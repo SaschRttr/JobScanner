@@ -1,0 +1,13 @@
+[Unit]
+Description=Job-Scanner Web-Interface
+After=network.target
+
+[Service]
+User=sascha
+WorkingDirectory=/home/sascha/Jobsuche
+ExecStart=/home/sascha/Jobsuche/venv/bin/python webui.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

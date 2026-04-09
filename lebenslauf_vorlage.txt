@@ -1,0 +1,131 @@
+---KONTAKT---
+Sascha Rüttiger
+Johannes-Krämer-Straße 18
+70597 Stuttgart
+0173/2659661
+Sascha.Ruettiger@icloud.com
+---/KONTAKT---
+
+---KOMPETENZPROFIL---
+Ich bringe über 17 Jahre Erfahrung in der Entwicklung, dem Test und der Validierung elektronischer Systeme mit – schwerpunktmäßig in frühen bis mittleren Entwicklungsphasen, wo noch vieles von Hand gemacht wird und pragmatische Lösungen gefragt sind.
+
+Bei Robert Bosch habe ich Feldtestanlagen begleitet und 2nd-Level-Support mit aufgebaut. Als Analysen und Dashboards häufig fehlten oder wochenlang auf sich warten ließen, arbeitete ich mich eigenständig in Python, SQL, Databricks und Plotly ein – und verkürzte die Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage. Durch meine Erfahrung an der Schnittstelle von Hardware und Software kann ich zwischen beiden Welten vermitteln – und sorge dafür dass Anforderungen und Probleme auf beiden Seiten richtig verstanden werden.
+
+Zuvor habe ich bei Bosch Automotive Steering komplette Testadapter für ASICs und Steuergeräte von Grund auf entwickelt – Schaltplan, Layout, Fertigung, Inbetriebnahme – und Aufbauzeiten von mehreren Tagen auf einen einzigen Tag verkürzt.
+
+Mein Antrieb ist es, Dinge wirklich zu verstehen – und daraus bessere Werkzeuge und Lösungen für mich und meine Kollegen zu schaffen.
+---/KOMPETENZPROFIL---
+
+---BERUFSERFAHRUNG---
+
+---STELLE_1---
+07/2020 – heute | Versuchsingenieur Labor & Feldtest – Solid Oxide Fuel Cell
+Robert Bosch GmbH, Stuttgart-Feuerbach
+
+---STELLE_1_AUFGABEN---
+- Eigenständige Entwicklung eines Mess- und Fehlerinjektionssystems (Controllino/C) zur sicheren Erfassung und Manipulation elektrischer Signale bis 800V DC / 230V AC inkl. Strommessung, 4–20mA-Bus und Thermoelement-Auswertung – abgenommen durch die führende Sicherheitsfachkraft
+- Systematische Fehleranalyse und strukturierter Feedback-Loop an die Entwicklung zur kontinuierlichen Verbesserung der SOFC-Architektur
+- Eigenständige Entwicklung von Dashboards und einer Fehlerdatenbank mit Python, SQL, Databricks und Plotly – Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage verkürzt
+- Planung und Durchführung von Validierungen elektrischer Komponenten (Inverter, Sensorik) inkl. strukturierter Datenerfassung
+- 3rd-Level-Service & Troubleshooting von Feldtestanlagen
+---/STELLE_1_AUFGABEN---
+---/STELLE_1---
+
+---STELLE_2---
+03/2016 – 06/2020 | Hardwareentwickler Testsysteme (Steuergeräte / Servolenkung)
+Bosch Automotive Steering GmbH, Schwäbisch Gmünd
+
+---STELLE_2_AUFGABEN---
+- Entwicklung vollständiger Testadapter für ASICs und Steuergeräte – von Konzept, Schaltplan und Layout über Fräsen und Bestückung bis zur Inbetriebnahme – Aufbauzeiten von mehreren Tagen auf einen Tag verkürzt
+- Entwicklungsbegleitende Modul- und ASIC-Tests gemäß ISO 26262 über den gesamten Temperaturbereich (-40°C bis +125°C)
+- Validierung elektrischer Antriebskomponenten unter verschiedenen Last- und Temperaturbedingungen
+- Interdisziplinäre Entwicklung einer Kurzschlusserkennungsstrategie im Zwischenkreis – von der messtechnischen Nachbildung mit Oszilloskop bis zur Umsetzung gemeinsam mit HW- und Softwareentwicklung
+- Koordination eines internationalen Testteams in Indien – Aufgabenverteilung, technische Abstimmung und Qualitätssicherung der Testergebnisse
+---/STELLE_2_AUFGABEN---
+---/STELLE_2---
+
+---STELLE_3---
+07/2015 – 02/2016 | System- und Softwaretester
+Bosch Power Tec GmbH, Böblingen
+
+---STELLE_3_AUFGABEN---
+- Systemtests nach VDE-AR-N 4105 für Solarwechselrichter
+- Mitbewerberanalyse NILM (non intrusive Load Management)
+- Ableitung und Erstellung von Testspezifikationen gemäß V-Modell auf Basis von Anforderungen in IBM DOORS
+---/STELLE_3_AUFGABEN---
+---/STELLE_3---
+
+---STELLE_4---
+12/2008 – 06/2015 | Entwicklungstechniker Elektrotechnik – Offgrid & Storage
+SMA Solar Technology AG, Niestetal
+
+---STELLE_4_AUFGABEN---
+- Anpassentwicklungen von Leistungselektronik und Second Source Qualifizierung
+- Entwicklung von Testumgebungen (Hardware) zur Automatisierung der Gerätetests
+- Validierung und Optimierung von Prüfabläufen
+- Entwicklungsgeleitende Qualifizierung (EMV, Klima, VDE-AR-N 4105)
+- Second Source Bauteilauswahl und Qualifizierung
+---/STELLE_4_AUFGABEN---
+---/STELLE_4---
+
+---STELLE_5---
+02/2008 – 11/2008 | Elektroniker für Geräte & Systeme
+Bundespolizei Präsidium Mitte
+
+---STELLE_5_AUFGABEN---
+- Instandhaltung funktechnischer Anlagen
+---/STELLE_5_AUFGABEN---
+---/STELLE_5---
+
+---/BERUFSERFAHRUNG---
+
+---AUSBILDUNG---
+
+---AUSBILDUNG_1---
+04/2024 – 09/2024 | Zertifikatslehrgang Softwareentwicklung
+Hochschule Aalen
+- C/C++, Softwareengineering und -testing
+- 35 ECTS, DQR 7
+---/AUSBILDUNG_1---
+
+---AUSBILDUNG_2---
+08/2008 – 06/2012 | Staatlich geprüfter Techniker (DQR 6)
+Oskar-von-Miller Schule, Kassel
+- Fachrichtung Computer- & Netzwerktechnik
+- Abschlussarbeit: „Green IT – Wirtschaftlichkeit & Nachhaltigkeit"
+- Ausbildereignung (IHK)
+---/AUSBILDUNG_2---
+
+---AUSBILDUNG_3---
+08/2004 – 01/2008 | Ausbildung Elektroniker für Geräte & Systeme
+Bundespolizei Präsidium Mitte
+- Instandhaltung funktechnische Anlagen
+---/AUSBILDUNG_3---
+
+---AUSBILDUNG_4---
+07/1999 – 06/2002 | Fachhochschulreife Elektrotechnik
+Radko-Stöckl-Schule, Melsungen
+---/AUSBILDUNG_4---
+
+---/AUSBILDUNG---
+
+---FAEHIGKEITEN---
+Altium Designer          ●●●●○
+Python (Plotly, Pandas)  ●●●○○
+SQL                      ●●●●○
+C/C++ Embedded (DQR 7)   ●●●○○
+LTSpice                  ●●○○○
+Datenanalyse & Visualisierung ●●●●○
+EMV-Tests                ●●○○○
+Oszilloskop / Labormesstechnik ●●●●○
+Testautomatisierung & Prüfadapterbau ●●●●○
+Sensorik & Signalaufbereitung ●●●○○
+Systemvalidierung & Datenerfassung ●●●●○
+Autodesk Fusion          ●●●○○
+3D-Druck / Prototyping   ●●●○○
+---/FAEHIGKEITEN---
+
+---SPRACHEN---
+Deutsch  Muttersprache (C2)  ●●●●●
+Englisch (B2)               ●●●○○
+---/SPRACHEN---

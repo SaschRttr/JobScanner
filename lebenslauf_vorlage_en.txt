@@ -1,0 +1,121 @@
+---KONTAKT---
+Sascha Rüttiger
+Johannes-Krämer-Straße 18
+70597 Stuttgart
+0173/2659661
+Sascha.Ruettiger@icloud.com
+---/KONTAKT---
+
+---KOMPETENZPROFIL---
+I bring over 17 years of experience in the development, testing and validation of electronic systems – with a focus on early to mid-stage development phases, where much work is still done manually and pragmatic solutions are essential.
+
+At Robert Bosch, I supported field testing facilities and helped establish 2nd-level support. When analyses and dashboards were frequently missing or took weeks to deliver, I independently learned Python, SQL, Databricks and Plotly – reducing delivery times from up to three weeks to an average of two days. Through my experience at the interface between hardware and software, I can bridge both worlds – ensuring that requirements and problems are properly understood on both sides.
+
+Previously, at Bosch Automotive Steering, I developed complete test adapters for ASICs and control units from the ground up – circuit design, layout, manufacturing, commissioning – reducing setup times from several days to a single day.
+
+My drive is to truly understand things – and from that understanding, create better tools and solutions for myself and my colleagues.
+---/KOMPETENZPROFIL---
+
+---BERUFSERFAHRUNG---
+
+---STELLE_1---
+07/2020 – heute | Versuchsingenieur Labor & Feldtest – Solid Oxide Fuel Cell
+Robert Bosch GmbH, Stuttgart-Feuerbach
+
+---STELLE_1_AUFGABEN---
+- Independent development of a measurement and fault injection system (Controllino/C) for safe acquisition and manipulation of electrical signals up to 800V DC / 230V AC including current measurement, 4–20mA bus and thermocouple evaluation – approved by the lead safety officer
+- Systematic fault analysis and structured feedback loop to development for continuous improvement of SOFC architecture
+- Independent development of dashboards and a fault database using Python, SQL, Databricks and Plotly – reduced deployment time from up to three weeks to an average of two days
+- Planning and execution of validations for electrical components (inverter, sensors) including structured data acquisition
+- 3rd-level service & troubleshooting of field test installations
+---/STELLE_1_AUFGABEN---
+---/STELLE_1---
+
+---STELLE_2---
+03/2016 – 06/2020 | Hardwareentwickler Testsysteme (Steuergeräte / Servolenkung)
+Bosch Automotive Steering GmbH, Schwäbisch Gmünd
+
+---STELLE_2_AUFGABEN---
+- Development of complete test adapters for ASICs and control units – from concept, schematic design and layout through milling and assembly to commissioning – reduced setup times from several days to one day
+- Development-accompanying module and ASIC testing according to ISO 26262 across the full temperature range (-40°C to +125°C)
+- Validation of electrical drive components under various load and temperature conditions
+- Interdisciplinary development of a short-circuit detection strategy in the DC link – from measurement-based simulation using oscilloscope to implementation in collaboration with HW and software development
+- Coordination of an international test team in India – task distribution, technical alignment and quality assurance of test results
+---/STELLE_2_AUFGABEN---
+---/STELLE_2---
+
+---STELLE_3---
+07/2015 – 02/2016 | System- und Softwaretester
+Bosch Power Tec GmbH, Böblingen
+
+---STELLE_3_AUFGABEN---
+- System testing according to VDE-AR-N 4105 for solar inverters
+- Competitive analysis NILM (non intrusive Load Management)
+- Derivation and creation of test specifications according to V-Model based on requirements in IBM DOORS
+---/STELLE_3_AUFGABEN---
+---/STELLE_3---
+
+---STELLE_4---
+12/2008 – 06/2015 | Entwicklungstechniker Elektrotechnik – Offgrid & Storage
+SMA Solar Technology AG, Niestetal
+
+---STELLE_4_AUFGABEN---
+- Adaptation development of power electronics and second source qualification
+- Development of test environments (hardware) for automation of device testing
+- Validation and optimization of test procedures
+- Development-guided qualification (EMC, climate, VDE-AR-N 4105)
+- Second source component selection and qualification
+---/STELLE_4_AUFGABEN---
+---/STELLE_4---
+
+---STELLE_5---
+02/2008 – 11/2008 | Elektroniker für Geräte & Systeme
+Bundespolizei Präsidium Mitte
+
+---STELLE_5_AUFGABEN---
+- Maintenance of radio communication systems
+---/STELLE_5_AUFGABEN---
+---/STELLE_5---
+
+---/BERUFSERFAHRUNG---
+
+---AUSBILDUNG---
+04/2024 – 09/2024 | Certificate Program in Software Development
+Hochschule Aalen
+- C/C++, Software Engineering and Testing
+- 35 ECTS, DQR 7
+
+08/2008 – 06/2012 | State-Certified Technician (DQR 6)
+Oskar-von-Miller Schule, Kassel
+- Specialization in Computer & Network Technology
+- Final thesis: "Green IT – Economic Efficiency & Sustainability"
+- Train-the-Trainer Qualification (IHK)
+
+08/2004 – 01/2008 | Apprenticeship as Electronics Technician for Devices & Systems
+Bundespolizei Präsidium Mitte
+- Maintenance of radio communication systems
+
+07/1999 – 06/2002 | University of Applied Sciences Entrance Qualification in Electrical Engineering
+Radko-Stöckl-Schule, Melsungen
+---/AUSBILDUNG---
+
+---FAEHIGKEITEN---
+Altium Designer          ●●●●○
+Python (Plotly, Pandas)  ●●●○○
+SQL                      ●●●●○
+C/C++ Embedded (DQR 7)   ●●●○○
+LTSpice                  ●●○○○
+Data Analysis & Visualization ●●●●○
+EMC Testing              ●●○○○
+Oscilloscope / Laboratory Measurement Technology ●●●●○
+Test Automation & Test Fixture Development ●●●●○
+Sensors & Signal Conditioning ●●●○○
+System Validation & Data Acquisition ●●●●○
+Autodesk Fusion          ●●●○○
+3D Printing / Prototyping ●●●○○
+---/FAEHIGKEITEN---
+
+---SPRACHEN---
+German    Native language (C2)    ●●●●●
+English  (B2)                               ●●●○○
+---/SPRACHEN---

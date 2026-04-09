@@ -1,0 +1,72 @@
+Kompetenzprofil
+Meine Stärke liegt im Verständnis von Wirkzusammenhängen: Weil ich Hardware, Software und Daten gleichermaßen durchdringe, liefere ich dort treffsichere Analysen und pragmatische Lösungen, wo andere erst den Kontext verstehen müssen.
+In meiner aktuellen Rolle betreue ich Feldtestanlagen für Brennstoffzellensysteme – eine Technologie, die noch keine fertigen Antworten kennt. Als ich erkannte, dass Analysen und Dashboards stets externe Anfragen erforderten und wertvolle Zeit kosteten, handelte ich aus eigenem Antrieb: Ich erarbeitete mir Python, SQL, Databricks und Plotly und brachte die Grundarchitektur einer Fehlerdatenbank ein, die seitdem als zentrales Analyse-Tool im Einsatz ist. Mit tiefem Anlagenverständnis erkenne ich die richtigen Zusammenhänge – und bin dadurch in der Lage, Anforderungen an Software- und Datenbankingenieure präziser zu beschreiben.
+Bei Bosch Automotive Steering habe ich in einer frühen Entwicklungsphase ohne automatisierte Testinfrastruktur kreativ und unternehmerisch gedacht: Durch selbst entwickelte Testadapter und begleitende Software habe ich Reproduzierbarkeit und Prüfqualität erst ermöglicht – Arbeiten, die ohne diese Lösung schlicht nicht zuverlässig durchführbar gewesen wären.
+Bei SMA habe ich Leistungselektronik für Batteriespeicher und netzgekoppelte Wechselrichter qualifiziert und nach VDE-AR-N 4105 sowie DIN VDE 0100 normkonform abgenommen.
+Ich bringe über 17 Jahre Erfahrung in der Entwicklung, dem Test und der Validierung elektronischer Systeme mit – kombiniert mit Datenanalyse und Visualisierung. Dabei packe ich an, baue mir die Tools die ich brauche, und finde pragmatische Lösungen auch dort wo es noch keine gibt.
+Meine technische Ausbildung habe ich zuletzt durch einen Zertifikatslehrgang in Softwareentwicklung an der Hochschule Aalen vertieft (C/C++, Software Engineering & Testing, 35 ECTS, DQR 7). 
+Berufserfahrung
+07/2020 – heute		Versuchsingenieur Labor & Feldtest – Solid Oxide Fuel Cell
+Robert Bosch GmbH, Stuttgart-Feuerbach
+    • Eigenständige Entwicklung eines Mess- und Fehlerinjektionssystems (Controllino/C) zur sicheren Erfassung und Manipulation elektrischer Signale bis 800V DC / 230V AC inkl. Strommessung, 4–20mA-Bus und Thermoelement-Auswertung – abgenommen durch die führende Sicherheitsfachkraft 
+    • Systematische Fehleranalyse und strukturierter Feedback-Loop an die Entwicklung zur kontinuierlichen Verbesserung der SOFC-Architektur 
+    • Entwicklung von Analyse-Dashboards (Python, SQL, Databricks, Plotly, Tableau) für ~100 Anlagen mit über 300 Parametern – Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage verkürzt 
+    • Identifikation und Klassifikation von Fehlerbildern sowie Aufbau einer strukturierten Fehlerdatenbank (3 Kategorien) zur systematischen Ausfallanalyse 
+    • Planung und Durchführung von Validierungen elektrischer Komponenten (Inverter, Sensorik) inkl. strukturierter Datenerfassung 
+    • 3rd-Level-Service & Troubleshooting von Feldtestanlagen 
+03/2016 – 06/2020	Hardwareentwickler Testsysteme (Steuergeräte / Servolenkung) 
+Bosch Automotive Steering GmbH, Schwäbisch Gmünd
+    • Entwicklung von Grund auf: Testadapter für ASICs und Steuergeräte – von Konzept, Schaltplan und Layout über Fräsen und Bestückung bis zur Inbetriebnahme – Testaufbauzeiten von mehreren Tagen auf einen Tag verkürzt 
+    • Verifikation von ASICs auf Registerebene – Prüfung einzelner Funktionsblöcke durch gezielte Registerzugriffe vor der Platinenintegration 
+    • Entwicklungsbegleitende Tests und Validierung elektrischer Antriebskomponenten über den gesamten Last- und Temperaturbereich (-40°C bis +125°C) 
+    • Validierung elektrischer Antriebskomponenten unter verschiedenen Last- und Temperaturbedingungen 
+    • Interdisziplinäre Entwicklung einer Kurzschlusserkennungsstrategie im Zwischenkreis – von der messtechnischen Nachbildung mit Oszilloskop bis zur Umsetzung gemeinsam mit HW- und Softwareentwicklung 
+    • Koordination eines internationalen Testteams in Indien – Aufgabenverteilung, technische Abstimmung und Qualitätssicherung der Testergebnisse 
+07/2015 – 02/2016	System- und Softwaretester
+Bosch Power Tec GmbH, Böblingen
+    • Systemtests nach VDE-AR-N 4105 für Solarwechselrichter
+    • Mitbewerberanalyse NILM (non intrusive Load Management)
+    • Ableitung und Erstellung von Testspezifikationen gemäß V-Modell auf Basis von Anforderungen in IBM DOORS
+      
+12/2008 – 06/2015	Entwicklungstechniker Elektrotechnik – Offgrid & Storage
+SMA Solar Technology AG, Niestetal
+    • Entwicklungsbegleitende Tests und Qualifizierung von Leistungselektronik nach V-Modell sowie Second Source Qualifizierung 
+    • Entwicklung von Testumgebungen (Hardware) zur Automatisierung der Gerätetests
+    • Validierung und Optimierung von Prüfabläufen
+    • Entwicklungsgeleitende Qualifizierung (Umwelt, VDE-AR-N 4105, DIN VDE 0100)
+    • Second Source Bauteilauswahl und Qualifizierung
+02/2008 – 11/2008	Elektroniker für Geräte & Systeme
+Bundespolizei Präsidium Mitte
+                • Instandhaltung funktechnischer Anlagen
+
+Aus- und Weiterbildung
+04/2024 – 09/2024	Zertifikatslehrgang Softwareentwicklung, Hochschule Aalen 
+                • Zertifikatslehrgang Softwareentwicklung (C/C++, Softwareengineering und -testing, 35 ECTS, DQR 7)
+08/2008 – 06/2012	Staatlich geprüfter Techniker, Oskar-von-Miller Schule, Kassel
+Fachrichtung Computer- & Netzwerktechnik
+                • Abschlussarbeit „Green IT – Wirtschaftlichkeit & Nachhaltigkeit“
+                • Ausbildereignung (IHK)
+08/2004 – 01/2008	Ausbildung Elektroniker für Geräte & Systeme, Bundespolizei Präsidium Mitte
+                • Instandhaltung funktechnische Anlagen
+07/2002 – 08/2003	freiwillig verlängerter Grundwehrdienst in Homberg/Efze
+07/1999 – 06/2002	Fachhochschulreife Elektrotechnik, Radko-Stöckl-Schule, Melsungen
+
+Fähigkeiten
+    • Normen: VDE-AR-N 4105, DIN VDE 0100 ●●●○○
+    • Leistungselektronik / Wechselrichter ●●●○○
+    • Altium Designer ●●●●○ 
+    • Python (Plotly, Pandas, Matplotlib, Tableau) ●●●○○
+    • SQL ●●●●○
+    • C/C++ – Embedded (DQR 7) ●●●○○
+    • LTSpice ●●○○○
+    • Datenanalyse & Visualisierung ●●●●○
+    • EMV-Tests ●●○○○
+    • Oszilloskop / Labormesstechnik ●●●●○
+    • Testautomatisierung & Prüfadapterbau ●●●●○
+    • Sensorik & Signalaufbereitung ●●●○○
+    • Systemvalidierung & Datenerfassung  ●●●●○
+    • Autodesk Fusion ●●●○○
+    • 3D-Druck / Prototyping ●●●○○
+Sprachen
+Deutsch Muttersprache (C2) ●●●●●
+Englisch (B2) ●●●○○
