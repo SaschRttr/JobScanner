@@ -18,13 +18,12 @@ Voraussetzungen:
 import subprocess
 import os
 import sys
-import json
 import time
 import threading
 import urllib.parse
+import json
 from pathlib import Path
-from flask import Flask, Response, send_file, jsonify
-
+from flask import Flask, Response, send_file, request, jsonify, redirect
 
 # =============================================================================
 # KONFIGURATION
@@ -91,7 +90,7 @@ def pipeline_im_hintergrund():
                 errors="replace",
                 cwd=str(BASIS_PFAD),
                 env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
-                start_new_session=True,
+                start_new_session=True,  # Unabhängig vom Flask-Prozess
             )
 
             for zeile in prozess.stdout:
@@ -124,9 +123,9 @@ def starten():
     t = threading.Thread(target=pipeline_im_hintergrund, daemon=True)
     t.start()
 
+    # Kurz warten damit die Logdatei angelegt wird
     time.sleep(0.3)
 
-    from flask import redirect
     return redirect("/stream")
 
 
@@ -138,6 +137,7 @@ def stream():
     Bricht der Browser ab: Scan läuft trotzdem weiter.
     """
     def log_lesen():
+        # Warten bis Logdatei existiert
         for _ in range(20):
             if LOG_DATEI.exists():
                 break
@@ -164,7 +164,7 @@ def stream():
 
 
 # =============================================================================
-# BEWERBUNG ERSTELLEN  (Checkbox im Report triggert diese Route)
+# BEWERBUNG ERSTELLEN
 # =============================================================================
 
 @app.route("/bewerbung-erstellen")
@@ -175,9 +175,7 @@ def bewerbung_erstellen():
     Gibt JSON zurück: { ok, nachricht, lebenslauf_url, anschreiben_url }
     Aufruf: GET /bewerbung-erstellen?url=<stellenurl>
     """
-    from flask import request as flask_req
-
-    stellen_url = urllib.parse.unquote(flask_req.args.get("url", ""))
+    stellen_url = urllib.parse.unquote(request.args.get("url", ""))
     if not stellen_url:
         return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
 
@@ -214,12 +212,14 @@ def bewerbung_erstellen():
     ordner  = txt_pfad.parent
     lv_pfad = ordner / "Lebenslauf.docx"
     as_pfad = ordner / "Anschreiben.docx"
+
     # Schritt 3: Report neu generieren damit Links dauerhaft erscheinen
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py")],
         cwd=str(BASIS_PFAD),
         env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
     )
+
     return jsonify({
         "ok": True,
         "nachricht": "Bewerbungsunterlagen erstellt",
@@ -228,7 +228,29 @@ def bewerbung_erstellen():
     })
 
 
+# =============================================================================
+# DOWNLOAD
+# =============================================================================
+
 @app.route("/download")
+def download():
+    """Liefert eine Datei vom Raspi als Download."""
+    pfad = urllib.parse.unquote(request.args.get("pfad", ""))
+    if not pfad:
+        return "Kein Pfad angegeben", 400
+    p = Path(pfad)
+    if not p.exists():
+        return f"Datei nicht gefunden: {pfad}", 404
+    bewerbungen_dir = BASIS_PFAD / "bewerbungen"
+    if bewerbungen_dir not in p.parents:
+        return "Zugriff verweigert", 403
+    return send_file(p, as_attachment=True)
+
+
+# =============================================================================
+# STATUS (SQLite)
+# =============================================================================
+
 @app.route("/status", methods=["GET"])
 def get_status():
     import db
@@ -245,28 +267,14 @@ def get_status():
 
 @app.route("/status", methods=["POST"])
 def post_status():
-    from flask import request as flask_req
-    import db
-    data = flask_req.get_json()
+    data = request.get_json()
     print("STATUS POST:", data)
     if not data or "url" not in data or "feld" not in data or "wert" not in data:
         return jsonify({"fehler": "url, feld, wert erwartet"}), 400
     if data["feld"] == "stufe":
+        import db
         db.upsert_bewerbungsstatus(data["url"], data["wert"])
     return jsonify({"ok": True})
-def download():
-    """Liefert eine Datei vom Raspi als Download."""
-    from flask import request as flask_req
-    pfad = urllib.parse.unquote(flask_req.args.get("pfad", ""))
-    if not pfad:
-        return "Kein Pfad angegeben", 400
-    p = Path(pfad)
-    if not p.exists():
-        return f"Datei nicht gefunden: {pfad}", 404
-    bewerbungen_dir = BASIS_PFAD / "bewerbungen"
-    if bewerbungen_dir not in p.parents:
-        return "Zugriff verweigert", 403
-    return send_file(p, as_attachment=True)
 
 
 # =============================================================================

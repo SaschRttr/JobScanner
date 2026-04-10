@@ -316,7 +316,7 @@ CSS = """
 
 JS = """
     const SERVER = window.location.hostname === '192.168.165.146'
-        ? 'http://192.168.165.146:5000'
+        ? 'http://192.168.165.146:5001'
         : null;
 
     async function speichern(url, feld, wert) {
@@ -449,8 +449,8 @@ JS = """
 
         try {
             const server = window.location.hostname === 'localhost'
-                ? 'http://localhost:5000'
-                : 'http://192.168.165.146:5000';
+                ? 'http://localhost:5001'
+                : 'http://192.168.165.146:5001';
 
             const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(decodeURIComponent(stellenUrl)));
             const data = await res.json();
