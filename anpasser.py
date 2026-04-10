@@ -192,6 +192,80 @@ Regeln:
 
 
 # =============================================================================
+# EINZELSTELLE ANPASSEN  (wird von webui.py / Flask aufgerufen)
+# =============================================================================
+
+def passe_stelle_an(url: str) -> dict:
+    """
+    Passt den Lebenslauf für eine einzelne Stelle an.
+    Gibt ein dict zurück:
+      { "ok": True,  "pfad": "/pfad/zu/Lebenslauf.txt" }
+      { "ok": False, "fehler": "Fehlermeldung" }
+    """
+    config = lade_config()
+    if not config["api_key"]:
+        return {"ok": False, "fehler": "Kein API-Key in config.txt"}
+
+    stellen = lade_json(STELLEN_JSON, [])
+    stelle  = next((s for s in stellen if s.get("url") == url), None)
+
+    if not stelle:
+        return {"ok": False, "fehler": f"Stelle nicht gefunden: {url}"}
+
+    b           = stelle.get("bewertung") or {}
+    anpassungen = b.get("lebenslauf_anpassungen", [])
+    s_aktuell   = b.get("score_aktuell", b.get("score", 0))
+    s_danach    = b.get("score_nach_anpassung", s_aktuell)
+    firma       = stelle["firma"]
+    titel       = stelle["titel"]
+
+    ordner = BEWERBUNGEN_DIR / sicherer_pfadname(firma) / sicherer_pfadname(titel)
+    ordner.mkdir(parents=True, exist_ok=True)
+    ziel = ordner / "Lebenslauf.txt"
+
+    sprache = b.get("sprache", "de")
+    if sprache == "en":
+        vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage_en.txt"
+        if not vorlage_pfad.exists():
+            return {"ok": False, "fehler": "lebenslauf_vorlage_en.txt nicht gefunden"}
+    else:
+        vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage.txt"
+
+    if not vorlage_pfad.exists():
+        return {"ok": False, "fehler": f"Vorlage nicht gefunden: {vorlage_pfad}"}
+
+    vorlage = vorlage_pfad.read_text(encoding="utf-8")
+    client  = anthropic_lib.Anthropic(api_key=config["api_key"])
+
+    relevante_marker   = bestimme_relevante_marker(anpassungen)
+    angepasste_vorlage = vorlage
+
+    for marker in relevante_marker:
+        abschnitt = extrahiere_abschnitt(vorlage, marker)
+        if not abschnitt:
+            continue
+        neuer_inhalt = passe_abschnitt_an(marker, abschnitt, anpassungen, stelle, client)
+        if neuer_inhalt:
+            angepasste_vorlage = ersetze_abschnitt(angepasste_vorlage, marker, neuer_inhalt)
+
+    with open(ziel, "w", encoding="utf-8") as f:
+        f.write(f"Firma:                {firma}\n")
+        f.write(f"Stelle:               {titel}\n")
+        f.write(f"Score aktuell:        {s_aktuell}%\n")
+        f.write(f"Score nach Anpassung: {s_danach}%\n")
+        f.write(f"Erstellt am:          {datetime.now().strftime('%d.%m.%Y %H:%M')}\n")
+        f.write(f"URL:                  {url}\n")
+        f.write(f"\nAngepasste Abschnitte: {', '.join(relevante_marker)}\n")
+        f.write("\nAnpassungshinweise:\n")
+        for a in anpassungen:
+            f.write(f"  → {a}\n")
+        f.write("\n" + "=" * 60 + "\n\n")
+        f.write(angepasste_vorlage)
+
+    return {"ok": True, "pfad": str(ziel)}
+
+
+# =============================================================================
 # HAUPTPROGRAMM
 # =============================================================================
 
@@ -288,7 +362,6 @@ def main():
             )
             if neuer_inhalt:
                 # Marker-Zeilen aus KI-Output entfernen falls vorhanden
-                neuer_inhalt = re.sub(r"---[/\\]?\w+---\n?", "", neuer_inhalt).strip()
                 angepasste_vorlage = ersetze_abschnitt(
                     angepasste_vorlage, marker, neuer_inhalt
                 )
@@ -297,7 +370,6 @@ def main():
                 print(f"  ⚠️  {marker} konnte nicht angepasst werden – Original behalten")
 
         # Datei schreiben
-        angepasste_vorlage = re.sub(r"---[/\\]?\w+---\n?", "", angepasste_vorlage)
         with open(ziel, "w", encoding="utf-8") as f:
             f.write(f"Firma:                {firma}\n")
             f.write(f"Stelle:               {titel}\n")

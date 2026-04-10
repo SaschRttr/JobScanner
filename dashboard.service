@@ -1,0 +1,13 @@
+[Unit]
+Description=Job-Scanner Dashboard
+After=network.target
+
+[Service]
+User=sascha
+WorkingDirectory=/home/sascha/Jobsuche
+ExecStart=/home/sascha/Jobsuche/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

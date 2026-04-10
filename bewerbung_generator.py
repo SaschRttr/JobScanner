@@ -20,6 +20,9 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 try:
     import anthropic as anthropic_lib
@@ -87,7 +90,11 @@ def parse_txt(txt_pfad: Path) -> dict:
 
 
 def parse_lebenslauf_abschnitte(lv_text: str) -> dict:
-    """Zerlegt den CV-Text in strukturierte Abschnitte."""
+    """
+    Zerlegt den CV-Text in strukturierte Abschnitte.
+    Unterstützt Marker-Format: ---KONTAKT--- / ---STELLE_1--- / ---STELLE_1_AUFGABEN--- etc.
+    Fallback: Zeitraum-Erkennung für TXT ohne Marker.
+    """
     zeilen = lv_text.splitlines()
 
     abschnitte = {
@@ -100,103 +107,143 @@ def parse_lebenslauf_abschnitte(lv_text: str) -> dict:
         "sprachen":   [],
     }
 
-    # Name = erste nicht-leere Zeile
-    for z in zeilen:
-        if z.strip():
-            abschnitte["name"] = z.strip()
-            break
-
-    # Kontakt-Zeilen (PLZ, Telefon, Email, Straße)
-    kontakt_muster = [r'\d{5}', r'0\d{3}', r'@', r'Stra\xdfe|Str\.|Weg|Gasse|Allee|Platz']
-    for z in zeilen[1:8]:
-        z = z.strip()
-        if z and any(re.search(m, z) for m in kontakt_muster):
-            abschnitte["kontakt"].append(z)
+    ZEITRAUM_RE = re.compile(
+        r'^(\d{2}/\d{4}\s*[–\-]\s*(?:\d{2}/\d{4}|heute|present|now))\s*\|\s*(.+)$',
+        re.IGNORECASE
+    )
+    SKILL_RE = re.compile(r'[●○◉◎⬤]')
+    BOLD_RE  = re.compile(r'\*\*(.+?)\*\*')
+    OPEN_RE  = re.compile(r'^---([A-ZÄÖÜ_0-9]+)---$')
+    CLOSE_RE = re.compile(r'^---/([A-ZÄÖÜ_0-9]+)---$')
 
     sektion         = None
     aktuell_stelle  = None
     aktuell_bildung = None
 
-    SEKTIONEN_MAP = {
-        "PROFILE": "profil", "PROFIL": "profil", "KOMPETENZPROFIL": "profil",
-        "PROFESSIONAL EXPERIENCE": "erfahrung", "BERUFSERFAHRUNG": "erfahrung",
-        "EDUCATION": "ausbildung", "AUSBILDUNG": "ausbildung",
-        "TECHNICAL SKILLS": "skills", "SKILLS": "skills",
-        "FÄHIGKEITEN": "skills", "KENNTNISSE": "skills",
-        "LANGUAGES": "sprachen", "SPRACHEN": "sprachen",
-    }
-
     for z in zeilen:
         z_strip = z.strip()
-        z_upper = z_strip.upper()
 
-        if z_upper in SEKTIONEN_MAP:
-            # Offene Einträge schließen
-            if aktuell_stelle:
-                abschnitte["stellen"].append(aktuell_stelle)
-                aktuell_stelle = None
-            if aktuell_bildung:
-                abschnitte["ausbildung"].append(aktuell_bildung)
-                aktuell_bildung = None
-            sektion = SEKTIONEN_MAP[z_upper]
+        # Öffnender Marker
+        mo = OPEN_RE.match(z_strip)
+        if mo:
+            name = mo.group(1)
+            if name == "KONTAKT":
+                sektion = "kontakt"
+            elif name in ("KOMPETENZPROFIL", "PROFIL", "PROFILE"):
+                sektion = "profil"
+            elif name in ("BERUFSERFAHRUNG", "PROFESSIONAL_EXPERIENCE"):
+                sektion = "erfahrung"
+            elif name == "AUSBILDUNG":
+                sektion = "ausbildung"
+                if aktuell_bildung:
+                    abschnitte["ausbildung"].append(aktuell_bildung)
+                    aktuell_bildung = None
+            elif name in ("FAEHIGKEITEN", "SKILLS", "TECHNICAL_SKILLS"):
+                sektion = "skills"
+            elif name == "SPRACHEN":
+                sektion = "sprachen"
+            elif re.match(r'^STELLE_\d+_AUFGABEN$', name):
+                sektion = "aufgaben"
+            elif re.match(r'^STELLE_\d+$', name):
+                if aktuell_stelle:
+                    abschnitte["stellen"].append(aktuell_stelle)
+                aktuell_stelle = {"titel": "", "zeitraum": "", "firma": "", "aufgaben": []}
+                sektion = "stelle_header"
+            continue
+
+        # Schließender Marker
+        mc = CLOSE_RE.match(z_strip)
+        if mc:
+            name = mc.group(1)
+            if re.match(r'^STELLE_\d+_AUFGABEN$', name):
+                sektion = "stelle_header"
+            elif re.match(r'^STELLE_\d+$', name):
+                if aktuell_stelle:
+                    abschnitte["stellen"].append(aktuell_stelle)
+                    aktuell_stelle = None
+                sektion = "erfahrung"
+            else:
+                sektion = None
             continue
 
         if not z_strip:
             continue
 
-        if sektion == "profil":
+        if sektion == "kontakt":
+            if not abschnitte["name"]:
+                abschnitte["name"] = z_strip
+            else:
+                abschnitte["kontakt"].append(z_strip)
+
+        elif sektion == "profil":
             abschnitte["profil"].append(z_strip)
 
-        elif sektion == "erfahrung":
-            if re.search(r'\d{2}/\d{4}', z_strip) or re.search(r'\d{4}\s*[–\-]\s*(\d{4}|heute|present)', z_strip):
-                if aktuell_stelle:
-                    abschnitte["stellen"].append(aktuell_stelle)
-                teile = re.split(r'\t+', z_strip)
-                aktuell_stelle = {
-                    "titel":    teile[0].strip(),
-                    "zeitraum": teile[-1].strip() if len(teile) > 1 else "",
-                    "firma":    "",
-                    "aufgaben": [],
-                }
-            elif aktuell_stelle:
-                if not aktuell_stelle["firma"] and not re.match(r'^[–\-•·]', z_strip):
-                    aktuell_stelle["firma"] = z_strip
-                else:
-                    sauber = z_strip.lstrip("–- •·").strip()
-                    if sauber:
-                        aktuell_stelle["aufgaben"].append(sauber)
+        elif sektion == "stelle_header" and aktuell_stelle is not None:
+            m = ZEITRAUM_RE.match(z_strip)
+            if m and not aktuell_stelle["titel"]:
+                aktuell_stelle["zeitraum"] = m.group(1).strip()
+                aktuell_stelle["titel"]    = m.group(2).strip()
+            elif aktuell_stelle["titel"] and not aktuell_stelle["firma"]:
+                aktuell_stelle["firma"] = z_strip
+
+        elif sektion == "aufgaben" and aktuell_stelle is not None:
+            sauber = z_strip.lstrip("–-•· ").strip()
+            if sauber:
+                aktuell_stelle["aufgaben"].append(sauber)
 
         elif sektion == "ausbildung":
-            if re.search(r'\d{2}/\d{4}|\d{4}\s*[–\-]', z_strip):
+            m = ZEITRAUM_RE.match(z_strip)
+            if m:
                 if aktuell_bildung:
                     abschnitte["ausbildung"].append(aktuell_bildung)
-                teile = re.split(r'\t+', z_strip)
                 aktuell_bildung = {
-                    "titel":    teile[0].strip(),
-                    "zeitraum": teile[-1].strip() if len(teile) > 1 else "",
-                    "ort":      "",
-                    "details":  [],
+                    "titel": m.group(2).strip(),
+                    "zeitraum": m.group(1).strip(),
+                    "ort": "", "details": []
                 }
             elif aktuell_bildung:
-                if not aktuell_bildung["ort"]:
+                if not aktuell_bildung["ort"] and not z_strip.startswith("-"):
                     aktuell_bildung["ort"] = z_strip
                 else:
-                    aktuell_bildung["details"].append(z_strip)
+                    detail = z_strip.lstrip("–-•· ").strip()
+                    if detail:
+                        aktuell_bildung["details"].append(detail)
 
         elif sektion == "skills":
-            abschnitte["skills"].append(z_strip)
+            bold = BOLD_RE.match(z_strip)
+            if bold:
+                abschnitte["skills"].append(bold.group(1).upper() + ":")
+            else:
+                sauber = SKILL_RE.sub('', z_strip).strip()
+                if sauber:
+                    abschnitte["skills"].append(sauber)
 
         elif sektion == "sprachen":
-            abschnitte["sprachen"].append(z_strip)
+            sauber = SKILL_RE.sub('', z_strip).strip()
+            if sauber:
+                abschnitte["sprachen"].append(sauber)
 
-    # Letzte offene Einträge schließen
+    # Letzte offene Einträge
     if aktuell_stelle:
         abschnitte["stellen"].append(aktuell_stelle)
     if aktuell_bildung:
         abschnitte["ausbildung"].append(aktuell_bildung)
 
-    return abschnitte
+    # Fallback: kein KONTAKT-Marker
+    if not abschnitte["name"]:
+        kontakt_muster = [r'\d{5}', r'0\d{3}', r'@', r'Stra\xdfe|Str\.|Weg|Gasse|Allee|Platz']
+        for i, z in enumerate(zeilen):
+            z_strip = z.strip()
+            if not z_strip or OPEN_RE.match(z_strip):
+                continue
+            if not abschnitte["name"]:
+                abschnitte["name"] = z_strip
+            elif any(re.search(m, z_strip) for m in kontakt_muster):
+                abschnitte["kontakt"].append(z_strip)
+            if i > 8:
+                break
 
+    return abschnitte
 
 # =============================================================================
 # ANSCHREIBEN PER AI GENERIEREN
@@ -249,17 +296,20 @@ Antworte NUR mit JSON, kein Markdown, keine Backticks:
 # =============================================================================
 # NODE.JS HELPER
 # =============================================================================
-
+import shutil
+NODE = r"C:\Program Files\nodejs\node.exe"
+print("NODE PATH:", NODE)
 def _run_node(js_code: str, label: str):
     """Schreibt JS in Temp-Datei und führt sie mit Node aus."""
-    with tempfile.NamedTemporaryFile(suffix=".js", mode="w", encoding="utf-8", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".js", mode="w", encoding="utf-8", delete=False, dir=BASIS_PFAD) as f:
         f.write(js_code)
         tmp = f.name
     try:
         result = subprocess.run(
-            ["node", tmp],
-            capture_output=True, text=True, encoding="utf-8"
-        )
+            [NODE, tmp],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(BASIS_PFAD)
+)
         if result.returncode != 0:
             raise RuntimeError(result.stderr[:400])
         print(f"  ✅ {label}")

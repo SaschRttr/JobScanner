@@ -185,13 +185,34 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
             </div>
         </details>"""
 
-    # Lebenslauf-Download (nur wenn Datei existiert)
+    # Bewerbungsunterlagen: Checkbox + Download-Links
     firma_safe = sicherer_pfadname(s["firma"])
     titel_safe = sicherer_pfadname(s["titel"])
-    lv_pfad = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Lebenslauf.txt"
-    if lv_pfad.exists():
-        lv_url = f"http://{RASPI_IP}:5001/lebenslauf?firma={firma_safe}&titel={titel_safe}"
-        lebenslauf_html = f'<div style="margin-top:6px;"><a href="{lv_url}" style="font-size:0.85em; color:#27ae60;">📄 Lebenslauf herunterladen</a></div>'
+    score      = (s.get("bewertung") or {}).get("score", 0)
+
+    lv_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Lebenslauf.docx"
+    as_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Anschreiben.docx"
+
+    if lv_docx.exists() and as_docx.exists():
+        # Beide DOCX vorhanden → Download-Links anzeigen
+        lv_dl  = f"http://{RASPI_IP}:5000/download?pfad={lv_docx}"
+        as_dl  = f"http://{RASPI_IP}:5000/download?pfad={as_docx}"
+        lebenslauf_html = f"""
+        <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
+            📄 <a href="{lv_dl}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
+            ✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>
+        </div>"""
+    elif score >= 70:
+        # Score hoch genug → Checkbox anzeigen
+        lebenslauf_html = f"""
+        <div style="margin-top:8px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
+            <label style="cursor:pointer;">
+                <input type="checkbox"
+                    onchange="bewerbungErstellen(this, '{url_escaped}', '{firma_safe}', '{titel_safe}')">
+                &nbsp;📋 Lebenslauf &amp; Anschreiben erstellen
+            </label>
+            <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
+        </div>"""
     else:
         lebenslauf_html = ""
     return f"""<div class="{css}" data-url="{url_escaped}">
@@ -411,6 +432,46 @@ JS = """
             status.textContent = '❌ Fehler: Flask-Server nicht erreichbar. Läuft webui.py?';
             status.style.color = '#e74c3c';
         };
+    }
+
+    async function bewerbungErstellen(checkbox, stellenUrl, firma, titel) {
+        if (!checkbox.checked) return;
+
+        const statusEl = document.getElementById('bew-status-' + firma + '-' + titel);
+        checkbox.disabled = true;
+        // Label blau färben als visuelles Feedback
+        const label = checkbox.closest('label');
+        if (label) { label.style.color = '#2980b9'; label.style.fontWeight = 'bold'; }
+        statusEl.textContent = '⏳ Wird erstellt...';
+        statusEl.style.color = '#2980b9';
+
+        try {
+            const server = window.location.hostname === 'localhost'
+                ? 'http://localhost:5000'
+                : 'http://192.168.165.146:5000';
+
+            const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(decodeURIComponent(stellenUrl)));
+            const data = await res.json();
+
+            if (data.ok) {
+                const box = document.getElementById('bew-box-' + firma + '-' + titel);
+                box.innerHTML = `
+                    <div style="padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
+                        📄 <a href="${server + data.lebenslauf_url}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
+                        ✉️ <a href="${server + data.anschreiben_url}" style="color:#27ae60;">Anschreiben.docx</a>
+                    </div>`;
+            } else {
+                statusEl.textContent = '❌ ' + (data.fehler || 'Unbekannter Fehler');
+                statusEl.style.color = '#e74c3c';
+                checkbox.disabled = false;
+                checkbox.checked  = false;
+            }
+        } catch (e) {
+            statusEl.textContent = '❌ Server nicht erreichbar';
+            statusEl.style.color = '#e74c3c';
+            checkbox.disabled = false;
+            checkbox.checked  = false;
+        }
     }
 """
 

@@ -18,10 +18,11 @@ Voraussetzungen:
 import subprocess
 import os
 import sys
-import time
-import threading
+import json
+import urllib.parse
 from pathlib import Path
-from flask import Flask, Response, send_file
+from flask import Flask, Response, send_file, jsonify
+
 
 # =============================================================================
 # KONFIGURATION
@@ -29,11 +30,7 @@ from flask import Flask, Response, send_file
 
 BASIS_PFAD  = Path(__file__).parent
 REPORT_HTML = BASIS_PFAD / "report.html"
-LOG_DATEI   = BASIS_PFAD / "scan.log"
 PORT        = 5000
-
-# Globaler Status: läuft gerade ein Scan?
-scan_laeuft = False
 
 # Reihenfolge der Scripts – identisch zu start.bat
 PIPELINE = [
@@ -59,25 +56,23 @@ def index():
     return "<h2>⚠️ Noch kein Report vorhanden. Bitte zuerst einen Scan starten.</h2>", 404
 
 
-def pipeline_im_hintergrund():
+@app.route("/starten")
+def starten():
     """
-    Läuft in einem eigenen Thread – komplett unabhängig vom Browser.
-    Schreibt Output in scan.log statt direkt zum Browser.
+    Startet die Pipeline und streamt den Output live zum Browser.
+    Nutzt SSE (Server-Sent Events) – der Browser bekommt jede
+    Ausgabezeile sofort, ohne die Seite neu zu laden.
     """
-    global scan_laeuft
-    scan_laeuft = True
-
-    with open(LOG_DATEI, "w", encoding="utf-8") as log:
+    def pipeline_ausfuehren():
         for script in PIPELINE:
             script_pfad = BASIS_PFAD / script
 
             if not script_pfad.exists():
-                log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
-                log.flush()
+                yield f"data: ⚠️  {script} nicht gefunden – übersprungen\n\n"
                 continue
 
-            log.write(f"\n▶️  Starte {script} ...\n")
-            log.flush()
+            yield f"data: \n\n"
+            yield f"data: ▶️  Starte {script} ...\n\n"
 
             prozess = subprocess.Popen(
                 [sys.executable, str(script_pfad)],
@@ -88,80 +83,104 @@ def pipeline_im_hintergrund():
                 errors="replace",
                 cwd=str(BASIS_PFAD),
                 env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
-                start_new_session=True,  # Unabhängig vom Flask-Prozess
             )
 
             for zeile in prozess.stdout:
                 zeile = zeile.rstrip("\n")
                 if zeile:
-                    log.write(zeile + "\n")
-                    log.flush()
+                    yield f"data: {zeile}\n\n"
 
             prozess.wait()
 
             if prozess.returncode == 0:
-                log.write(f"✅ {script} fertig\n")
+                yield f"data: ✅ {script} fertig\n\n"
             else:
-                log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
-            log.flush()
+                yield f"data: ❌ {script} mit Fehler beendet (Code {prozess.returncode})\n\n"
 
-        log.write("\nFERTIG\n")
-        log.flush()
+        yield "data: \n\n"
+        yield "data: ✅ Pipeline abgeschlossen – Seite wird neu geladen...\n\n"
+        yield "data: FERTIG\n\n"  # Signal für Browser: jetzt neu laden
 
-    scan_laeuft = False
-
-
-@app.route("/starten")
-def starten():
-    """Startet die Pipeline als Hintergrund-Thread und leitet zum Stream weiter."""
-    global scan_laeuft
-    if scan_laeuft:
-        return "⚠️ Scan läuft bereits.", 409
-
-    t = threading.Thread(target=pipeline_im_hintergrund, daemon=True)
-    t.start()
-
-    # Kurz warten damit die Logdatei angelegt wird
-    time.sleep(0.3)
-
-    # Browser direkt auf den Stream umleiten
-    from flask import redirect
-    return redirect("/stream")
+    return Response(pipeline_ausfuehren(), mimetype="text/event-stream")
 
 
-@app.route("/stream")
-def stream():
+
+# =============================================================================
+# BEWERBUNG ERSTELLEN  (Checkbox im Report triggert diese Route)
+# =============================================================================
+
+@app.route("/bewerbung-erstellen")
+def bewerbung_erstellen():
     """
-    Streamt scan.log live zum Browser per SSE.
-    Läuft unabhängig vom eigentlichen Scan-Prozess.
-    Bricht der Browser ab: Scan läuft trotzdem weiter.
+    Startet anpasser.py für eine einzelne Stelle (per URL-Parameter).
+    Danach ruft er bewerbung_generator.py auf um DOCX-Dateien zu erzeugen.
+    Gibt JSON zurück: { ok, nachricht, lebenslauf_url, anschreiben_url }
+    Aufruf: GET /bewerbung-erstellen?url=<stellenurl>
     """
-    def log_lesen():
-        # Warten bis Logdatei existiert
-        for _ in range(20):
-            if LOG_DATEI.exists():
-                break
-            time.sleep(0.2)
-        else:
-            yield "data: ⚠️ Logdatei nicht gefunden\n\n"
-            return
+    from flask import request as flask_req
+    import urllib.parse
 
-        with open(LOG_DATEI, "r", encoding="utf-8") as f:
-            while True:
-                zeile = f.readline()
-                if zeile:
-                    zeile = zeile.rstrip("\n")
-                    if zeile == "FERTIG":
-                        yield "data: ✅ Pipeline abgeschlossen – Seite wird neu geladen...\n\n"
-                        yield "data: FERTIG\n\n"
-                        return
-                    if zeile:
-                        yield f"data: {zeile}\n\n"
-                else:
-                    # Noch keine neue Zeile – kurz warten
-                    time.sleep(0.3)
+    stellen_url = urllib.parse.unquote(flask_req.args.get("url", ""))
+    if not stellen_url:
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
 
-    return Response(log_lesen(), mimetype="text/event-stream")
+    # Schritt 1: TXT erzeugen via anpasser
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        from anpasser import passe_stelle_an
+        ergebnis = passe_stelle_an(stellen_url)
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"anpasser Fehler: {e}"}), 500
+
+    if not ergebnis["ok"]:
+        return jsonify(ergebnis), 500
+
+    txt_pfad = Path(ergebnis["pfad"])
+
+    # Schritt 2: DOCX erzeugen
+    generator_pfad = BASIS_PFAD / "bewerbung_generator.py"
+    if not generator_pfad.exists():
+        return jsonify({"ok": False, "fehler": "bewerbung_generator.py nicht gefunden"}), 500
+
+    proc = subprocess.run(
+        [sys.executable, str(generator_pfad), str(txt_pfad)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    if proc.returncode != 0:
+        print("GENERATOR FEHLER:", proc.stderr)
+        print("GENERATOR STDOUT:", proc.stdout)
+        return jsonify({"ok": False, "fehler": f"Generator Fehler: {proc.stderr[:500]}"}), 500
+
+    ordner  = txt_pfad.parent
+    lv_pfad = ordner / "Lebenslauf.docx"
+    as_pfad = ordner / "Anschreiben.docx"
+
+    return jsonify({
+        "ok": True,
+        "nachricht": "Bewerbungsunterlagen erstellt",
+        "lebenslauf_url":  f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
+        "anschreiben_url": f"/download?pfad={urllib.parse.quote(str(as_pfad))}",
+    })
+
+
+@app.route("/download")
+def download():
+    """Liefert eine Datei vom Raspi als Download."""
+    from flask import request as flask_req
+    import urllib.parse
+    pfad = urllib.parse.unquote(flask_req.args.get("pfad", ""))
+    if not pfad:
+        return "Kein Pfad angegeben", 400
+    p = Path(pfad)
+    if not p.exists():
+        return f"Datei nicht gefunden: {pfad}", 404
+    bewerbungen_dir = BASIS_PFAD / "bewerbungen"
+    if bewerbungen_dir not in p.parents:
+        return "Zugriff verweigert", 403
+    return send_file(p, as_attachment=True)
 
 
 # =============================================================================
