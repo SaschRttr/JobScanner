@@ -169,16 +169,29 @@ with col_l2:
     if df_status.empty:
         st.info("Noch keine Bewerbungen erfasst.")
     else:
-        for stufe, anzahl in df_status["stufe"].value_counts().items():
-            label = stufen_label.get(stufe, stufe)
-            farbe = stufen_farbe.get(stufe, "#888")
+        heute = pd.Timestamp.now()
+        for _, row in df_status.sort_values("beworben_am", na_position="last").iterrows():
+            label = stufen_label.get(row["stufe"], row["stufe"])
+            farbe = stufen_farbe.get(row["stufe"], "#888")
+            # Tage seit Bewerbung
+            if row.get("beworben_am"):
+                try:
+                    tage = (heute - pd.Timestamp(row["beworben_am"])).days
+                    tage_txt = f"{tage} Tag(e)"
+                except:
+                    tage_txt = "–"
+            else:
+                tage_txt = "–"
             st.markdown(
                 f'<div style="padding:8px 12px; margin:4px 0; background:{farbe}22; '
                 f'border-left:4px solid {farbe}; border-radius:4px;">'
-                f'<strong>{label}</strong>: {anzahl}</div>',
+                f'<strong>{row["firma"]}</strong><br>'
+                f'<span style="font-size:0.85em; color:#555;">{row["titel"][:50]}</span><br>'
+                f'<span style="font-size:0.8em;">{label} &nbsp;|&nbsp; '
+                f'<span style="color:#888;">offen seit {tage_txt}</span></span>'
+                f'</div>',
                 unsafe_allow_html=True
             )
-
 with col_r2:
     st.subheader("🏆 Top Stellen (Score ≥ 70%)")
     df_top = df_bewertet[df_bewertet["score"] >= 70].head(15)

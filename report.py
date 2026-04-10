@@ -124,7 +124,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
         css = "stelle stelle-neu"
     else:
         css = "stelle"
-
+    
     tags = "".join(f'<span class="tag">{t}</span>' for t in s.get("treffer", []))
     neu_badge      = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
     geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>' if ist_geloescht else ""
@@ -195,6 +195,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
 
     if lv_docx.exists() and as_docx.exists():
         # Beide DOCX vorhanden → Download-Links anzeigen
+        css = "stelle stelle-bewerbung"
         lv_dl  = f"http://{RASPI_IP}:5000/download?pfad={lv_docx}"
         as_dl  = f"http://{RASPI_IP}:5000/download?pfad={as_docx}"
         lebenslauf_html = f"""
@@ -252,6 +253,7 @@ CSS = """
     .stelle.einladung     { background: #ddeeff; border-left-color: #2980b9; }
     .stelle.zusage        { background: #d5f5e3; border-left-color: #27ae60; }
     .stelle.absage        { background: #fde8e8; border-left-color: #e74c3c; }
+    .stelle-bewerbung { background: #d6eaf8; border-left-color: #2980b9; }
     .tags { margin-top: 5px; }
     .tag {
         display: inline-block; background: #e8f4fd; color: #2980b9;
@@ -314,7 +316,7 @@ CSS = """
 
 JS = """
     const SERVER = window.location.hostname === '192.168.165.146'
-        ? 'http://192.168.165.146:5001'
+        ? 'http://192.168.165.146:5000'
         : null;
 
     async function speichern(url, feld, wert) {

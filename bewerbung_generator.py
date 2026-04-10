@@ -297,7 +297,7 @@ Antworte NUR mit JSON, kein Markdown, keine Backticks:
 # NODE.JS HELPER
 # =============================================================================
 import shutil
-NODE = r"C:\Program Files\nodejs\node.exe"
+NODE = r"C:\Program Files\nodejs\node.exe" if sys.platform == "win32" else "node"
 print("NODE PATH:", NODE)
 def _run_node(js_code: str, label: str):
     """Schreibt JS in Temp-Datei und führt sie mit Node aus."""

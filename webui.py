@@ -214,7 +214,12 @@ def bewerbung_erstellen():
     ordner  = txt_pfad.parent
     lv_pfad = ordner / "Lebenslauf.docx"
     as_pfad = ordner / "Anschreiben.docx"
-
+    # Schritt 3: Report neu generieren damit Links dauerhaft erscheinen
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py")],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
     return jsonify({
         "ok": True,
         "nachricht": "Bewerbungsunterlagen erstellt",
@@ -224,6 +229,31 @@ def bewerbung_erstellen():
 
 
 @app.route("/download")
+@app.route("/status", methods=["GET"])
+def get_status():
+    import db
+    with db.verbindung() as con:
+        rows = con.execute("""
+            SELECT url, stufe, beworben_am, kennenlernen_am, einladung_am, ergebnis_am
+            FROM bewerbungsstatus
+        """).fetchall()
+    result = {}
+    for r in rows:
+        result[r["url"]] = dict(r)
+    return jsonify(result)
+
+
+@app.route("/status", methods=["POST"])
+def post_status():
+    from flask import request as flask_req
+    import db
+    data = flask_req.get_json()
+    print("STATUS POST:", data)
+    if not data or "url" not in data or "feld" not in data or "wert" not in data:
+        return jsonify({"fehler": "url, feld, wert erwartet"}), 400
+    if data["feld"] == "stufe":
+        db.upsert_bewerbungsstatus(data["url"], data["wert"])
+    return jsonify({"ok": True})
 def download():
     """Liefert eine Datei vom Raspi als Download."""
     from flask import request as flask_req
