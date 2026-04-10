@@ -449,12 +449,27 @@ def domain(url: str) -> str:
 
 def text_matched(text: str, begriffe: list) -> list:
     t = text.lower()
-    return [b for b in begriffe if b in t]
+    treffer = []
+    for b in begriffe:
+        if "+" in b:
+            if all(teil in t for teil in b.split("+")):
+                treffer.append(b)
+        else:
+            if b in t:
+                treffer.append(b)
+    return treffer
 
 
 def ist_ausgeschlossen(text: str, begriffe: list) -> bool:
     t = text.lower()
-    return any(b in t for b in begriffe)
+    for b in begriffe:
+        if "+" in b:
+            if all(teil in t for teil in b.split("+")):
+                return True
+        else:
+            if b in t:
+                return True
+    return False
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:
@@ -813,6 +828,14 @@ def main():
                 bekannte[url]["status"] = 1
                 bekannte[url]["geloescht_am"] = None
                 print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
+            if idx is None:
+                stellen.append({
+                    "firma": t["firma"], "titel": t["titel"], "url": url,
+                    "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
+                    "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
+                })
+                stellen_index[url] = len(stellen) - 1
+                print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
         elif url not in bekannte:
             bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None}
             stellen.append({
@@ -842,6 +865,14 @@ def main():
                 if idx is not None and rohtext:
                     stellen[idx]["rohtext"] = rohtext
                 print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
+            if idx is None:
+                stellen.append({
+                    "firma": t["firma"], "titel": t["titel"], "url": url,
+                    "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
+                    "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
+                })
+                stellen_index[url] = len(stellen) - 1
+                print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
         elif url not in bekannte:
             bekannte[url] = {
                 "status": 2 if rohtext else 1,

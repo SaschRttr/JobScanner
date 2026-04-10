@@ -1,0 +1,296 @@
+
+▶️  Starte scanner.py ...
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 91 Suchbegriffe, 68 Ausschlussbegriffe, 18 Firmen
+  📂 Stellen geladen: 13
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  ℹ️  Keine passenden Stellen bei Thales
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  ✅    Staff Product Development Engineer (m/f/d)
+     Treffer: development engineer
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  ✅    Field Application Engineer - Distribution (m/f/d) - REMOTE EMEA
+     Treffer: field
+  📋 Seite 8: 10 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 9
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  📋 Seite 2: 11 Jobs gefunden
+  ✅    Senior Versuchsingenieur (w/m/d) Entwicklung 3D Lasermaschinen
+     Treffer: entwicklung, versuchsingenieur
+  ✅    Entwicklungsingenieur (w/m/d) Elektrotechnik
+     Treffer: entwicklung, entwicklungsingenieur
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Planungsingenieur Hardware (m/w/d)
+     Treffer: hardware
+  📋 Seite 2: 18 Jobs gefunden
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  ℹ️  Keine weiteren Jobs auf Seite 3
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  ℹ️  Keine passenden Stellen bei Knorr-Bremse
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 52 Links gesamt
+  ✅ Heuristik: 36 Job-Links erkannt
+  📋 36 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Weiter zum Inhalt
+     - Skip to footer
+     - Jobs suchen
+     - Login
+     - Deutsch
+     - Deutsch
+     - English
+     - Español
+     - Français
+     - Magyar
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 78 Links gesamt
+  ✅ Heuristik: 60 Job-Links erkannt
+  📋 60 Kandidaten
+  ✅ AI Data Engineer (Human)
+     Treffer: data engineer
+  ✅ Controls and Embedded Electronics & Firmware Specialist (Human)
+     Treffer: embedded, embedded
+  ✅ Electronics Development Engineer (Human)
+     Treffer: electronics development, development engineer
+  ⏭️  Rohtext bereits vorhanden: AI Data Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Controls and Embedded Electronics & Firmware Specialist (Hum
+  ⏭️  Rohtext bereits vorhanden: Electronics Development Engineer (Human)
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  📜 Scrolle...
+  🔗 302 Links gesamt
+  ✅ Heuristik: 15 Job-Links erkannt
+  📋 15 Kandidaten
+  ✅ PMU Design Verification Engineer (m/f/d)
+     Treffer: verification
+  📄 Lade Rohtext: PMU Design Verification Engineer (m/f/d)...
+  🆕 Neu: PMU Design Verification Engineer (m/f/d)
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 134 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ SW Entwicklungsingenieur (all genders)
+     Treffer: entwicklung, entwicklungsingenieur
+  📄 Lade Rohtext: SW Entwicklungsingenieur (all genders)...
+  🆕 Neu: SW Entwicklungsingenieur (all genders)
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 412 Links gesamt
+  ✅ Heuristik: 255 Job-Links erkannt
+  📋 255 Kandidaten
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  ✅ Head of Development – Infrastructure, Testing & Integration for Radio 
+     Treffer: test
+  📄 Lade Rohtext: Senior Test Engineer Java (m/w/d)...
+  🆕 Neu: Senior Test Engineer Java (m/w/d)
+  📄 Lade Rohtext: Senior Software Developer Test (m/w/d)...
+  🆕 Neu: Senior Software Developer Test (m/w/d)
+  📄 Lade Rohtext: Systemingenieur (m/w/d) für sichere Kommunikationssysteme...
+  🆕 Neu: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  📄 Lade Rohtext: Systemingenieur für Funkkommunikationssysteme (m/d/w)...
+  🆕 Neu: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+  📄 Lade Rohtext: Head of Development – Infrastructure, Testing & Integration ...
+  🆕 Neu: Head of Development – Infrastructure, Testing & Integration 
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer
+  ✅ Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer
+  📄 Lade Rohtext: Expert Hardware Test Engineer (m/f/d)...
+  🆕 Neu: Expert Hardware Test Engineer (m/f/d)
+  📄 Lade Rohtext: Hardware Test Engineer (m/f/d)...
+  🆕 Neu: Hardware Test Engineer (m/f/d)
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Parametric Data Analyst (m/f/d)
+     Treffer: data analyst
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Supplier Data Manager (m/f/d)
+     Treffer: test
+  ✅ System Integration Engineer (m/f/d)
+     Treffer: test
+  📄 Lade Rohtext: Parametric Data Analyst (m/f/d)...
+  🆕 Neu: Parametric Data Analyst (m/f/d)
+  📄 Lade Rohtext: Product Engineer (m/f/d)...
+  🆕 Neu: Product Engineer (m/f/d)
+  📄 Lade Rohtext: Supplier Data Manager (m/f/d)...
+  🆕 Neu: Supplier Data Manager (m/f/d)
+  📄 Lade Rohtext: System Integration Engineer (m/f/d)...
+  🆕 Neu: System Integration Engineer (m/f/d)
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 9 Job-Links erkannt
+  📋 9 Kandidaten
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ Software Entwickler - HighSpeed IO Instrumente (m/f/d)
+     Treffer: test
+  ✅ Software Entwickler – RF Demod (m/f/d)
+     Treffer: test
+  📄 Lade Rohtext: R&D Software Development Engineer (C++) (m/f/d)...
+  🆕 Neu: R&D Software Development Engineer (C++) (m/f/d)
+  📄 Lade Rohtext: Software Entwickler - HighSpeed IO Instrumente (m/f/d)...
+  🆕 Neu: Software Entwickler - HighSpeed IO Instrumente (m/f/d)
+  📄 Lade Rohtext: Software Entwickler – RF Demod (m/f/d)...
+  🆕 Neu: Software Entwickler – RF Demod (m/f/d)
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 71 Links gesamt
+  ✅ Heuristik: 8 Job-Links erkannt
+  📋 8 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+============================================================
+  Scanne: Bertrandt
+============================================================
+  📜 Scrolle...
+  🔗 198 Links gesamt
+  ✅ Heuristik: 176 Job-Links erkannt
+  📋 176 Kandidaten
+  ✅ Systemingenieur (m/w/d)
+     Treffer: systemingenieur
+  ✅ Entwicklungsingenieur Leistungselektronik (m/w/d)
+     Treffer: elektronik, entwicklung, leistungselektronik, entwicklungsingenieur
+  ✅ Experte Inbetriebnahme (m/w/d)
+     Treffer: inbetriebnahme, inbetriebnahme
+  ✅ Ingenieur Prüftechnik Schaltanlagen (m/w/d)
+     Treffer: prüftechnik
+  ✅ Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  ✅ Data Engineer (m/w/d)
+     Treffer: data engineer
+  ✅ Test Engineer (m/w/d)
+     Treffer: test, test engineer
+  ✅ Elektrotechniker (m/w/d) in der Medizintechnik
+     Treffer: elektrotechniker
+  ✅ Techniker (m/w/d) Prüf- und Messtechnik
+     Treffer: messtechnik, messtechnik
+  ✅ Automatisierungstechniker / Elektrotechniker (m/w/d)
+     Treffer: elektrotechniker
+  ✅ Systems Engineer - Aerospace field
+     Treffer: field
+  ✅ Senior Embedded Softwareentwickler (m/w/d) Radarsysteme
+     Treffer: embedded, embedded
+  ✅ Validierungsingenieur (m/w/d)
+     Treffer: validierung, validierung
+  ✅ Elektrokonstrukteur Hardware (m/w/d)
+     Treffer: hardware
+  ✅ Elektroniker (m/w/d) Geräte & Systeme im Serviceeinsatz
+     Treffer: elektronik
+  ✅ Testare banc PWT - Mioveni
+     Treffer: test
+  📄 Lade Rohtext: Systemingenieur (m/w/d)...
+  🆕 Neu: Systemingenieur (m/w/d)
+  📄 Lade Rohtext: Entwicklungsingenieur Leistungselektronik (m/w/d)...
+  🆕 Neu: Entwicklungsingenieur Leistungselektronik (m/w/d)
+  📄 Lade Rohtext: Experte Inbetriebnahme (m/w/d)...
+  🆕 Neu: Experte Inbetriebnahme (m/w/d)
+  📄 Lade Rohtext: Ingenieur Prüftechnik Schaltanlagen (m/w/d)...
+  🆕 Neu: Ingenieur Prüftechnik Schaltanlagen (m/w/d)
+  📄 Lade Rohtext: Entwicklungsingenieur Elektrotechnik (m/w/d)...
+  🆕 Neu: Entwicklungsingenieur Elektrotechnik (m/w/d)
+  📄 Lade Rohtext: Data Engineer (m/w/d)...
+  🆕 Neu: Data Engineer (m/w/d)
+  📄 Lade Rohtext: Test Engineer (m/w/d)...
+  🆕 Neu: Test Engineer (m/w/d)
+  📄 Lade Rohtext: Elektrotechniker (m/w/d) in der Medizintechnik...
+  🆕 Neu: Elektrotechniker (m/w/d) in der Medizintechnik
+  📄 Lade Rohtext: Techniker (m/w/d) Prüf- und Messtechnik...
+  🆕 Neu: Techniker (m/w/d) Prüf- und Messtechnik
+  📄 Lade Rohtext: Automatisierungstechniker / Elektrotechniker (m/w/d)...
+  🆕 Neu: Automatisierungstechniker / Elektrotechniker (m/w/d)
+  📄 Lade Rohtext: Systems Engineer - Aerospace field...
+  🆕 Neu: Systems Engineer - Aerospace field
+  📄 Lade Rohtext: Senior Embedded Softwareentwickler (m/w/d) Radarsysteme...
+  🆕 Neu: Senior Embedded Softwareentwickler (m/w/d) Radarsysteme
+  📄 Lade Rohtext: Validierungsingenieur (m/w/d)...
+  🆕 Neu: Validierungsingenieur (m/w/d)
+  📄 Lade Rohtext: Elektrokonstrukteur Hardware (m/w/d)...
