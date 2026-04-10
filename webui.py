@@ -19,6 +19,8 @@ import subprocess
 import os
 import sys
 import json
+import time
+import threading
 import urllib.parse
 from pathlib import Path
 from flask import Flask, Response, send_file, jsonify
@@ -30,7 +32,11 @@ from flask import Flask, Response, send_file, jsonify
 
 BASIS_PFAD  = Path(__file__).parent
 REPORT_HTML = BASIS_PFAD / "report.html"
+LOG_DATEI   = BASIS_PFAD / "scan.log"
 PORT        = 5000
+
+# Globaler Status: läuft gerade ein Scan?
+scan_laeuft = False
 
 # Reihenfolge der Scripts – identisch zu start.bat
 PIPELINE = [
@@ -56,23 +62,25 @@ def index():
     return "<h2>⚠️ Noch kein Report vorhanden. Bitte zuerst einen Scan starten.</h2>", 404
 
 
-@app.route("/starten")
-def starten():
+def pipeline_im_hintergrund():
     """
-    Startet die Pipeline und streamt den Output live zum Browser.
-    Nutzt SSE (Server-Sent Events) – der Browser bekommt jede
-    Ausgabezeile sofort, ohne die Seite neu zu laden.
+    Läuft in einem eigenen Thread – komplett unabhängig vom Browser.
+    Schreibt Output in scan.log statt direkt zum Browser.
     """
-    def pipeline_ausfuehren():
+    global scan_laeuft
+    scan_laeuft = True
+
+    with open(LOG_DATEI, "w", encoding="utf-8") as log:
         for script in PIPELINE:
             script_pfad = BASIS_PFAD / script
 
             if not script_pfad.exists():
-                yield f"data: ⚠️  {script} nicht gefunden – übersprungen\n\n"
+                log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
+                log.flush()
                 continue
 
-            yield f"data: \n\n"
-            yield f"data: ▶️  Starte {script} ...\n\n"
+            log.write(f"\n▶️  Starte {script} ...\n")
+            log.flush()
 
             prozess = subprocess.Popen(
                 [sys.executable, str(script_pfad)],
@@ -83,26 +91,76 @@ def starten():
                 errors="replace",
                 cwd=str(BASIS_PFAD),
                 env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                start_new_session=True,
             )
 
             for zeile in prozess.stdout:
                 zeile = zeile.rstrip("\n")
                 if zeile:
-                    yield f"data: {zeile}\n\n"
+                    log.write(zeile + "\n")
+                    log.flush()
 
             prozess.wait()
 
             if prozess.returncode == 0:
-                yield f"data: ✅ {script} fertig\n\n"
+                log.write(f"✅ {script} fertig\n")
             else:
-                yield f"data: ❌ {script} mit Fehler beendet (Code {prozess.returncode})\n\n"
+                log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
+            log.flush()
 
-        yield "data: \n\n"
-        yield "data: ✅ Pipeline abgeschlossen – Seite wird neu geladen...\n\n"
-        yield "data: FERTIG\n\n"  # Signal für Browser: jetzt neu laden
+        log.write("\nFERTIG\n")
+        log.flush()
 
-    return Response(pipeline_ausfuehren(), mimetype="text/event-stream")
+    scan_laeuft = False
 
+
+@app.route("/starten")
+def starten():
+    """Startet die Pipeline als Hintergrund-Thread und leitet zum Stream weiter."""
+    global scan_laeuft
+    if scan_laeuft:
+        return "⚠️ Scan läuft bereits.", 409
+
+    t = threading.Thread(target=pipeline_im_hintergrund, daemon=True)
+    t.start()
+
+    time.sleep(0.3)
+
+    from flask import redirect
+    return redirect("/stream")
+
+
+@app.route("/stream")
+def stream():
+    """
+    Streamt scan.log live zum Browser per SSE.
+    Läuft unabhängig vom eigentlichen Scan-Prozess.
+    Bricht der Browser ab: Scan läuft trotzdem weiter.
+    """
+    def log_lesen():
+        for _ in range(20):
+            if LOG_DATEI.exists():
+                break
+            time.sleep(0.2)
+        else:
+            yield "data: ⚠️ Logdatei nicht gefunden\n\n"
+            return
+
+        with open(LOG_DATEI, "r", encoding="utf-8") as f:
+            while True:
+                zeile = f.readline()
+                if zeile:
+                    zeile = zeile.rstrip("\n")
+                    if zeile == "FERTIG":
+                        yield "data: ✅ Pipeline abgeschlossen – Seite wird neu geladen...\n\n"
+                        yield "data: FERTIG\n\n"
+                        return
+                    if zeile:
+                        yield f"data: {zeile}\n\n"
+                else:
+                    time.sleep(0.3)
+
+    return Response(log_lesen(), mimetype="text/event-stream")
 
 
 # =============================================================================
@@ -118,7 +176,6 @@ def bewerbung_erstellen():
     Aufruf: GET /bewerbung-erstellen?url=<stellenurl>
     """
     from flask import request as flask_req
-    import urllib.parse
 
     stellen_url = urllib.parse.unquote(flask_req.args.get("url", ""))
     if not stellen_url:
@@ -170,7 +227,6 @@ def bewerbung_erstellen():
 def download():
     """Liefert eine Datei vom Raspi als Download."""
     from flask import request as flask_req
-    import urllib.parse
     pfad = urllib.parse.unquote(flask_req.args.get("pfad", ""))
     if not pfad:
         return "Kein Pfad angegeben", 400
