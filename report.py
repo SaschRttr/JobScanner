@@ -11,7 +11,7 @@ E-Mail wird nur gesendet wenn:
   - EMAIL_AKTIV = true in config.txt
   - Es neue oder weggefallene Stellen gibt
 """
-
+# -*- coding: utf-8 -*-
 import json
 import re
 import smtplib
@@ -216,10 +216,26 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
         </div>"""
     else:
         lebenslauf_html = ""
+    # Stellentext-Block (aufklappbar)
+    stellentext = s.get("stellentext") or s.get("rohtext") or ""
+    if stellentext:
+        # HTML-Sonderzeichen escapen, Zeilenumbrüche als <br>
+        import html as html_mod
+        st_escaped = html_mod.escape(stellentext[:4000])
+        st_escaped = st_escaped.replace("\n", "<br>")
+        stellentext_html = f"""
+        <details class="stellentext-details">
+            <summary>📄 Stellentext anzeigen</summary>
+            <div class="stellentext-inhalt">{st_escaped}</div>
+        </details>"""
+    else:
+        stellentext_html = ""
+
     return f"""<div class="{css}" data-url="{url_escaped}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{datum_label}
     <div class="tags">{tags}</div>
     {bewertung_html}
+    {stellentext_html}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -271,6 +287,18 @@ CSS = """
         border-radius: 6px; font-size: 0.9em;
     }
     .bewertung details { margin-top: 8px; }
+    .stellentext-details { margin-top: 8px; }
+    .stellentext-details summary {
+        cursor: pointer; color: #555; font-size: 0.9em;
+        padding: 4px 0; user-select: none;
+    }
+    .stellentext-inhalt {
+        margin-top: 8px; padding: 12px; background: #fff;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 0.85em; line-height: 1.6; color: #333;
+        max-height: 400px; overflow-y: auto;
+        white-space: pre-wrap;
+    }
     .begruendung { color: #555; }
     .notizen { margin-top: 8px; }
     .notizen summary { cursor: pointer; color: #888; font-size: 0.85em; }
@@ -315,9 +343,7 @@ CSS = """
 """
 
 JS = """
-    const SERVER = window.location.hostname === '192.168.165.146'
-        ? 'http://192.168.165.146:5001'
-        : null;
+    const SERVER = window.location.origin;
 
     async function speichern(url, feld, wert) {
         const status = JSON.parse(localStorage.getItem('job_status') || '{}');
@@ -430,7 +456,7 @@ JS = """
         quelle.onerror = function() {
             quelle.close();
             btn.disabled = false;
-            btn.textContent = '🔄 Scan jetzt starten';
+            btn.textContent = 'Scan jetzt starten';
             status.textContent = '❌ Fehler: Flask-Server nicht erreichbar. Läuft webui.py?';
             status.style.color = '#e74c3c';
         };
@@ -448,9 +474,7 @@ JS = """
         statusEl.style.color = '#2980b9';
 
         try {
-            const server = window.location.hostname === 'localhost'
-                ? 'http://localhost:5001'
-                : 'http://192.168.165.146:5001';
+            const server = window.location.origin;
 
             const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(decodeURIComponent(stellenUrl)));
             const data = await res.json();
@@ -474,6 +498,58 @@ JS = """
             checkbox.disabled = false;
             checkbox.checked  = false;
         }
+    }
+    async function stelleEinfuegen() {
+        const url = document.getElementById('manuell-url').value.trim();
+        const firma = document.getElementById('manuell-firma').value.trim();
+        const statusEl = document.getElementById('manuell-status');
+        const output = document.getElementById('manuell-output');
+
+        if (!url) {
+            statusEl.textContent = 'Bitte eine URL eingeben.';
+            statusEl.style.color = '#e74c3c';
+            return;
+        }
+
+        statusEl.textContent = 'Stelle wird eingetragen...';
+        statusEl.style.color = '#2980b9';
+
+        const server = window.location.origin;
+
+        const res = await fetch(server + '/stelle-einfuegen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, firma })
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+            statusEl.style.color = '#e74c3c';
+            return;
+        }
+
+        statusEl.textContent = 'Eingetragen - Pipeline laeuft...';
+        statusEl.style.color = '#27ae60';
+        output.style.display = 'block';
+        output.textContent = '';
+
+        const quelle = new EventSource(server + '/manuell-stream');
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                statusEl.textContent = 'Fertig - Seite wird neu geladen...';
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+            output.textContent += e.data + '\\n';
+            output.scrollTop = output.scrollHeight;
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            statusEl.textContent = 'Verbindungsfehler zum Server';
+            statusEl.style.color = '#e74c3c';
+        };
     }
 """
 
@@ -506,12 +582,28 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         Stand: {datum}
     </div>
-    <div class="scan-box">
+    """
+    html += """
+        <div class="scan-box">
         <button class="scan-btn" onclick="scanStarten()">🔄 Scan jetzt starten</button>
         <div id="scan-status"></div>
         <pre id="scan-output"></pre>
-    </div>
-"""
+        </div>
+
+        <div class="scan-box">
+        <h3 style="margin-top:0;">📎 Stelle manuell einfügen</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="text" id="manuell-url" placeholder="https://jobs.firma.de/stelle/123"
+                style="flex:2; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <input type="text" id="manuell-firma" placeholder="Firmenname (optional)"
+                style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <button class="scan-btn" onclick="stelleEinfuegen()">➕ Einfügen</button>
+        </div>
+        <div id="manuell-status"></div>
+        <pre id="manuell-output" style="display:none;"></pre>
+        </div>
+    """
+
 
     # ── Neue Stellen ────────────────────────────────────────────────
     if neue:

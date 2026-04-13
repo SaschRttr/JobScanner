@@ -24,7 +24,7 @@ import urllib.parse
 import json
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
-
+print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
 # =============================================================================
@@ -52,7 +52,6 @@ PIPELINE = [
 
 app = Flask(__name__)
 
-
 @app.route("/")
 def index():
     """Liefert den aktuellen Report aus."""
@@ -69,48 +68,49 @@ def pipeline_im_hintergrund():
     global scan_laeuft
     scan_laeuft = True
 
-    with open(LOG_DATEI, "w", encoding="utf-8") as log:
-        for script in PIPELINE:
-            script_pfad = BASIS_PFAD / script
+    try:
+        with open(LOG_DATEI, "w", encoding="utf-8") as log:
+            for script in PIPELINE:
+                script_pfad = BASIS_PFAD / script
 
-            if not script_pfad.exists():
-                log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
-                log.flush()
-                continue
-
-            log.write(f"\n▶️  Starte {script} ...\n")
-            log.flush()
-
-            prozess = subprocess.Popen(
-                [sys.executable, str(script_pfad)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=str(BASIS_PFAD),
-                env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
-                start_new_session=True,  # Unabhängig vom Flask-Prozess
-            )
-
-            for zeile in prozess.stdout:
-                zeile = zeile.rstrip("\n")
-                if zeile:
-                    log.write(zeile + "\n")
+                if not script_pfad.exists():
+                    log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
                     log.flush()
+                    continue
 
-            prozess.wait()
+                log.write(f"\n▶️  Starte {script} ...\n")
+                log.flush()
 
-            if prozess.returncode == 0:
-                log.write(f"✅ {script} fertig\n")
-            else:
-                log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
+                prozess = subprocess.Popen(
+                    [sys.executable, str(script_pfad)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=str(BASIS_PFAD),
+                    env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                    start_new_session=True,  # Unabhängig vom Flask-Prozess
+                )
+
+                for zeile in prozess.stdout:
+                    zeile = zeile.rstrip("\n")
+                    if zeile:
+                        log.write(zeile + "\n")
+                        log.flush()
+
+                prozess.wait()
+
+                if prozess.returncode == 0:
+                    log.write(f"✅ {script} fertig\n")
+                else:
+                    log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
+                log.flush()
+
+            log.write("\nFERTIG\n")
             log.flush()
-
-        log.write("\nFERTIG\n")
-        log.flush()
-
-    scan_laeuft = False
+    finally:
+        scan_laeuft = False
 
 
 @app.route("/starten")
@@ -276,7 +276,166 @@ def post_status():
         db.upsert_bewerbungsstatus(data["url"], data["wert"])
     return jsonify({"ok": True})
 
+@app.route("/stelle-einfuegen", methods=["POST"])
+def stelle_einfuegen():
+    """
+    Trägt eine Stelle sofort in stellen.json, bekannte_stellen.json und DB ein.
+    Kein HTTP-Fetch hier — das macht rohtext_holen.py im Pipeline-Stream.
+    Erwartet JSON: { url, firma (optional) }
+    Gibt zurück: { ok, fehler }
+    """
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
 
+    stellen_url = data["url"].strip()
+    firma       = data.get("firma", "").strip() or "Unbekannt"
+
+    from datetime import datetime
+    jetzt = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # --- stellen.json + bekannte_stellen.json ----------------------------
+    try:
+        stellen_pfad  = BASIS_PFAD / "stellen.json"
+        bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
+
+        stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8"))  if stellen_pfad.exists()  else []
+        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8")) if bekannte_pfad.exists() else {}
+
+        if any(s.get("url") == stellen_url for s in stellen):
+            return jsonify({"ok": False, "fehler": "Stelle bereits vorhanden"}), 409
+
+        stellen.append({
+            "url":         stellen_url,
+            "firma":       firma,
+            "titel":       "(manuell eingetragen)",
+            "treffer":     [],
+            "gefunden_am": jetzt,
+            "neu":         True,
+            "rohtext":     None,
+        })
+        stellen_pfad.write_text(
+            json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        bekannte[stellen_url] = {"status": 1, "gefunden_am": jetzt}
+        bekannte_pfad.write_text(
+            json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"JSON-Fehler: {e}"}), 500
+
+    # --- SQLite-DB -------------------------------------------------------
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db
+        db.erstelle_schema()
+        db.upsert_stelle({
+            "url":         stellen_url,
+            "firma":       firma,
+            "titel":       "(manuell eingetragen)",
+            "treffer":     [],
+            "gefunden_am": jetzt,
+            "neu":         True,
+            "status":      1,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    return jsonify({"ok": True})
+
+
+@app.route("/manuell-stream")
+def manuell_stream():
+    global scan_laeuft
+
+    # Safety-Reset: Falls scan_laeuft durch eine Exception stecken blieb
+    if scan_laeuft:
+        try:
+            if not LOG_DATEI.exists():
+                scan_laeuft = False  # Log nicht da – Flag war stale
+            else:
+                inhalt = LOG_DATEI.read_text(encoding="utf-8", errors="replace")
+                log_alter = time.time() - LOG_DATEI.stat().st_mtime
+                if "FERTIG" in inhalt or log_alter > 60:
+                    scan_laeuft = False  # Scan beendet oder seit >60s tot
+        except OSError:
+            scan_laeuft = False
+
+    if scan_laeuft:
+        return "Scan läuft bereits.", 409
+
+    TEIL_PIPELINE = ["rohtext_holen.py", "extraktor.py", "bewertung.py", "report.py"]
+
+    def pipeline_manuell():
+        global scan_laeuft
+        scan_laeuft = True
+        try:
+            with open(LOG_DATEI, "w", encoding="utf-8") as log:
+                for script in TEIL_PIPELINE:
+                    script_pfad = BASIS_PFAD / script
+                    log.write(f"\n Starte {script} ...\n")
+                    log.flush()
+                    prozess = subprocess.Popen(
+                        [sys.executable, str(script_pfad)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        cwd=str(BASIS_PFAD),
+                        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                        start_new_session=True,
+                    )
+                    for zeile in prozess.stdout:
+                        zeile = zeile.rstrip("\n")
+                        if zeile:
+                            log.write(zeile + "\n")
+                            log.flush()
+                    prozess.wait()
+                    if prozess.returncode == 0:
+                        log.write(f"OK {script} fertig\n")
+                    else:
+                        log.write(f"FEHLER {script} (Code {prozess.returncode})\n")
+                    log.flush()
+                log.write("\nFERTIG\n")
+                log.flush()
+        finally:
+            scan_laeuft = False
+
+    t = threading.Thread(target=pipeline_manuell, daemon=True)
+    t.start()
+    time.sleep(0.3)
+
+    # Direkt den Stream zurückgeben statt redirect
+    def log_lesen():
+        for _ in range(20):
+            if LOG_DATEI.exists():
+                break
+            time.sleep(0.2)
+        else:
+            yield "data: Logdatei nicht gefunden\n\n"
+            return
+
+        with open(LOG_DATEI, "r", encoding="utf-8") as f:
+            while True:
+                zeile = f.readline()
+                if zeile:
+                    zeile = zeile.rstrip("\n")
+                    if zeile == "FERTIG":
+                        yield "data: Fertig - Seite wird neu geladen...\n\n"
+                        yield "data: FERTIG\n\n"
+                        return
+                    if zeile:
+                        yield f"data: {zeile}\n\n"
+                else:
+                    time.sleep(0.3)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(log_lesen(), mimetype="text/event-stream", headers=headers)
 # =============================================================================
 # START
 # =============================================================================
