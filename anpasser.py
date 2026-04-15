@@ -35,11 +35,12 @@ except ImportError:
 # PFADE
 # =============================================================================
 
-BASIS_PFAD      = Path(__file__).parent
-STELLEN_JSON    = BASIS_PFAD / "stellen.json"
-VORLAGE_PFAD    = BASIS_PFAD / "lebenslauf_vorlage.txt"
-BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
-CONFIG_PFAD     = Path(__file__).parent / "config.txt"
+BASIS_PFAD           = Path(__file__).parent
+STELLEN_JSON         = BASIS_PFAD / "stellen.json"
+VORLAGE_PFAD         = BASIS_PFAD / "lebenslauf_vorlage.txt"
+ANSCHREIBEN_VORLAGE  = BASIS_PFAD / "anschreiben_vorlage.txt"
+BEWERBUNGEN_DIR      = BASIS_PFAD / "bewerbungen"
+CONFIG_PFAD          = Path(__file__).parent / "config.txt"
 
 KI_MODELL  = "claude-sonnet-4-20250514"
 MIN_SCORE  = 70
@@ -192,6 +193,189 @@ Regeln:
 
 
 # =============================================================================
+# ANSCHREIBEN: FIRMENDATEN AUS CONFIG
+# =============================================================================
+
+_MONATE = {
+    1: "Januar", 2: "Februar", 3: "März",    4: "April",
+    5: "Mai",    6: "Juni",    7: "Juli",     8: "August",
+    9: "September", 10: "Oktober", 11: "November", 12: "Dezember",
+}
+
+_DUMMY_FIRMA = {
+    "firmenname":      "[Firmenname]",
+    "abteilung":       "[Abteilung]",
+    "ansprechpartner": "[Ansprechpartner]",
+    "strasse":         "[Straße]",
+    "plz":             "[PLZ]",
+    "ort":             "[Ort]",
+}
+
+
+def lade_firma_anschreiben(firma_name: str) -> dict:
+    """
+    Liest [firma_anschreiben] aus config.txt.
+    Findet den Eintrag per Teilstring-Match (case-insensitive).
+    Gibt Dummy-Werte zurück wenn kein Eintrag passt.
+    """
+    if not CONFIG_PFAD.exists():
+        return _DUMMY_FIRMA.copy()
+
+    inhalt = CONFIG_PFAD.read_text(encoding="utf-8")
+    start  = inhalt.find("[firma_anschreiben]")
+    ende   = inhalt.find("[\\firma_anschreiben]")
+    if start == -1 or ende == -1:
+        return _DUMMY_FIRMA.copy()
+
+    sektion     = inhalt[start + len("[firma_anschreiben]"):ende]
+    firma_lower = firma_name.lower()
+
+    for zeile in sektion.splitlines():
+        z = zeile.strip()
+        if not z or z.startswith("#"):
+            continue
+        teile = [t.strip() for t in z.split("|")]
+        if len(teile) != 6:
+            continue
+        eintrag_lower = teile[0].lower()
+        if eintrag_lower in firma_lower or firma_lower in eintrag_lower:
+            return {
+                "firmenname":      teile[0],
+                "abteilung":       teile[1],
+                "ansprechpartner": teile[2],
+                "strasse":         teile[3],
+                "plz":             teile[4],
+                "ort":             teile[5],
+            }
+    return _DUMMY_FIRMA.copy()
+
+
+# =============================================================================
+# ANSCHREIBEN: KI-AUFRUF (einmaliger Aufruf, alle Abschnitte auf einmal)
+# =============================================================================
+
+def generiere_anschreiben_inhalt(
+    stelle: dict,
+    vorlage_abschnitte: dict,
+    client,
+) -> dict | None:
+    """
+    Einzelner KI-Aufruf: passt die bestehenden Vorlagen-Abschnitte minimal an.
+    Bleibt so nah wie möglich am Original – ändert nur was stellenspezifisch nötig ist.
+    """
+    beschreibung = (stelle.get("rohtext") or stelle.get("beschreibung") or "")[:2500]
+
+    prompt = f"""Du bist ein Bewerbungsberater. Passe das folgende Standard-Anschreiben für eine konkrete Stelle an.
+
+WICHTIG – Minimaländerungen:
+- Behalte Satzbau, Stil und Ton so weit wie möglich bei
+- Ändere NUR was wirklich stellenspezifisch sein muss (z.B. Buzzwords aus der Stellenanzeige aufgreifen,
+  einen Bullet durch einen passenderen ersetzen, die Anrede falls ein Name bekannt ist)
+- Erfinde keine neuen Fakten – nur Fakten aus dem Lebenslauf verwenden
+- Wenn ein Abschnitt schon gut passt, gib ihn unverändert zurück
+
+Firma:  {stelle.get('firma', '')}
+Stelle: {stelle.get('titel', '')}
+Stellenbeschreibung (Auszug): {beschreibung}
+
+=== STANDARD-ANSCHREIBEN (Vorlage) ===
+
+ANREDE:
+{vorlage_abschnitte.get('ANREDE', '')}
+
+ABSATZ_1:
+{vorlage_abschnitte.get('ABSATZ_1', '')}
+
+ABSATZ_2_INTRO:
+{vorlage_abschnitte.get('ABSATZ_2_INTRO', '')}
+
+ABSATZ_2_BULLETS (jede Zeile ein Bullet, mit "- " Präfix):
+{vorlage_abschnitte.get('ABSATZ_2_BULLETS', '')}
+
+ABSATZ_3:
+{vorlage_abschnitte.get('ABSATZ_3', '')}
+
+ABSATZ_4:
+{vorlage_abschnitte.get('ABSATZ_4', '')}
+
+Antworte NUR mit JSON (kein Markdown, keine Backticks):
+{{"betreff":"Bewerbung als <exakter Stellentitel aus Anzeige>","anrede":"...","absatz_1":"...","absatz_2_intro":"...","absatz_2_bullets":["...","...","..."],"absatz_3":"...","absatz_4":"..."}}"""
+
+    try:
+        antwort = client.messages.create(
+            model=KI_MODELL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = re.sub(r"```json|```", "", antwort.content[0].text.strip()).strip()
+        return json.loads(text)
+    except Exception as e:
+        print(f"  ❌ API-Fehler Anschreiben: {e}")
+        return None
+
+
+# =============================================================================
+# ANSCHREIBEN: VORLAGE BEFÜLLEN UND SPEICHERN
+# =============================================================================
+
+def generiere_anschreiben(stelle: dict, client, ordner: Path) -> bool:
+    """
+    Erzeugt Anschreiben.txt im Zielordner.
+    Gibt True zurück wenn erfolgreich, False bei Fehler.
+    """
+    if not ANSCHREIBEN_VORLAGE.exists():
+        print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
+        return False
+
+    vorlage = ANSCHREIBEN_VORLAGE.read_text(encoding="utf-8")
+    firma_d = lade_firma_anschreiben(stelle.get("firma", ""))
+
+    # EMPFAENGER direkt befüllen (kein KI)
+    empfaenger = (
+        f"{firma_d['firmenname']}\n"
+        f"{firma_d['abteilung']}\n"
+        f"{firma_d['ansprechpartner']}\n"
+        f"{firma_d['strasse']}\n"
+        f"{firma_d['plz']} {firma_d['ort']}"
+    )
+
+    # DATUM direkt befüllen (kein KI)
+    heute = datetime.now()
+    datum = f"Stuttgart, {heute.day}. {_MONATE[heute.month]} {heute.year}"
+
+    # Vorlage-Abschnitte für KI-Kontext einlesen
+    vorlage_abschnitte = {}
+    for marker in ["ANREDE", "ABSATZ_1", "ABSATZ_2_INTRO", "ABSATZ_2_BULLETS", "ABSATZ_3", "ABSATZ_4"]:
+        abschnitt = extrahiere_abschnitt(vorlage, marker)
+        if abschnitt:
+            vorlage_abschnitte[marker] = abschnitt
+
+    # Einmaliger KI-Aufruf: Vorlage minimal anpassen
+    inhalt = generiere_anschreiben_inhalt(stelle, vorlage_abschnitte, client)
+    if not inhalt:
+        return False
+
+    bullets_text = "\n".join(f"- {b}" for b in inhalt.get("absatz_2_bullets", []))
+
+    # Vorlage befüllen (ABSENDER, GRUSS, ANLAGEN bleiben unverändert aus Vorlage)
+    angepasst = vorlage
+    angepasst = ersetze_abschnitt(angepasst, "EMPFAENGER",       empfaenger)
+    angepasst = ersetze_abschnitt(angepasst, "DATUM",            datum)
+    angepasst = ersetze_abschnitt(angepasst, "BETREFF",          inhalt.get("betreff", ""))
+    angepasst = ersetze_abschnitt(angepasst, "ANREDE",           inhalt.get("anrede",  ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_1",         inhalt.get("absatz_1", ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_INTRO",   inhalt.get("absatz_2_intro", ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_BULLETS", bullets_text)
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_3",         inhalt.get("absatz_3", ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_4",         inhalt.get("absatz_4", ""))
+
+    ziel = ordner / "Anschreiben.txt"
+    ziel.write_text(angepasst, encoding="utf-8")
+    print(f"  ✅ Anschreiben.txt gespeichert")
+    return True
+
+
+# =============================================================================
 # EINZELSTELLE ANPASSEN  (wird von webui.py / Flask aufgerufen)
 # =============================================================================
 
@@ -261,6 +445,11 @@ def passe_stelle_an(url: str) -> dict:
             f.write(f"  → {a}\n")
         f.write("\n" + "=" * 60 + "\n\n")
         f.write(angepasste_vorlage)
+
+    # Anschreiben generieren (überschreibe nie vorhandene Datei nicht automatisch)
+    as_ziel = ordner / "Anschreiben.txt"
+    if not as_ziel.exists():
+        generiere_anschreiben(stelle, client, ordner)
 
     return {"ok": True, "pfad": str(ziel)}
 
@@ -384,7 +573,15 @@ def main():
             f.write("\n" + "=" * 60 + "\n\n")
             f.write(angepasste_vorlage)
 
-        print(f"  ✅ Gespeichert: {ziel}")
+        print(f"  ✅ Lebenslauf.txt gespeichert: {ziel}")
+
+        # Anschreiben generieren
+        as_ziel = ordner / "Anschreiben.txt"
+        if not as_ziel.exists():
+            generiere_anschreiben(stelle, client, ordner)
+        else:
+            print(f"  ⏭️  Anschreiben.txt bereits vorhanden – übersprungen")
+
         erstellt += 1
 
     print(f"\n{'='*60}")

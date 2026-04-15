@@ -294,9 +294,27 @@ Antworte NUR mit JSON, kein Markdown, keine Backticks:
 
 
 # =============================================================================
+# ANSCHREIBEN ALS TXT MIT MARKERN SPEICHERN
+# =============================================================================
+
+def schreibe_anschreiben_txt(anschreiben: dict, ziel: Path):
+    """
+    Schreibt das AI-generierte Anschreiben als TXT mit ---MARKER---,
+    damit docx_patcher es gegen anschreiben_vorlage.txt vergleichen kann.
+    """
+    absaetze = anschreiben.get("absaetze", [])
+    zeilen = []
+    zeilen += [f"---BETREFF---", anschreiben.get("betreff", ""), "---/BETREFF---", ""]
+    zeilen += [f"---ANREDE---",  anschreiben.get("anrede",  ""), "---/ANREDE---",  ""]
+    for i, absatz in enumerate(absaetze, 1):
+        zeilen += [f"---ABSATZ_{i}---", absatz, f"---/ABSATZ_{i}---", ""]
+    zeilen += [f"---GRUSS---", anschreiben.get("gruss", ""), "---/GRUSS---"]
+    ziel.write_text("\n".join(zeilen), encoding="utf-8")
+
+
+# =============================================================================
 # NODE.JS HELPER
 # =============================================================================
-import shutil
 NODE = r"C:\Program Files\nodejs\node.exe" if sys.platform == "win32" else "node"
 print("NODE PATH:", NODE)
 def _run_node(js_code: str, label: str):

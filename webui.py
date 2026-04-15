@@ -216,33 +216,23 @@ def bewerbung_erstellen():
     if not ok:
         return jsonify({"ok": False, "fehler": "DOCX-Generierung fehlgeschlagen"}), 500
 
-    # Schritt 3: Anschreiben.docx erzeugen (Fehler nur warnen, nicht abbrechen)
+    # Schritt 3: Anschreiben.docx aus der von anpasser.py erzeugten Anschreiben.txt
+    as_txt          = txt_pfad.parent / "Anschreiben.txt"
     as_pfad         = txt_pfad.parent / f"Anschreiben_{datei_suffix}.docx"
     anschreiben_url = None
     try:
-        from bewerbung_generator import (
-            parse_txt,
-            parse_lebenslauf_abschnitte,
-            generiere_anschreiben_text,
-            erstelle_anschreiben_docx,
-            lade_config,
+        if not as_txt.exists():
+            raise FileNotFoundError("Anschreiben.txt nicht gefunden – anpasser.py lief nicht durch?")
+        vorlage_as_docx = BASIS_PFAD / "anschreiben_vorlage.docx"
+        vorlage_as_txt  = BASIS_PFAD / "anschreiben_vorlage.txt"
+        ok_as = erzeuge_docx_mit_changes(
+            txt_pfad         = as_txt,
+            vorlage_pfad     = vorlage_as_docx,
+            ausgabe_pfad     = as_pfad,
+            vorlage_txt_pfad = vorlage_as_txt,
         )
-        import anthropic as _anthropic
-
-        config     = lade_config()
-        client     = _anthropic.Anthropic(api_key=config["api_key"])
-        meta       = parse_txt(txt_pfad)
-        abschnitte = parse_lebenslauf_abschnitte(meta["lebenslauf_text"])
-
-        stellen_json = BASIS_PFAD / "stellen.json"
-        stellen = json.loads(stellen_json.read_text(encoding="utf-8")) if stellen_json.exists() else []
-        stelle  = next(
-            (s for s in stellen if s.get("url") == meta["url"]),
-            {"firma": meta["firma"], "titel": meta["titel"], "beschreibung": ""},
-        )
-
-        anschreiben = generiere_anschreiben_text(meta["lebenslauf_text"], stelle, client)
-        erstelle_anschreiben_docx(anschreiben, abschnitte, as_pfad)
+        if not ok_as:
+            raise RuntimeError("DOCX-Patch für Anschreiben fehlgeschlagen")
         anschreiben_url = f"/download?pfad={urllib.parse.quote(str(as_pfad))}"
     except Exception as e:
         print(f"⚠️ Anschreiben-Fehler (nicht kritisch): {e}")

@@ -12,6 +12,7 @@ lebenslauf*.txt
 lebenslauf*.docx
 *.pdf
 lebenslauf_vorlage.docx
+anschreiben*
 
 # Logs
 scan.log
@@ -24,3 +25,4 @@ __pycache__/
 # Node
 node_modules/
 package-lock.json
+.claude
