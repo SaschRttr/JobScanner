@@ -17,6 +17,7 @@ Voraussetzungen:
 
 import subprocess
 import os
+import re
 import sys
 import time
 import threading
@@ -192,28 +193,61 @@ def bewerbung_erstellen():
 
     txt_pfad = Path(ergebnis["pfad"])
 
-    # Schritt 2: DOCX erzeugen
-    generator_pfad = BASIS_PFAD / "bewerbung_generator.py"
-    if not generator_pfad.exists():
-        return jsonify({"ok": False, "fehler": "bewerbung_generator.py nicht gefunden"}), 500
+    # Dateinamen-Suffix aus Stellentitel ableiten
+    try:
+        from bewerbung_generator import parse_txt as _parse_txt
+        _titel = _parse_txt(txt_pfad).get("titel", "Stelle")
+    except Exception:
+        _titel = "Stelle"
+    _titel_sauber = re.sub(r'[\\/:*?"<>|]', '', _titel).strip().replace(' ', '_') or "Stelle"
+    datei_suffix  = f"Sascha_Rüttiger_{_titel_sauber}"
 
-    proc = subprocess.run(
-        [sys.executable, str(generator_pfad), str(txt_pfad)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        cwd=str(BASIS_PFAD),
-        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    # Schritt 2: Lebenslauf.docx mit Tracked Changes erzeugen
+    from docx_patcher import erzeuge_docx_mit_changes
+
+    vorlage_docx = BASIS_PFAD / "lebenslauf_vorlage.docx"
+    lv_pfad      = txt_pfad.parent / f"Lebenslauf_{datei_suffix}.docx"
+
+    ok = erzeuge_docx_mit_changes(
+        txt_pfad      = txt_pfad,
+        vorlage_pfad  = vorlage_docx,
+        ausgabe_pfad  = lv_pfad,
     )
+    if not ok:
+        return jsonify({"ok": False, "fehler": "DOCX-Generierung fehlgeschlagen"}), 500
 
-    if proc.returncode != 0:
-        print("GENERATOR FEHLER:", proc.stderr)
-        print("GENERATOR STDOUT:", proc.stdout)
-        return jsonify({"ok": False, "fehler": f"Generator Fehler: {proc.stderr[:500]}"}), 500
+    # Schritt 3: Anschreiben.docx erzeugen (Fehler nur warnen, nicht abbrechen)
+    as_pfad         = txt_pfad.parent / f"Anschreiben_{datei_suffix}.docx"
+    anschreiben_url = None
+    try:
+        from bewerbung_generator import (
+            parse_txt,
+            parse_lebenslauf_abschnitte,
+            generiere_anschreiben_text,
+            erstelle_anschreiben_docx,
+            lade_config,
+        )
+        import anthropic as _anthropic
 
-    ordner  = txt_pfad.parent
-    lv_pfad = ordner / "Lebenslauf.docx"
-    as_pfad = ordner / "Anschreiben.docx"
+        config     = lade_config()
+        client     = _anthropic.Anthropic(api_key=config["api_key"])
+        meta       = parse_txt(txt_pfad)
+        abschnitte = parse_lebenslauf_abschnitte(meta["lebenslauf_text"])
 
-    # Schritt 3: Report neu generieren damit Links dauerhaft erscheinen
+        stellen_json = BASIS_PFAD / "stellen.json"
+        stellen = json.loads(stellen_json.read_text(encoding="utf-8")) if stellen_json.exists() else []
+        stelle  = next(
+            (s for s in stellen if s.get("url") == meta["url"]),
+            {"firma": meta["firma"], "titel": meta["titel"], "beschreibung": ""},
+        )
+
+        anschreiben = generiere_anschreiben_text(meta["lebenslauf_text"], stelle, client)
+        erstelle_anschreiben_docx(anschreiben, abschnitte, as_pfad)
+        anschreiben_url = f"/download?pfad={urllib.parse.quote(str(as_pfad))}"
+    except Exception as e:
+        print(f"⚠️ Anschreiben-Fehler (nicht kritisch): {e}")
+
+    # Schritt 4: Report neu generieren damit Links dauerhaft erscheinen
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py")],
         cwd=str(BASIS_PFAD),
@@ -221,10 +255,10 @@ def bewerbung_erstellen():
     )
 
     return jsonify({
-        "ok": True,
-        "nachricht": "Bewerbungsunterlagen erstellt",
-        "lebenslauf_url":  f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
-        "anschreiben_url": f"/download?pfad={urllib.parse.quote(str(as_pfad))}",
+        "ok":             True,
+        "nachricht":      "Bewerbungsunterlagen erstellt",
+        "lebenslauf_url": f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
+        "anschreiben_url": anschreiben_url,
     })
 
 

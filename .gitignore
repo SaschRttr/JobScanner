@@ -11,6 +11,7 @@ jobscanner.db
 lebenslauf*.txt
 lebenslauf*.docx
 *.pdf
+lebenslauf_vorlage.docx
 
 # Logs
 scan.log
