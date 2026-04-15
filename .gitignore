@@ -6,3 +6,20 @@ stellen.json
 strukturen.json
 report.html
 jobscanner.db
+
+# Persönliche Dokumente
+lebenslauf*.txt
+lebenslauf*.docx
+*.pdf
+
+# Logs
+scan.log
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+package-lock.json
