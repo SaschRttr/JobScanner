@@ -7,13 +7,9 @@ Sascha.Ruettiger@icloud.com
 ---/KONTAKT---
 
 ---KOMPETENZPROFIL---
-Ich bringe über 17 Jahre Erfahrung in der Entwicklung, dem Test und der Validierung elektronischer Systeme mit – schwerpunktmäßig in frühen bis mittleren Entwicklungsphasen, wo noch vieles von Hand gemacht wird und pragmatische Lösungen gefragt sind.
-
-Bei Robert Bosch habe ich Feldtestanlagen begleitet und 2nd-Level-Support mit aufgebaut. Als Analysen und Dashboards häufig fehlten oder wochenlang auf sich warten ließen, arbeitete ich mich eigenständig in Python, SQL, Databricks und Plotly ein – und verkürzte die Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage. Durch meine Erfahrung an der Schnittstelle von Hardware und Software kann ich zwischen beiden Welten vermitteln – und sorge dafür dass Anforderungen und Probleme auf beiden Seiten richtig verstanden werden.
-
-Zuvor habe ich bei Bosch Automotive Steering komplette Testadapter für ASICs und Steuergeräte von Grund auf entwickelt – Schaltplan, Layout, Fertigung, Inbetriebnahme – und Aufbauzeiten von mehreren Tagen auf einen einzigen Tag verkürzt.
-
-Mein Antrieb ist es, Dinge wirklich zu verstehen – und daraus bessere Werkzeuge und Lösungen für mich und meine Kollegen zu schaffen.
+Ich bringe über 17 Jahre Erfahrung in der Entwicklung, dem Test und der Validierung elektronischer Systeme, in schwerpunktmäßig in frühen bis mittleren Entwicklungsphasen, wo manuelle Messtechnik und iteratives Arbeiten gefragt sind und wo ich durch gezielte Automatisierung den größten Hebel für Effizienz, Geschwindigkeit und Qualität sehe.
+Was mich dabei auszeichnet: Ich erkenne Verbesserungspotenzial und setze es eigenständig um. Ob die Lösung ein Testaufbau, eine Automatisierung oder ein Dashboard ist, ergibt sich aus dem Problem. Ich warte nicht darauf, dass jemand anderes eine Lösung bringt, ich entwickle sie. Dabei bewege ich mich sicher zwischen Hardware und Software und kann Anforderungen und Probleme in beide Richtungen übersetzen, weil ich beide Seiten kenne. Die Erkenntnisse aus Messung und Analyse bleiben dabei nicht bei mir. Ich übersetze sie so, dass andere damit weiterarbeiten können und nutze sie um Prozesse und Systeme gezielt zu verbessern.
+Mein Antrieb ist es, Dinge wirklich zu verstehen und daraus bessere Werkzeuge und Lösungen für mich und meine Kollegen zu schaffen.
 ---/KOMPETENZPROFIL---
 
 ---BERUFSERFAHRUNG---
@@ -23,11 +19,12 @@ Mein Antrieb ist es, Dinge wirklich zu verstehen – und daraus bessere Werkzeug
 Robert Bosch GmbH, Stuttgart-Feuerbach
 
 ---STELLE_1_AUFGABEN---
-- Eigenständige Entwicklung eines Mess- und Fehlerinjektionssystems (Controllino/C) zur sicheren Erfassung und Manipulation elektrischer Signale bis 800V DC / 230V AC inkl. Strommessung, 4–20mA-Bus und Thermoelement-Auswertung – abgenommen durch die führende Sicherheitsfachkraft
 - Systematische Fehleranalyse und strukturierter Feedback-Loop an die Entwicklung zur kontinuierlichen Verbesserung der SOFC-Architektur
-- Eigenständige Entwicklung von Dashboards und einer Fehlerdatenbank mit Python, SQL, Databricks und Plotly – Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage verkürzt
+- Eigenständige Entwicklung von Dashboards und Fehlerdatenbank mit Python, SQL, Databricks und Plotly – Bereitstellungszeit von bis zu drei Wochen auf durchschnittlich zwei Tage verkürzt
+- Eigenständige Entwicklung eines Mess- und Fehlerinjektionssystems (Controllino/C) zur sicheren Erfassung und Manipulation elektrischer Signale bis 800V DC / 230V AC inkl. Strommessung, 4–20mA-Bus und Thermoelement-Auswertung – abgenommen durch die führende Sicherheitsfachkraft
 - Planung und Durchführung von Validierungen elektrischer Komponenten (Inverter, Sensorik) inkl. strukturierter Datenerfassung
 - 3rd-Level-Service & Troubleshooting von Feldtestanlagen
+- Technischer Kundensupport und Standortkoordination – Schnittstelle zwischen Feldtest, Entwicklung und Betreiber
 ---/STELLE_1_AUFGABEN---
 ---/STELLE_1---
 
@@ -38,6 +35,8 @@ Bosch Automotive Steering GmbH, Schwäbisch Gmünd
 ---STELLE_2_AUFGABEN---
 - Entwicklung vollständiger Testadapter für ASICs und Steuergeräte – von Konzept, Schaltplan und Layout über Fräsen und Bestückung bis zur Inbetriebnahme – Aufbauzeiten von mehreren Tagen auf einen Tag verkürzt
 - Entwicklungsbegleitende Modul- und ASIC-Tests gemäß ISO 26262 über den gesamten Temperaturbereich (-40°C bis +125°C)
+- Charakterisierung analoger Spannungs- und Stromqualität (Klirrfaktor, Spannungshöhe) unter verschiedenen Last- und Temperaturbedingungen
+- Signalanalyse und Protokolldebugging auf Oszilloskop Ebene – SPI-Kommunikation dekodiert, getriggert und systematisch ausgewertet
 - Validierung elektrischer Antriebskomponenten unter verschiedenen Last- und Temperaturbedingungen
 - Interdisziplinäre Entwicklung einer Kurzschlusserkennungsstrategie im Zwischenkreis – von der messtechnischen Nachbildung mit Oszilloskop bis zur Umsetzung gemeinsam mit HW- und Softwareentwicklung
 - Koordination eines internationalen Testteams in Indien – Aufgabenverteilung, technische Abstimmung und Qualitätssicherung der Testergebnisse
@@ -60,10 +59,10 @@ Bosch Power Tec GmbH, Böblingen
 SMA Solar Technology AG, Niestetal
 
 ---STELLE_4_AUFGABEN---
-- Anpassentwicklungen von Leistungselektronik und Second Source Qualifizierung
+- Entwicklungsbegleitende Tests und Qualifizierung von Leistungselektronik nach V-Modell sowie Second Source Qualifizierung
 - Entwicklung von Testumgebungen (Hardware) zur Automatisierung der Gerätetests
 - Validierung und Optimierung von Prüfabläufen
-- Entwicklungsgeleitende Qualifizierung (EMV, Klima, VDE-AR-N 4105)
+- Entwicklungsgeleitende Qualifizierung (Umwelt, VDE-AR-N 4105, DIN VDE 0100)
 - Second Source Bauteilauswahl und Qualifizierung
 ---/STELLE_4_AUFGABEN---
 ---/STELLE_4---
@@ -103,26 +102,23 @@ Bundespolizei Präsidium Mitte
 ---/AUSBILDUNG_3---
 
 ---AUSBILDUNG_4---
+07/2002 – 08/2003 | Freiwillig verlängerter Grundwehrdienst
+Homberg/Efze
+---/AUSBILDUNG_4---
+
+---AUSBILDUNG_5---
 07/1999 – 06/2002 | Fachhochschulreife Elektrotechnik
 Radko-Stöckl-Schule, Melsungen
----/AUSBILDUNG_4---
+---/AUSBILDUNG_5---
 
 ---/AUSBILDUNG---
 
 ---FAEHIGKEITEN---
-Altium Designer          ●●●●○
-Python (Plotly, Pandas)  ●●●○○
-SQL                      ●●●●○
-C/C++ Embedded (DQR 7)   ●●●○○
-LTSpice                  ●●○○○
-Datenanalyse & Visualisierung ●●●●○
-EMV-Tests                ●●○○○
-Oszilloskop / Labormesstechnik ●●●●○
-Testautomatisierung & Prüfadapterbau ●●●●○
-Sensorik & Signalaufbereitung ●●●○○
-Systemvalidierung & Datenerfassung ●●●●○
-Autodesk Fusion          ●●●○○
-3D-Druck / Prototyping   ●●●○○
+Messtechnik & Labor: Oszilloskop, Labormesstechnik, EMV-Tests, Sensorik & Signalaufbereitung
+Hardware & Design: Altium Designer, LTSpice, Schaltplanerstellung, PCB-Layout, Testadapterentwicklung (Konzept, Schaltplan, Layout bis Inbetriebnahme)
+Software & Analyse: Python (Plotly, Pandas, Matplotlib), SQL, Databricks, C/C++ Embedded, Datenvisualisierung und Dashboarding
+Systemvalidierung und Qualifizierung: V-Modell, ISO 26262, VDE-AR-N 4105, DIN VDE 0100, Systemvalidierung und Datenerfassung
+Prototyping: Autodesk Fusion 360, 3D-Druck
 ---/FAEHIGKEITEN---
 
 ---SPRACHEN---

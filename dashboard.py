@@ -3,14 +3,14 @@ dashboard.py  –  Job-Scanner Dashboard
 =======================================
 Streamlit-Dashboard mit:
   - Score-Verteilung
-  - Bewerbungsstatus
-  - Firmen-Ranking
+  - Bewerbungsstatus (Karten pro Stufe)
+  - Firmen-Bubble-Diagramm
+  - Top-Stellen
 
 Starten:
   streamlit run dashboard.py
 """
 
-import json
 import sqlite3
 from pathlib import Path
 import streamlit as st
@@ -59,10 +59,10 @@ def lade_daten():
     firmen = con.execute("""
         SELECT
             s.firma,
-            COUNT(*)            AS anzahl,
-            AVG(b.score)        AS avg_score,
-            MAX(b.score)        AS max_score,
-            SUM(CASE WHEN b.score >= 70 THEN 1 ELSE 0 END) AS relevante
+            COUNT(*)                                          AS anzahl,
+            AVG(b.score)                                      AS avg_score,
+            MAX(b.score)                                      AS max_score,
+            SUM(CASE WHEN b.score >= 70 THEN 1 ELSE 0 END)   AS relevante
         FROM stellen s
         JOIN bewertungen b ON s.url = b.url
         WHERE s.status != 0
@@ -105,7 +105,7 @@ stufen_label = {
 stufen_farbe = {
     "beworben":     "#f1c40f",
     "kennenlernen": "#2980b9",
-    "einladung":    "#2980b9",
+    "einladung":    "#8e44ad",
     "zusage":       "#27ae60",
     "absage":       "#e74c3c",
 }
@@ -114,12 +114,32 @@ stufen_farbe = {
 # KPI-ZEILE
 # =============================================================================
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Stellen gesamt",   len(df_stellen))
-c2.metric("Bewertet",         len(df_bewertet))
-c3.metric("Score ≥ 70%",      len(df_bewertet[df_bewertet["score"] >= 70]))
-c4.metric("Beworben",         len(df_stellen[df_stellen["stufe"].isin(stufen_label.keys())]))
-c5.metric("Aktive Gespräche", len(df_stellen[df_stellen["stufe"].isin(["beworben","kennenlernen","einladung"])]))
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Stellen gesamt",  len(df_stellen))
+c2.metric("Bewertet",        len(df_bewertet))
+c3.metric("Score ≥ 70%",     len(df_bewertet[df_bewertet["score"] >= 70]))
+c4.metric("Bewerbungen",     len(df_stellen[df_stellen["stufe"].isin(stufen_label.keys())]))
+
+st.divider()
+
+# =============================================================================
+# BEWERBUNGSSTATUS — eine Karte pro Stufe
+# =============================================================================
+
+st.subheader("📬 Bewerbungen nach Status")
+
+cols = st.columns(5)
+for i, (stufe, label) in enumerate(stufen_label.items()):
+    anzahl = len(df_stellen[df_stellen["stufe"] == stufe])
+    farbe  = stufen_farbe[stufe]
+    cols[i].markdown(
+        f'<div style="padding:16px; border-radius:8px; background:{farbe}22; '
+        f'border-top:4px solid {farbe}; text-align:center;">'
+        f'<div style="font-size:2em; font-weight:bold; color:{farbe};">{anzahl}</div>'
+        f'<div style="font-size:0.85em; color:#444; margin-top:4px;">{label}</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
 st.divider()
 
@@ -158,7 +178,7 @@ with col_r:
 st.divider()
 
 # =============================================================================
-# ZEILE 2: Status + Top-Stellen
+# ZEILE 2: Bewerbungsstatus-Liste + Top-Stellen
 # =============================================================================
 
 col_l2, col_r2 = st.columns([1, 2])
@@ -173,12 +193,11 @@ with col_l2:
         for _, row in df_status.sort_values("beworben_am", na_position="last").iterrows():
             label = stufen_label.get(row["stufe"], row["stufe"])
             farbe = stufen_farbe.get(row["stufe"], "#888")
-            # Tage seit Bewerbung
             if row.get("beworben_am"):
                 try:
                     tage = (heute - pd.Timestamp(row["beworben_am"])).days
                     tage_txt = f"{tage} Tag(e)"
-                except:
+                except Exception:
                     tage_txt = "–"
             else:
                 tage_txt = "–"
@@ -192,6 +211,7 @@ with col_l2:
                 f'</div>',
                 unsafe_allow_html=True
             )
+
 with col_r2:
     st.subheader("🏆 Top Stellen (Score ≥ 70%)")
     df_top = df_bewertet[df_bewertet["score"] >= 70].head(15)
@@ -202,62 +222,186 @@ with col_r2:
             farbe = "#27ae60" if row["score"] >= 80 else "#f39c12"
             badge = ""
             if row.get("stufe") and row["stufe"]:
-                badge = f' &nbsp;<span style="font-size:0.8em; background:#eee; padding:2px 6px; border-radius:10px;">{stufen_label.get(row["stufe"], row["stufe"])}</span>'
+                badge = (
+                    f' &nbsp;<span style="font-size:0.8em; background:#eee; '
+                    f'padding:2px 6px; border-radius:10px;">'
+                    f'{stufen_label.get(row["stufe"], row["stufe"])}</span>'
+                )
             st.markdown(
                 f'<div style="padding:6px 12px; margin:3px 0; background:#f8f9fa; '
                 f'border-radius:4px; border-left:4px solid {farbe};">'
                 f'<strong style="color:{farbe};">{int(row["score"])}%</strong> &nbsp;'
-                f'<a href="{row["url"]}" target="_blank" style="color:#2c3e50;">{row["titel"][:55]}</a>'
-                f'<span style="color:#888; font-size:0.85em;"> — {row["firma"]}</span>{badge}</div>',
+                f'<a href="{row["url"]}" target="_blank" style="color:#2c3e50;">'
+                f'{row["titel"][:55]}</a>'
+                f'<span style="color:#888; font-size:0.85em;"> — {row["firma"]}</span>'
+                f'{badge}</div>',
                 unsafe_allow_html=True
             )
 
 st.divider()
 
 # =============================================================================
-# FIRMEN-RANKING
+# FIRMEN-BUBBLE-DIAGRAMM
+# Größe  = Anzahl Stellen insgesamt
+# Farbe  = Anteil Stellen mit Score ≥ 70% (rot → grün)
+# Y-Achse = Ø Score
 # =============================================================================
 
-st.subheader("🏢 Firmen-Ranking — Wo lohnt sich eine Initiativbewerbung?")
+st.subheader("🏢 Firmen-Übersicht — Wo lohnt sich eine Initiativbewerbung?")
+st.caption("Größe der Bubble = Anzahl Stellen · Farbe: rot = wenig Passungen, grün = viele Passungen")
 
-df_firmen_top = df_firmen[df_firmen["relevante"] > 0].head(20).copy()
-df_firmen_top["avg_score"] = df_firmen_top["avg_score"].round(1)
+df_bubble = df_firmen.copy()
+df_bubble["avg_score"] = df_bubble["avg_score"].round(1)
+df_bubble["relevante"] = df_bubble["relevante"].fillna(0).astype(int)
 
-if df_firmen_top.empty:
+# Anteil guter Passungen (0..1) als Farbwert
+df_bubble["anteil"] = df_bubble["relevante"] / df_bubble["anzahl"].clip(lower=1)
+
+if df_bubble.empty:
     st.info("Noch keine Firmendaten.")
 else:
-    fig3 = px.bar(
-        df_firmen_top, x="avg_score", y="firma", orientation="h",
-        color="relevante", color_continuous_scale=["#f39c12", "#27ae60"],
-        labels={"avg_score": "Ø Score (%)", "firma": "Firma", "relevante": "Stellen ≥ 70%"},
-        text="relevante",
-    )
-    fig3.update_traces(texttemplate="%{text} Stelle(n) ≥70%", textposition="outside")
+    hover_texte = [
+        f"<b>{r['firma']}</b><br>"
+        f"Stellen gesamt: {r['anzahl']}<br>"
+        f"Davon ≥ 70%: {r['relevante']}<br>"
+        f"Ø Score: {r['avg_score']}%<br>"
+        f"Max Score: {int(r['max_score'])}%"
+        for _, r in df_bubble.iterrows()
+    ]
+
+    fig3 = go.Figure(go.Scatter(
+        x=df_bubble["firma"],
+        y=df_bubble["avg_score"],
+        mode="markers",
+        marker=dict(
+            size=df_bubble["anzahl"] * 14,   # Größe proportional zur Stellenanzahl
+            sizemode="area",
+            color=df_bubble["anteil"],
+            colorscale="RdYlGn",
+            cmin=0,
+            cmax=1,
+            showscale=True,
+            colorbar=dict(
+                title="Anteil ≥70%",
+                tickformat=".0%",
+            ),
+        ),
+        text=hover_texte,
+        hovertemplate="%{text}<extra></extra>",
+    ))
+
     fig3.update_layout(
-        plot_bgcolor="white", yaxis=dict(autorange="reversed"),
-        margin=dict(t=20, b=20), coloraxis_showscale=False,
-        height=max(300, len(df_firmen_top) * 35),
+        xaxis=dict(tickangle=-35, title=""),
+        yaxis=dict(title="Ø Score (%)"),
+        plot_bgcolor="white",
+        height=520,
+        margin=dict(t=20, b=140),
     )
     st.plotly_chart(fig3, use_container_width=True)
+
+# =============================================================================
+# KUMULATIVER BEWERBUNGSVERLAUF (letzter Monat)
+# =============================================================================
+
+st.divider()
+st.subheader("📈 Bewerbungsverlauf — kumuliert (letzter Monat)")
+st.caption("Aufaddierte Bewerbungen mit gesetztem Status, farblich nach Ergebnis")
+
+df_verlauf = df_stellen[
+    df_stellen["stufe"].notna() & (df_stellen["stufe"] != "") &
+    df_stellen["beworben_am"].notna()
+].copy()
+
+if df_verlauf.empty:
+    st.info("Noch keine Bewerbungen mit Datum erfasst.")
+else:
+    df_verlauf["beworben_am"] = pd.to_datetime(df_verlauf["beworben_am"], errors="coerce")
+    df_verlauf = df_verlauf.dropna(subset=["beworben_am"])
+
+    # Auf letzten Monat einschränken
+    cutoff = pd.Timestamp.now() - pd.Timedelta(days=30)
+    df_verlauf = df_verlauf[df_verlauf["beworben_am"] >= cutoff]
+
+    if df_verlauf.empty:
+        st.info("Keine Bewerbungen in den letzten 30 Tagen.")
+    else:
+        df_verlauf["datum"] = df_verlauf["beworben_am"].dt.date
+
+        # Datumsreihe für den gesamten Zeitraum aufbauen
+        alle_tage = pd.date_range(
+            start=df_verlauf["datum"].min(),
+            end=pd.Timestamp.now().date(),
+            freq="D"
+        )
+
+        def kumulativ(df_teil):
+            """Zählt pro Tag und gibt kumulative Summe zurück."""
+            pro_tag = df_teil.groupby("datum").size().reindex(alle_tage.date, fill_value=0)
+            return pro_tag.cumsum()
+
+        # Alle mit Status
+        gesamt_kum   = kumulativ(df_verlauf)
+        # Nur Absagen
+        absagen_kum  = kumulativ(df_verlauf[df_verlauf["stufe"] == "absage"])
+        # Nur positive (beworben / kennenlernen / einladung / zusage)
+        positiv_kum  = kumulativ(df_verlauf[df_verlauf["stufe"].isin(
+            ["beworben", "kennenlernen", "einladung", "zusage"]
+        )])
+
+        fig_verl = go.Figure()
+
+        fig_verl.add_trace(go.Scatter(
+            x=list(alle_tage.date), y=gesamt_kum.values,
+            mode="lines+markers", name="Gesamt",
+            line=dict(color="#3498db", width=2),
+            marker=dict(size=5),
+        ))
+        fig_verl.add_trace(go.Scatter(
+            x=list(alle_tage.date), y=positiv_kum.values,
+            mode="lines+markers", name="Aktiv / Positiv",
+            line=dict(color="#27ae60", width=2),
+            marker=dict(size=5),
+        ))
+        fig_verl.add_trace(go.Scatter(
+            x=list(alle_tage.date), y=absagen_kum.values,
+            mode="lines+markers", name="Absagen",
+            line=dict(color="#e74c3c", width=2, dash="dot"),
+            marker=dict(size=5),
+        ))
+
+        fig_verl.update_layout(
+            plot_bgcolor="white",
+            xaxis=dict(title="Datum", tickformat="%d.%m."),
+            yaxis=dict(title="Anzahl (kumuliert)", dtick=1),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            height=350,
+            margin=dict(t=40, b=20),
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_verl, use_container_width=True)
 
 # =============================================================================
 # AKTIVE BEWERBUNGEN DETAIL
 # =============================================================================
 
-df_aktiv = df_stellen[df_stellen["stufe"].isin(["beworben","kennenlernen","einladung"])].copy()
+df_aktiv = df_stellen[
+    df_stellen["stufe"].isin(["beworben", "kennenlernen", "einladung"])
+].copy()
 
 if not df_aktiv.empty:
     st.divider()
     st.subheader("📌 Aktive Bewerbungen im Detail")
     for _, row in df_aktiv.iterrows():
-        farbe = stufen_farbe.get(row["stufe"], "#888")
-        label = stufen_label.get(row["stufe"], row["stufe"])
+        farbe    = stufen_farbe.get(row["stufe"], "#888")
+        label    = stufen_label.get(row["stufe"], row["stufe"])
         score_txt = f"{int(row['score'])}%" if pd.notna(row["score"]) else "–"
-        datum = (row.get("beworben_am") or row.get("gefunden_am") or "–")
+        datum    = row.get("beworben_am") or row.get("gefunden_am") or "–"
         st.markdown(
             f'<div style="padding:10px 15px; margin:5px 0; background:white; '
-            f'border-radius:6px; border-left:5px solid {farbe}; box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
-            f'<strong><a href="{row["url"]}" target="_blank" style="color:#2c3e50;">{row["titel"]}</a></strong>'
+            f'border-radius:6px; border-left:5px solid {farbe}; '
+            f'box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
+            f'<strong><a href="{row["url"]}" target="_blank" style="color:#2c3e50;">'
+            f'{row["titel"]}</a></strong>'
             f' &nbsp;<span style="color:#888;">— {row["firma"]}</span><br>'
             f'<span style="font-size:0.85em; color:{farbe};">{label}</span>'
             f' &nbsp;|&nbsp; Score: <strong>{score_txt}</strong>'
