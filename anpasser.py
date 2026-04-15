@@ -50,15 +50,28 @@ MIN_SCORE  = 70
 # CONFIG
 # =============================================================================
 
+def _lese_config_block(inhalt: str, name: str) -> str:
+    """Extrahiert den Inhalt zwischen [name] und [\\name] aus config.txt."""
+    start_tag = f"[{name}]"
+    end_tag   = f"[\\{name}]"
+    start = inhalt.find(start_tag)
+    ende  = inhalt.find(end_tag)
+    if start == -1 or ende == -1:
+        return ""
+    return inhalt[start + len(start_tag):ende].strip()
+
+
 def lade_config() -> dict:
     if not CONFIG_PFAD.exists():
         print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
         sys.exit(1)
-    result = {"api_key": ""}
-    for zeile in CONFIG_PFAD.read_text(encoding="utf-8").splitlines():
+    inhalt = CONFIG_PFAD.read_text(encoding="utf-8")
+    result = {"api_key": "", "anschreiben_prompt": ""}
+    for zeile in inhalt.splitlines():
         z = zeile.strip()
         if z.upper().startswith("API_KEY"):
             result["api_key"] = z.split("=", 1)[1].strip()
+    result["anschreiben_prompt"] = _lese_config_block(inhalt, "anschreiben_prompt")
     return result
 
 
@@ -251,86 +264,66 @@ def lade_firma_anschreiben(firma_name: str) -> dict:
 
 
 # =============================================================================
-# ANSCHREIBEN: KI-AUFRUF (einmaliger Aufruf, alle Abschnitte auf einmal)
+# ANSCHREIBEN: AUFGABEN-POOL AUS LEBENSLAUF-VORLAGE
 # =============================================================================
 
-def generiere_anschreiben_inhalt(
-    stelle: dict,
-    vorlage_abschnitte: dict,
-    client,
-) -> dict | None:
+def extrahiere_aufgaben_pool(vorlage: str) -> str:
     """
-    Einzelner KI-Aufruf: passt die bestehenden Vorlagen-Abschnitte minimal an.
-    Bleibt so nah wie möglich am Original – ändert nur was stellenspezifisch nötig ist.
+    Extrahiert alle STELLE_X_AUFGABEN-Blöcke aus dem übergebenen Vorlagen-Text
+    und gibt sie als formatierten Pool zurück.
     """
-    beschreibung = (stelle.get("rohtext") or stelle.get("beschreibung") or "")[:2500]
+    pool_zeilen: list[str] = []
 
-    prompt = f"""Du bist ein Bewerbungsberater. Passe das folgende Standard-Anschreiben für eine konkrete Stelle an.
+    for match in re.finditer(
+        r"---STELLE_(\d+)_AUFGABEN---\n(.*?)---/STELLE_\1_AUFGABEN---",
+        vorlage, re.DOTALL
+    ):
+        nummer = match.group(1)
+        inhalt = match.group(2).strip()
 
-WICHTIG – Minimaländerungen:
-- Behalte Satzbau, Stil und Ton so weit wie möglich bei
-- Ändere NUR was wirklich stellenspezifisch sein muss (z.B. Buzzwords aus der Stellenanzeige aufgreifen,
-  einen Bullet durch einen passenderen ersetzen, die Anrede falls ein Name bekannt ist)
-- Erfinde keine neuen Fakten – nur Fakten aus dem Lebenslauf verwenden
-- Wenn ein Abschnitt schon gut passt, gib ihn unverändert zurück
-
-Firma:  {stelle.get('firma', '')}
-Stelle: {stelle.get('titel', '')}
-Stellenbeschreibung (Auszug): {beschreibung}
-
-=== STANDARD-ANSCHREIBEN (Vorlage) ===
-
-ANREDE:
-{vorlage_abschnitte.get('ANREDE', '')}
-
-ABSATZ_1:
-{vorlage_abschnitte.get('ABSATZ_1', '')}
-
-ABSATZ_2_INTRO:
-{vorlage_abschnitte.get('ABSATZ_2_INTRO', '')}
-
-ABSATZ_2_BULLETS (jede Zeile ein Bullet, mit "- " Präfix):
-{vorlage_abschnitte.get('ABSATZ_2_BULLETS', '')}
-
-ABSATZ_3:
-{vorlage_abschnitte.get('ABSATZ_3', '')}
-
-ABSATZ_4:
-{vorlage_abschnitte.get('ABSATZ_4', '')}
-
-Antworte NUR mit JSON (kein Markdown, keine Backticks):
-{{"betreff":"Bewerbung als <exakter Stellentitel aus Anzeige>","anrede":"...","absatz_1":"...","absatz_2_intro":"...","absatz_2_bullets":["...","...","..."],"absatz_3":"...","absatz_4":"..."}}"""
-
-    try:
-        antwort = client.messages.create(
-            model=KI_MODELL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
+        # Jobtitel-Zeile aus dem übergeordneten STELLE_X-Block als Header
+        stelle_match = re.search(
+            rf"---STELLE_{nummer}---\n(.*?)---STELLE_{nummer}_AUFGABEN---",
+            vorlage, re.DOTALL
         )
-        text = re.sub(r"```json|```", "", antwort.content[0].text.strip()).strip()
-        return json.loads(text)
-    except Exception as e:
-        print(f"  ❌ API-Fehler Anschreiben: {e}")
-        return None
+        header = (
+            stelle_match.group(1).strip().splitlines()[0]
+            if stelle_match else f"Stelle {nummer}"
+        )
+
+        pool_zeilen.append(f"[{header}]")
+        pool_zeilen.append(inhalt)
+        pool_zeilen.append("")
+
+    return "\n".join(pool_zeilen).strip()
 
 
 # =============================================================================
-# ANSCHREIBEN: VORLAGE BEFÜLLEN UND SPEICHERN
+# ANSCHREIBEN: GENERIEREN UND SPEICHERN
 # =============================================================================
 
-def generiere_anschreiben(stelle: dict, client, ordner: Path) -> bool:
+def generiere_anschreiben(
+    stelle: dict,
+    lebenslauf_vorlage: str,
+    anschreiben_vorlage: str,
+    config: dict,
+    client,
+    ordner: Path,
+) -> bool:
     """
     Erzeugt Anschreiben.txt im Zielordner.
+    - EMPFAENGER, DATUM, BETREFF werden direkt befüllt (kein KI)
+    - Alle Absätze in einem einzigen KI-Aufruf via config["anschreiben_prompt"]
+    - Marker-Zeilen werden aus der gespeicherten Datei entfernt
     Gibt True zurück wenn erfolgreich, False bei Fehler.
     """
-    if not ANSCHREIBEN_VORLAGE.exists():
-        print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
+    if not config.get("anschreiben_prompt"):
+        print(f"  ⚠️  Kein [anschreiben_prompt] in config.txt – Anschreiben übersprungen")
         return False
 
-    vorlage = ANSCHREIBEN_VORLAGE.read_text(encoding="utf-8")
     firma_d = lade_firma_anschreiben(stelle.get("firma", ""))
 
-    # EMPFAENGER direkt befüllen (kein KI)
+    # --- EMPFAENGER direkt befüllen ---
     empfaenger = (
         f"{firma_d['firmenname']}\n"
         f"{firma_d['abteilung']}\n"
@@ -339,35 +332,57 @@ def generiere_anschreiben(stelle: dict, client, ordner: Path) -> bool:
         f"{firma_d['plz']} {firma_d['ort']}"
     )
 
-    # DATUM direkt befüllen (kein KI)
+    # --- DATUM direkt befüllen ---
     heute = datetime.now()
     datum = f"Stuttgart, {heute.day}. {_MONATE[heute.month]} {heute.year}"
 
-    # Vorlage-Abschnitte für KI-Kontext einlesen
-    vorlage_abschnitte = {}
-    for marker in ["ANREDE", "ABSATZ_1", "ABSATZ_2_INTRO", "ABSATZ_2_BULLETS", "ABSATZ_3", "ABSATZ_4"]:
-        abschnitt = extrahiere_abschnitt(vorlage, marker)
-        if abschnitt:
-            vorlage_abschnitte[marker] = abschnitt
+    # --- BETREFF direkt befüllen ---
+    betreff = stelle.get("titel", "")
 
-    # Einmaliger KI-Aufruf: Vorlage minimal anpassen
-    inhalt = generiere_anschreiben_inhalt(stelle, vorlage_abschnitte, client)
-    if not inhalt:
+    # --- Aufgaben-Pool aus Lebenslauf-Vorlage ---
+    aufgaben_pool = extrahiere_aufgaben_pool(lebenslauf_vorlage)
+    if not aufgaben_pool:
+        print(f"  ⚠️  Kein Aufgaben-Pool in lebenslauf_vorlage – Anschreiben übersprungen")
         return False
 
-    bullets_text = "\n".join(f"- {b}" for b in inhalt.get("absatz_2_bullets", []))
+    # --- KI-Prompt aus config befüllen ---
+    b = stelle.get("bewertung") or {}
+    staerken_text      = "\n".join(f"- {s}" for s in b.get("staerken", []))
+    score_begruendung  = b.get("score_begruendung", "")
 
-    # Vorlage befüllen (ABSENDER, GRUSS, ANLAGEN bleiben unverändert aus Vorlage)
-    angepasst = vorlage
+    prompt = config["anschreiben_prompt"].format(
+        firma             = stelle.get("firma", ""),
+        titel             = stelle.get("titel", ""),
+        staerken          = staerken_text or "(keine Angaben)",
+        score_begruendung = score_begruendung or "(keine Angaben)",
+        aufgaben_pool     = aufgaben_pool,
+    )
+
+    # --- Einmaliger KI-Aufruf ---
+    try:
+        antwort = client.messages.create(
+            model=KI_MODELL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text   = re.sub(r"```json|```", "", antwort.content[0].text.strip()).strip()
+        inhalt = json.loads(text)
+    except Exception as e:
+        print(f"  ❌ API-Fehler Anschreiben: {e}")
+        return False
+
+    # --- Vorlage befüllen ---
+    # ABSENDER, GRUSS, ANLAGEN bleiben unverändert aus der Vorlage
+    angepasst = anschreiben_vorlage
     angepasst = ersetze_abschnitt(angepasst, "EMPFAENGER",       empfaenger)
     angepasst = ersetze_abschnitt(angepasst, "DATUM",            datum)
-    angepasst = ersetze_abschnitt(angepasst, "BETREFF",          inhalt.get("betreff", ""))
-    angepasst = ersetze_abschnitt(angepasst, "ANREDE",           inhalt.get("anrede",  ""))
-    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_1",         inhalt.get("absatz_1", ""))
-    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_INTRO",   inhalt.get("absatz_2_intro", ""))
-    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_BULLETS", bullets_text)
-    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_3",         inhalt.get("absatz_3", ""))
-    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_4",         inhalt.get("absatz_4", ""))
+    angepasst = ersetze_abschnitt(angepasst, "BETREFF",          betreff)
+    angepasst = ersetze_abschnitt(angepasst, "ANREDE",           inhalt.get("ANREDE",        ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_1",         inhalt.get("ABSATZ_1",      ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_INTRO",   inhalt.get("ABSATZ_2_INTRO",""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_2_BULLETS", inhalt.get("ABSATZ_2_BULLETS", ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_3",         inhalt.get("ABSATZ_3",      ""))
+    angepasst = ersetze_abschnitt(angepasst, "ABSATZ_4",         inhalt.get("ABSATZ_4",      ""))
 
     ziel = ordner / "Anschreiben.txt"
     ziel.write_text(angepasst, encoding="utf-8")
@@ -418,14 +433,14 @@ def passe_stelle_an(url: str) -> dict:
     if not vorlage_pfad.exists():
         return {"ok": False, "fehler": f"Vorlage nicht gefunden: {vorlage_pfad}"}
 
-    vorlage = vorlage_pfad.read_text(encoding="utf-8")
-    client  = anthropic_lib.Anthropic(api_key=config["api_key"])
+    lv_vorlage = vorlage_pfad.read_text(encoding="utf-8")
+    client     = anthropic_lib.Anthropic(api_key=config["api_key"])
 
     relevante_marker   = bestimme_relevante_marker(anpassungen)
-    angepasste_vorlage = vorlage
+    angepasste_vorlage = lv_vorlage
 
     for marker in relevante_marker:
-        abschnitt = extrahiere_abschnitt(vorlage, marker)
+        abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
         if not abschnitt:
             continue
         neuer_inhalt = passe_abschnitt_an(marker, abschnitt, anpassungen, stelle, client)
@@ -446,10 +461,21 @@ def passe_stelle_an(url: str) -> dict:
         f.write("\n" + "=" * 60 + "\n\n")
         f.write(angepasste_vorlage)
 
-    # Anschreiben generieren (überschreibe nie vorhandene Datei nicht automatisch)
+    # Anschreiben-Vorlage je nach Sprache wählen
     as_ziel = ordner / "Anschreiben.txt"
     if not as_ziel.exists():
-        generiere_anschreiben(stelle, client, ordner)
+        if sprache == "en":
+            as_vorlage_pfad = BASIS_PFAD / "anschreiben_vorlage_en.txt"
+            if not as_vorlage_pfad.exists():
+                as_vorlage_pfad = ANSCHREIBEN_VORLAGE
+        else:
+            as_vorlage_pfad = ANSCHREIBEN_VORLAGE
+
+        if not as_vorlage_pfad.exists():
+            print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
+        else:
+            as_vorlage = as_vorlage_pfad.read_text(encoding="utf-8")
+            generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner)
 
     return {"ok": True, "pfad": str(ziel)}
 
@@ -518,29 +544,29 @@ def main():
             uebersprungen += 1
             continue
 
-        # Richtige Vorlage je nach Sprache wählen
+        # Richtige Lebenslauf-Vorlage je nach Sprache wählen
         sprache = b.get("sprache", "de")
         if sprache == "en":
-            vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage_en.txt"
-            if not vorlage_pfad.exists():
+            lv_vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage_en.txt"
+            if not lv_vorlage_pfad.exists():
                 print(f"  ⚠️  lebenslauf_vorlage_en.txt nicht gefunden – bitte uebersetzer.py ausführen")
                 print(f"  ⏭️  Übersprungen")
                 uebersprungen += 1
                 continue
             print(f"  🌍 Englische Vorlage wird verwendet")
         else:
-            vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage.txt"
+            lv_vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage.txt"
             print(f"  🇩🇪 Deutsche Vorlage wird verwendet")
-        vorlage = vorlage_pfad.read_text(encoding="utf-8")
+        lv_vorlage = lv_vorlage_pfad.read_text(encoding="utf-8")
 
         # Relevante Marker bestimmen
         relevante_marker = bestimme_relevante_marker(anpassungen)
         print(f"  📌 Relevante Abschnitte: {', '.join(relevante_marker)}")
 
         # Vorlage schrittweise anpassen
-        angepasste_vorlage = vorlage
+        angepasste_vorlage = lv_vorlage
         for marker in relevante_marker:
-            abschnitt = extrahiere_abschnitt(vorlage, marker)
+            abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
             if not abschnitt:
                 print(f"  ⚠️  Marker '{marker}' nicht in Vorlage gefunden – überspringe")
                 continue
@@ -550,7 +576,6 @@ def main():
                 marker, abschnitt, anpassungen, stelle, client
             )
             if neuer_inhalt:
-                # Marker-Zeilen aus KI-Output entfernen falls vorhanden
                 angepasste_vorlage = ersetze_abschnitt(
                     angepasste_vorlage, marker, neuer_inhalt
                 )
@@ -575,12 +600,23 @@ def main():
 
         print(f"  ✅ Lebenslauf.txt gespeichert: {ziel}")
 
-        # Anschreiben generieren
+        # Anschreiben-Vorlage je nach Sprache wählen und Anschreiben generieren
         as_ziel = ordner / "Anschreiben.txt"
-        if not as_ziel.exists():
-            generiere_anschreiben(stelle, client, ordner)
-        else:
+        if as_ziel.exists():
             print(f"  ⏭️  Anschreiben.txt bereits vorhanden – übersprungen")
+        else:
+            if sprache == "en":
+                as_vorlage_pfad = BASIS_PFAD / "anschreiben_vorlage_en.txt"
+                if not as_vorlage_pfad.exists():
+                    as_vorlage_pfad = ANSCHREIBEN_VORLAGE
+            else:
+                as_vorlage_pfad = ANSCHREIBEN_VORLAGE
+
+            if not as_vorlage_pfad.exists():
+                print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
+            else:
+                as_vorlage = as_vorlage_pfad.read_text(encoding="utf-8")
+                generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner)
 
         erstellt += 1
 
