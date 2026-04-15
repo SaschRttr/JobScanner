@@ -193,19 +193,20 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     lv_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Lebenslauf.docx"
     as_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Anschreiben.docx"
 
-    if lv_docx.exists() and as_docx.exists():
-        # Beide DOCX vorhanden → Download-Links anzeigen
-        css = "stelle stelle-bewerbung"
-        lv_dl  = f"http://{RASPI_IP}:5000/download?pfad={lv_docx}"
-        as_dl  = f"http://{RASPI_IP}:5000/download?pfad={as_docx}"
-        lebenslauf_html = f"""
+    if score >= 70:
+        if lv_docx.exists() and as_docx.exists():
+            # Beide DOCX vorhanden → Download-Links anzeigen
+            css = "stelle stelle-bewerbung"
+            lv_dl  = f"http://{RASPI_IP}:5000/download?pfad={lv_docx}"
+            as_dl  = f"http://{RASPI_IP}:5000/download?pfad={as_docx}"
+            lebenslauf_html = f"""
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
             📄 <a href="{lv_dl}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
             ✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>
         </div>"""
-    elif score >= 70:
-        # Score hoch genug → Checkbox anzeigen
-        lebenslauf_html = f"""
+        else:
+            # Noch nicht erstellt oder gelöscht → Checkbox anzeigen
+            lebenslauf_html = f"""
         <div style="margin-top:8px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             <label style="cursor:pointer;">
                 <input type="checkbox"
@@ -476,7 +477,7 @@ JS = """
         try {
             const server = window.location.origin;
 
-            const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(decodeURIComponent(stellenUrl)));
+            const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(stellenUrl));
             const data = await res.json();
 
             if (data.ok) {

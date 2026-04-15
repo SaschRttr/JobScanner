@@ -175,7 +175,7 @@ def bewerbung_erstellen():
     Gibt JSON zurück: { ok, nachricht, lebenslauf_url, anschreiben_url }
     Aufruf: GET /bewerbung-erstellen?url=<stellenurl>
     """
-    stellen_url = urllib.parse.unquote(request.args.get("url", ""))
+    stellen_url = request.args.get("url", "")
     if not stellen_url:
         return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
 
@@ -256,7 +256,7 @@ def get_status():
     import db
     with db.verbindung() as con:
         rows = con.execute("""
-            SELECT url, stufe, beworben_am, kennenlernen_am, einladung_am, ergebnis_am
+            SELECT url, stufe, beworben_am, kennenlernen_am, einladung_am, ergebnis_am, kommentar
             FROM bewerbungsstatus
         """).fetchall()
     result = {}
@@ -274,6 +274,15 @@ def post_status():
     if data["feld"] == "stufe":
         import db
         db.upsert_bewerbungsstatus(data["url"], data["wert"])
+    elif data["feld"] == "kommentar":
+        import db
+        con = db.verbindung()
+        con.execute("""
+            INSERT INTO bewerbungsstatus (url, kommentar)
+            VALUES (?, ?)
+            ON CONFLICT(url) DO UPDATE SET kommentar = excluded.kommentar
+        """, (data["url"], data["wert"]))
+        con.commit()
     return jsonify({"ok": True})
 
 @app.route("/stelle-einfuegen", methods=["POST"])
