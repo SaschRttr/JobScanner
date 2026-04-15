@@ -298,7 +298,9 @@ def stelle_einfuegen():
         return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
 
     stellen_url = data["url"].strip()
+    ist_pdf = stellen_url.lower().endswith(".pdf")
     firma       = data.get("firma", "").strip() or "Unbekannt"
+    titel       = data.get("titel", "").strip() or "(manuell eingetragen)"
 
     from datetime import datetime
     jetzt = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -314,20 +316,30 @@ def stelle_einfuegen():
         if any(s.get("url") == stellen_url for s in stellen):
             return jsonify({"ok": False, "fehler": "Stelle bereits vorhanden"}), 409
 
+        rohtext = None
+        if ist_pdf:
+            try:
+                import requests, pdfplumber, io
+                r = requests.get(stellen_url, timeout=15)
+                with pdfplumber.open(io.BytesIO(r.content)) as pdf:
+                    rohtext = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            except Exception as e:
+                print(f"  ⚠️  PDF-Extraktion fehlgeschlagen: {e}")
+
         stellen.append({
             "url":         stellen_url,
             "firma":       firma,
-            "titel":       "(manuell eingetragen)",
+            "titel":       titel,
             "treffer":     [],
             "gefunden_am": jetzt,
             "neu":         True,
-            "rohtext":     None,
+            "rohtext":     rohtext,
         })
         stellen_pfad.write_text(
             json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-        bekannte[stellen_url] = {"status": 1, "gefunden_am": jetzt}
+        bekannte[stellen_url] = {"status": 2 if rohtext else 1, "gefunden_am": jetzt}
         bekannte_pfad.write_text(
             json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -342,7 +354,7 @@ def stelle_einfuegen():
         db.upsert_stelle({
             "url":         stellen_url,
             "firma":       firma,
-            "titel":       "(manuell eingetragen)",
+            "titel":       titel,
             "treffer":     [],
             "gefunden_am": jetzt,
             "neu":         True,

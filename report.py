@@ -501,8 +501,9 @@ JS = """
         }
     }
     async function stelleEinfuegen() {
-        const url = document.getElementById('manuell-url').value.trim();
+       const url = document.getElementById('manuell-url').value.trim();
         const firma = document.getElementById('manuell-firma').value.trim();
+        const titel = document.getElementById('manuell-titel').value.trim();
         const statusEl = document.getElementById('manuell-status');
         const output = document.getElementById('manuell-output');
 
@@ -520,7 +521,7 @@ JS = """
         const res = await fetch(server + '/stelle-einfuegen', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, firma })
+            body: JSON.stringify({ url, firma, titel })
         });
         const data = await res.json();
 
@@ -591,12 +592,14 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         <pre id="scan-output"></pre>
         </div>
 
-        <div class="scan-box">
+       <div class="scan-box">
         <h3 style="margin-top:0;">📎 Stelle manuell einfügen</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
             <input type="text" id="manuell-url" placeholder="https://jobs.firma.de/stelle/123"
                 style="flex:2; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:4px;">
             <input type="text" id="manuell-firma" placeholder="Firmenname (optional)"
+                style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <input type="text" id="manuell-titel" placeholder="Jobtitel (optional)"
                 style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
             <button class="scan-btn" onclick="stelleEinfuegen()">➕ Einfügen</button>
         </div>
@@ -604,7 +607,6 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         <pre id="manuell-output" style="display:none;"></pre>
         </div>
     """
-
 
     # ── Neue Stellen ────────────────────────────────────────────────
     if neue:
