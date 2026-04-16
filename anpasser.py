@@ -71,7 +71,8 @@ def lade_config() -> dict:
         z = zeile.strip()
         if z.upper().startswith("API_KEY"):
             result["api_key"] = z.split("=", 1)[1].strip()
-    result["anschreiben_prompt"] = _lese_config_block(inhalt, "anschreiben_prompt")
+    result["anschreiben_prompt"]    = _lese_config_block(inhalt, "anschreiben_prompt")
+    result["anschreiben_prompt_en"] = _lese_config_block(inhalt, "anschreiben_prompt_en")
     return result
 
 
@@ -215,6 +216,12 @@ _MONATE = {
     9: "September", 10: "Oktober", 11: "November", 12: "Dezember",
 }
 
+_MONTHS_EN = {
+    1: "January", 2: "February", 3: "March",    4: "April",
+    5: "May",     6: "June",     7: "July",      8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
+}
+
 _DUMMY_FIRMA = {
     "firmenname":      "[Firmenname]",
     "abteilung":       "[Abteilung]",
@@ -309,6 +316,7 @@ def generiere_anschreiben(
     config: dict,
     client,
     ordner: Path,
+    sprache: str = "de",
 ) -> bool:
     """
     Erzeugt Anschreiben.txt im Zielordner.
@@ -317,7 +325,11 @@ def generiere_anschreiben(
     - Marker-Zeilen werden aus der gespeicherten Datei entfernt
     Gibt True zurück wenn erfolgreich, False bei Fehler.
     """
-    if not config.get("anschreiben_prompt"):
+    prompt_key = "anschreiben_prompt_en" if sprache == "en" else "anschreiben_prompt"
+    if not config.get(prompt_key):
+        # Fallback to German prompt if English one is missing
+        prompt_key = "anschreiben_prompt"
+    if not config.get(prompt_key):
         print(f"  ⚠️  Kein [anschreiben_prompt] in config.txt – Anschreiben übersprungen")
         return False
 
@@ -334,7 +346,10 @@ def generiere_anschreiben(
 
     # --- DATUM direkt befüllen ---
     heute = datetime.now()
-    datum = f"Stuttgart, {heute.day}. {_MONATE[heute.month]} {heute.year}"
+    if sprache == "en":
+        datum = f"Stuttgart, {_MONTHS_EN[heute.month]} {heute.day}, {heute.year}"
+    else:
+        datum = f"Stuttgart, {heute.day}. {_MONATE[heute.month]} {heute.year}"
 
     # --- BETREFF direkt befüllen ---
     betreff = stelle.get("titel", "")
@@ -350,7 +365,7 @@ def generiere_anschreiben(
     staerken_text      = "\n".join(f"- {s}" for s in b.get("staerken", []))
     score_begruendung  = b.get("score_begruendung", "")
 
-    prompt = config["anschreiben_prompt"]
+    prompt = config[prompt_key]
     prompt = prompt.replace("{firma}",             stelle.get("firma", ""))
     prompt = prompt.replace("{titel}",             stelle.get("titel", ""))
     prompt = prompt.replace("{staerken}",          staerken_text or "(keine Angaben)")
@@ -474,7 +489,7 @@ def passe_stelle_an(url: str) -> dict:
             print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
         else:
             as_vorlage = as_vorlage_pfad.read_text(encoding="utf-8")
-            generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner)
+            generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
 
     return {"ok": True, "pfad": str(ziel)}
 
@@ -615,7 +630,7 @@ def main():
                 print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
             else:
                 as_vorlage = as_vorlage_pfad.read_text(encoding="utf-8")
-                generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner)
+                generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
 
         erstellt += 1
 

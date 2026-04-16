@@ -24,6 +24,7 @@ Voraussetzungen:
 
 import argparse
 import json
+import re
 import sys
 import urllib.request
 import platform
@@ -358,6 +359,29 @@ def ist_job_link(href: str) -> bool:
     return any(m in href for m in JOB_LINK_MUSTER)
 
 
+# Bewerbungsformular-URLs ausschließen (z.B. rexx-systems -de-f\d+, generische Apply-Pfade)
+_FORM_MUSTER = [r'-de-f\d+', r'/apply/', r'/bewerben$', r'/application/']
+
+def ist_bewerbungslink(href: str) -> bool:
+    return any(re.search(m, href) for m in _FORM_MUSTER)
+
+
+_BUTTON_TEXTE = {
+    "jetzt bewerben", "bewerben", "drucken", "drucken / weiterempfehlen",
+    "zurück", "zurück zur übersicht", "zur initiativbewerbung",
+    "zum jobalert", "mehr erfahren", "details", "apply now", "print",
+}
+
+def titel_aus_slug(href: str) -> str:
+    """Extrahiert einen lesbaren Titel aus dem URL-Slug als Fallback."""
+    pfad = urlparse(href).path
+    slug = pfad.rstrip("/").split("/")[-1]
+    slug = re.sub(r"\.[a-z]+$", "", slug)            # .html entfernen
+    slug = re.sub(r"-[a-z]{0,3}-[jf]?\d+$", "", slug)  # -de-j1860 entfernen
+    slug = re.sub(r"-\d+$", "", slug)                # trailing -1234 entfernen
+    return slug.replace("-", " ").strip()
+
+
 def _get_nested(obj: dict, pfad: str, standard="") -> any:
     """Liest einen verschachtelten Wert per Punkt-Notation: 'data.title' → obj['data']['title']."""
     for schluessel in pfad.split("."):
@@ -473,9 +497,15 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dic
     # Job-Link-Muster bestimmen
     muster = strukturen.get(dom, {}).get("link_muster")
 
+    def muster_trifft(href: str, m: str) -> bool:
+        try:
+            return bool(re.search(m, href))
+        except re.error:
+            return m in href
+
     if muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
-        kandidaten = [l for l in alle_links if muster in l["href"]]
+        kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
     else:
         kandidaten = [l for l in alle_links if ist_job_link(l["href"])]
         if kandidaten:
@@ -488,10 +518,13 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dic
                 print(f"  ✅ KI-Muster gelernt: '{muster}'")
                 strukturen.setdefault(dom, {})["link_muster"] = muster
                 strukturen.setdefault(dom, {})["gelernt_am"] = jetzt()
-                kandidaten = [l for l in alle_links if muster in l["href"]]
+                kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
             else:
                 print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
                 return []
+
+    # Bewerbungsformular-Links rausfiltern
+    kandidaten = [l for l in kandidaten if not ist_bewerbungslink(l["href"])]
 
     print(f"  📋 {len(kandidaten)} Kandidaten")
 
@@ -505,6 +538,10 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dic
 
         zeilen = [z.strip() for z in titel_roh.split("\n") if len(z.strip()) >= MIN_TITEL_LAENGE]
         titel = zeilen[0] if zeilen else titel_roh.strip()
+
+        # Fallback: Titel aus URL-Slug wenn Link-Text wie ein Button aussieht
+        if not titel or len(titel) < MIN_TITEL_LAENGE or titel.lower() in _BUTTON_TEXTE:
+            titel = titel_aus_slug(href)
 
         if not titel or len(titel) < MIN_TITEL_LAENGE:
             continue
