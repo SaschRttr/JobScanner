@@ -350,13 +350,12 @@ def generiere_anschreiben(
     staerken_text      = "\n".join(f"- {s}" for s in b.get("staerken", []))
     score_begruendung  = b.get("score_begruendung", "")
 
-    prompt = config["anschreiben_prompt"].format(
-        firma             = stelle.get("firma", ""),
-        titel             = stelle.get("titel", ""),
-        staerken          = staerken_text or "(keine Angaben)",
-        score_begruendung = score_begruendung or "(keine Angaben)",
-        aufgaben_pool     = aufgaben_pool,
-    )
+    prompt = config["anschreiben_prompt"]
+    prompt = prompt.replace("{firma}",             stelle.get("firma", ""))
+    prompt = prompt.replace("{titel}",             stelle.get("titel", ""))
+    prompt = prompt.replace("{staerken}",          staerken_text or "(keine Angaben)")
+    prompt = prompt.replace("{score_begruendung}", score_begruendung or "(keine Angaben)")
+    prompt = prompt.replace("{aufgaben_pool}",     aufgaben_pool)
 
     # --- Einmaliger KI-Aufruf ---
     try:
