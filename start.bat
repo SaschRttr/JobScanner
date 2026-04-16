@@ -4,5 +4,4 @@ python scanner.py
 python extraktor.py
 python bewertung.py
 python report.py
-python anpasser.py
 pause

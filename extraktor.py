@@ -222,8 +222,13 @@ def main():
             stellen[idx]["stellentext"] = stellentext
             bekannte[url]["status"] = 3
             extrahiert += 1
+        elif rohtext and len(rohtext) > 100:
+            print(f"  ⚠️  Extraktion fehlgeschlagen – verwende Rohtext als Fallback")
+            stellen[idx]["stellentext"] = rohtext[:8000]
+            bekannte[url]["status"] = 3
+            extrahiert += 1
         else:
-            print(f"  ⚠️  Extraktion fehlgeschlagen – Status bleibt 2")
+            print(f"  ⚠️  Extraktion fehlgeschlagen – kein Rohtext vorhanden")
 
         # Zwischenspeichern nach jeder Stelle
         speichere_json(STELLEN_JSON, stellen)

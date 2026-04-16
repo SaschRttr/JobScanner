@@ -437,15 +437,60 @@ JS = """
         });
     }
 
-    window.onload = ladeStatus;
+    window.onload = function() { ladeStatus(); ladeFirmen(); };
+
+    async function ladeFirmen() {
+        try {
+            const r = await fetch('/firmen');
+            const namen = await r.json();
+            const sel = document.getElementById('firma-dropdown');
+            namen.forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = n;
+                sel.appendChild(opt);
+            });
+        } catch(e) {}
+    }
+
+    function firmaTest() {
+        const sel    = document.getElementById('firma-dropdown');
+        const status = document.getElementById('firma-status');
+        const output = document.getElementById('firma-output');
+        const firma  = sel.value;
+        if (!firma) { status.textContent = '⚠️ Bitte Firma wählen'; return; }
+
+        sel.disabled = true;
+        status.textContent = `⏳ Scanne ${firma}...`;
+        output.style.display = 'block';
+        output.textContent = '';
+
+        const quelle = new EventSource('/firma-testen?firma=' + encodeURIComponent(firma));
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                sel.disabled = false;
+                status.textContent = '✅ Fertig';
+                return;
+            }
+            output.textContent += e.data + '\\n';
+            output.scrollTop = output.scrollHeight;
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            sel.disabled = false;
+            status.textContent = '❌ Verbindungsfehler';
+        };
+    }
 
     function scanStarten() {
-        const btn = document.querySelector('.scan-btn');
-        const output = document.getElementById('scan-output');
-        const status = document.getElementById('scan-status');
+        const btn     = document.getElementById('scan-start-btn');
+        const stopBtn = document.getElementById('scan-stop-btn');
+        const output  = document.getElementById('scan-output');
+        const status  = document.getElementById('scan-status');
 
         btn.disabled = true;
         btn.textContent = '⏳ Scan läuft...';
+        stopBtn.style.display = 'inline-block';
         output.style.display = 'block';
         output.textContent = '';
         status.textContent = '';
@@ -455,6 +500,9 @@ JS = """
         quelle.onmessage = function(e) {
             if (e.data === 'FERTIG') {
                 quelle.close();
+                stopBtn.style.display = 'none';
+                btn.disabled = false;
+                btn.textContent = '🔄 Scan jetzt starten';
                 status.textContent = '✅ Fertig – Seite wird neu geladen...';
                 setTimeout(() => location.reload(), 2000);
                 return;
@@ -465,11 +513,26 @@ JS = """
 
         quelle.onerror = function() {
             quelle.close();
+            stopBtn.style.display = 'none';
             btn.disabled = false;
-            btn.textContent = 'Scan jetzt starten';
+            btn.textContent = '🔄 Scan jetzt starten';
             status.textContent = '❌ Fehler: Flask-Server nicht erreichbar. Läuft webui.py?';
             status.style.color = '#e74c3c';
         };
+    }
+
+    async function scanStoppen() {
+        const stopBtn = document.getElementById('scan-stop-btn');
+        const status  = document.getElementById('scan-status');
+        stopBtn.disabled = true;
+        stopBtn.textContent = '⏳ Wird abgebrochen...';
+        try {
+            const r = await fetch('/stoppen');
+            const d = await r.json();
+            status.textContent = d.nachricht || 'Abbruch angefordert';
+        } catch(e) {
+            status.textContent = '❌ Fehler beim Abbrechen';
+        }
     }
 
     async function bewerbungErstellen(checkbox, stellenUrl, firma, titel) {
@@ -596,9 +659,24 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     """
     html += """
         <div class="scan-box">
-        <button class="scan-btn" onclick="scanStarten()">🔄 Scan jetzt starten</button>
+        <button id="scan-start-btn" class="scan-btn" onclick="scanStarten()">🔄 Scan jetzt starten</button>
+        <button id="scan-stop-btn" class="scan-btn" onclick="scanStoppen()"
+            style="display:none; background:#e74c3c; margin-left:10px;">⛔ Scan abbrechen</button>
         <div id="scan-status"></div>
         <pre id="scan-output"></pre>
+        </div>
+
+       <div class="scan-box">
+        <h3 style="margin-top:0;">🏢 Einzelne Firma testen</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <select id="firma-dropdown"
+                style="flex:2; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                <option value="">– Firma wählen –</option>
+            </select>
+            <button class="scan-btn" onclick="firmaTest()">▶️ Testen</button>
+        </div>
+        <div id="firma-status"></div>
+        <pre id="firma-output" style="display:none; max-height:300px; overflow-y:auto;"></pre>
         </div>
 
        <div class="scan-box">

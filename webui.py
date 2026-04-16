@@ -37,7 +37,9 @@ STELLEN_JSON = BASIS_PFAD / "stellen.json"
 PORT         = 5000
 
 # Globaler Status: läuft gerade ein Scan?
-scan_laeuft = False
+scan_laeuft   = False
+scan_stoppen  = False       # Signal: Scan soll abgebrochen werden
+laufender_prozess = None    # Aktuell laufender Subprozess
 
 # Reihenfolge der Scripts – identisch zu start.bat
 PIPELINE = [
@@ -45,7 +47,6 @@ PIPELINE = [
     "extraktor.py",
     "bewertung.py",
     "report.py",
-    "anpasser.py",
 ]
 
 # =============================================================================
@@ -67,12 +68,18 @@ def pipeline_im_hintergrund():
     Läuft in einem eigenen Thread – komplett unabhängig vom Browser.
     Schreibt Output in scan.log statt direkt zum Browser.
     """
-    global scan_laeuft
-    scan_laeuft = True
+    global scan_laeuft, scan_stoppen, laufender_prozess
+    scan_laeuft  = True
+    scan_stoppen = False
 
     try:
         with open(LOG_DATEI, "w", encoding="utf-8") as log:
             for script in PIPELINE:
+                if scan_stoppen:
+                    log.write("\n⛔ Scan wurde manuell abgebrochen.\n")
+                    log.flush()
+                    break
+
                 script_pfad = BASIS_PFAD / script
 
                 if not script_pfad.exists():
@@ -94,6 +101,7 @@ def pipeline_im_hintergrund():
                     env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
                     start_new_session=True,  # Unabhängig vom Flask-Prozess
                 )
+                laufender_prozess = prozess
 
                 for zeile in prozess.stdout:
                     zeile = zeile.rstrip("\n")
@@ -102,6 +110,12 @@ def pipeline_im_hintergrund():
                         log.flush()
 
                 prozess.wait()
+                laufender_prozess = None
+
+                if scan_stoppen:
+                    log.write(f"\n⛔ Scan wurde nach {script} abgebrochen.\n")
+                    log.flush()
+                    break
 
                 if prozess.returncode == 0:
                     log.write(f"✅ {script} fertig\n")
@@ -109,10 +123,15 @@ def pipeline_im_hintergrund():
                     log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
                 log.flush()
 
-            log.write("\nFERTIG\n")
+            if not scan_stoppen:
+                log.write("\nFERTIG\n")
+            else:
+                log.write("\nFERTIG\n")  # Stream-Ende-Signal auch beim Abbruch
             log.flush()
     finally:
-        scan_laeuft = False
+        scan_laeuft       = False
+        scan_stoppen      = False
+        laufender_prozess = None
 
 
 @app.route("/starten")
@@ -129,6 +148,18 @@ def starten():
     time.sleep(0.3)
 
     return redirect("/stream")
+
+
+@app.route("/stoppen")
+def stoppen():
+    """Bricht den laufenden Scan nach dem aktuellen Script ab."""
+    global scan_stoppen, laufender_prozess
+    if not scan_laeuft:
+        return jsonify({"ok": False, "nachricht": "Kein Scan aktiv"}), 400
+    scan_stoppen = True
+    if laufender_prozess and laufender_prozess.poll() is None:
+        laufender_prozess.terminate()
+    return jsonify({"ok": True, "nachricht": "Scan wird abgebrochen..."})
 
 
 @app.route("/stream")
@@ -163,6 +194,83 @@ def stream():
                     time.sleep(0.3)
 
     return Response(log_lesen(), mimetype="text/event-stream")
+
+
+# =============================================================================
+# FIRMEN-LISTE & EINZELTEST
+# =============================================================================
+
+@app.route("/firmen")
+def firmen_liste():
+    """Gibt alle Firmennamen als JSON zurück (API-Firmen + Playwright-Firmen)."""
+    namen = []
+
+    # API-Firmen aus config.txt [api_firmen]
+    try:
+        inhalt = (BASIS_PFAD / "config.txt").read_text(encoding="utf-8")
+        start  = inhalt.find("[api_firmen]")
+        ende   = inhalt.find("[\\api_firmen]")
+        if start != -1 and ende != -1:
+            block = inhalt[start + len("[api_firmen]"):ende].strip()
+            for f in json.loads(block):
+                if f.get("name"):
+                    namen.append(f["name"])
+    except Exception:
+        pass
+
+    # Playwright-Firmen aus config.txt [firmen]
+    try:
+        start = inhalt.find("[firmen]")
+        ende  = inhalt.find("[\\firmen]")
+        if start != -1 and ende != -1:
+            for zeile in inhalt[start + len("[firmen]"):ende].splitlines():
+                z = zeile.strip()
+                if z and not z.startswith("#") and "|" in z:
+                    namen.append(z.split("|")[0].strip())
+    except Exception:
+        pass
+
+    return jsonify(sorted(namen))
+
+
+@app.route("/firma-testen")
+def firma_testen():
+    """Startet scanner.py --firma <name> und streamt den Output per SSE."""
+    firma = request.args.get("firma", "").strip()
+    if not firma:
+        return "Kein firma-Parameter", 400
+
+    def stream_firma():
+        import subprocess, os
+        pipeline = [
+            [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
+            [sys.executable, str(BASIS_PFAD / "extraktor.py")],
+            [sys.executable, str(BASIS_PFAD / "bewertung.py")],
+            [sys.executable, str(BASIS_PFAD / "report.py")],
+        ]
+        for cmd in pipeline:
+            prozess = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(BASIS_PFAD),
+                env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+            )
+            for zeile in prozess.stdout:
+                zeile = zeile.rstrip("\n")
+                if zeile:
+                    yield f"data: {zeile}\n\n"
+            prozess.wait()
+            if prozess.returncode != 0:
+                yield f"data: ❌ {cmd[1]} fehlgeschlagen (Code {prozess.returncode})\n\n"
+                break
+        yield "data: FERTIG\n\n"
+
+    return Response(stream_firma(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # =============================================================================

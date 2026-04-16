@@ -22,6 +22,7 @@ Voraussetzungen:
   playwright install chromium
 """
 
+import argparse
 import json
 import sys
 import urllib.request
@@ -54,11 +55,12 @@ except ImportError:
 # PFADE
 # =============================================================================
 
-BASIS_PFAD      = Path(__file__).parent
-STELLEN_JSON    = BASIS_PFAD / "stellen.json"
-BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
-STRUKTUREN_JSON = BASIS_PFAD / "strukturen.json"
-CONFIG_PFAD     = Path(__file__).parent / "config.txt"
+BASIS_PFAD        = Path(__file__).parent
+STELLEN_JSON      = BASIS_PFAD / "stellen.json"
+BEKANNTE_JSON     = BASIS_PFAD / "bekannte_stellen.json"
+STRUKTUREN_JSON   = BASIS_PFAD / "strukturen.json"
+CONFIG_PFAD       = Path(__file__).parent / "config.txt"
+API_FIRMEN_PFAD   = Path(__file__).parent / "api_firmen.json"
 
 
 # =============================================================================
@@ -77,6 +79,7 @@ def lade_config() -> dict:
         "ausschlussbegriffe": [],
         "verbotene_standorte": [],
         "firmen": [],
+        "api_firmen": [],
         "prompt": "",
     }
 
@@ -92,6 +95,11 @@ def lade_config() -> dict:
             abschnitt = z[2:-1].lower()
             if abschnitt == "prompt":
                 result["prompt"] = "\n".join(puffer).strip()
+            elif abschnitt == "api_firmen":
+                try:
+                    result["api_firmen"] = json.loads("\n".join(puffer))
+                except Exception as e:
+                    print(f"❌ Fehler beim Parsen von [api_firmen]: {e}")
             aktiver_abschnitt = None
             puffer = []
             continue
@@ -112,8 +120,8 @@ def lade_config() -> dict:
                 result["llm_bewertung"] = z.split("=", 1)[1].strip().lower() == "true"
             continue
 
-        # Prompt-Abschnitt: alles übernehmen
-        if aktiver_abschnitt == "prompt":
+        # Prompt- und api_firmen-Abschnitt: alles übernehmen
+        if aktiver_abschnitt in ("prompt", "api_firmen"):
             puffer.append(zeile)
             continue
 
@@ -164,162 +172,16 @@ MIN_TITEL_LAENGE = 10
 #       damit Anwender nur die URL der Stellenbörse angeben muss.
 #       Aktuell müssen API-Firmen manuell konfiguriert werden.
 
-API_FIRMEN = [
-    {
-        "name": "Thales",
-        "url": "https://careers.thalesgroup.com/widgets",
-        "seiten": 5,
-        "seiten_parameter": "from",
-        "seiten_schrittweite": 10,
-        "payload": {
-            "lang": "en_global",
-            "deviceType": "desktop",
-            "country": "global",
-            "pageName": "search-results",
-            "ddoKey": "refineSearch",
-            "sortBy": "",
-            "subsearch": "",
-            "jobs": True,
-            "counts": True,
-            "all_fields": ["category", "country", "state", "city", "type"],
-            "size": 10,
-            "clearAll": False,
-            "jdsource": "facets",
-            "isSliderEnable": False,
-            "pageId": "page18",
-            "siteType": "external",
-            "keywords": "ditzingen",
-            "global": True,
-            "selected_fields": {},
-            "locationData": {}
-        },
-        "antwort_pfad": ["refineSearch", "data", "jobs"],
-        "feld_titel": "title",
-        "feld_id": "jobId",
-        "feld_standort": "city",
-        "url_vorlage": "https://careers.thalesgroup.com/global/en/job/{id}/{titel}",
-    },
-    {
-        "name": "TE Connectivity",
-        "url": "https://careers.te.com/services/recruiting/v1/jobs",
-        "seiten": 10,
-        "seiten_parameter": "pageNumber",
-        "seiten_schrittweite": 1,
-        "payload": {
-            "locale": "en_US",
-            "pageNumber": 0,
-            "sortBy": "",
-            "keywords": "",
-            "location": "",
-            "facetFilters": {"filter7": ["Germany"]},
-            "brand": "",
-            "skills": [],
-            "categoryId": 0,
-            "alertId": "",
-            "rcmCandidateId": ""
-        },
-        "antwort_pfad": ["jobSearchResult"],
-        "antwort_unterebene": "response",
-        "feld_titel": "unifiedStandardTitle",
-        "feld_id": "id",
-        "feld_standort": "jobLocationShort",
-        "url_vorlage": "https://careers.te.com/job/{url_titel}/{id}-de_DE/",
-        "feld_url_titel": "urlTitle",
-    },
-    {
-    "name": "Trumpf",
-    "url": "https://trumpf.wd3.myworkdayjobs.com/wday/cxs/trumpf/TRUMPF_Graduates_and_Professionals/jobs",
-    "methode": "POST",
-    "seiten": 10,
-    "seiten_parameter": "offset",
-    "seiten_start": 0,
-    "seiten_schrittweite": 20,
-    "payload": {
-        "appliedFacets": {
-            "locations": ["e3c66ea9d86601d7662bca38bb3ee008"]
-        },
-        "limit": 20,
-        "offset": 0,
-        "searchText": ""
-    },
-    "antwort_pfad": ["jobPostings"],
-    "feld_titel": "title",
-    "feld_id": "externalPath",
-    "feld_standort": "locationsText",
-    "url_vorlage": "https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professionals{id}",
-    },
-    {
-    "name": "Hitachi Rail",
-    "url": "https://www.hitachirail.com/umbraco/api/workdayrebuild/getjobs",
-    "methode": "GET",
-    "seiten": 5,
-    "seiten_parameter": "page",
-    "seiten_start": 1,
-    "seiten_schrittweite": 1,
-    "payload": {
-        "ItemsPerPage": 20,
-        "sortByField": "primaryJobPostingDate",
-        "sortDirection": "DESC",
-        "page": 1,
-        "City": "Stuttgart",
-    },
-    "antwort_pfad": ["items"],
-    "feld_titel": "jobPostingTitle",
-    "feld_standort": "primaryJobPostingLocation",
-    "feld_id": "url",
-    "url_vorlage": "https://www.hitachirail.com{id}",
-},
-{
-    "name": "eta plus",
-    "url": "https://jobs.b-ite.com/api/v1/postings/search",
-    "methode": "POST",
-    "seiten": 1,
-    "seiten_parameter": "_dummy",
-    "seiten_schrittweite": 1,
-    "headers": {
-        "bite-jobsapi-client": "v5-20260319-54d54ae",
-    },
-    "payload": {
-        "key": "73b9185d464269b0f922b6fa609bf1f8fa299d96",
-        "channel": 0,
-        "locale": "de",
-        "sort": {"by": "title", "order": "asc"},
-        "origin": "https://www.eta-uv.de/de/unternehmen/karriere/stellenangebote",
-        "page": {"offset": 0},
-    },
-    "antwort_pfad": ["jobPostings"],
-    "feld_titel": "title",
-    "feld_standort": "jobSite",
-    "feld_id": "url",
-    "url_vorlage": "{id}",
-},
-{
-    "name": "Knorr-Bremse",
-    "url": "https://production.api.recruiting-solutions.org/search",
-    "methode": "POST",
-    "seiten": 5,
-    "seiten_parameter": "_dummy",
-    "seiten_schrittweite": 1,
-    "headers": {
-        "customerid": "kb-prod",
-        "internal": "false"
-    },
-    "payload": {
-        "count": True,
-        "facets": [],
-        "filter": "datePosted lt 2026-04-09T08:39:00.794Z and (addresses/any(jt: jt/city eq 'Schwieberdingen')) and language eq 'de_DE'",
-        "search": "*",
-        "searchFields": "jobId,title,description,addresses/city,addresses/country,addresses/name,legalEntity",
-        "skip": 0,
-        "top": 20
-    },
-    "antwort_pfad": ["value"],
-    "feld_titel": "title",
-    "feld_standort": "addresses/city",
-    "feld_id": "link",
-    "url_vorlage": "{id}"
-}
-]
+def lade_api_firmen(config: dict) -> list:
+    """Lädt API-Firmen aus config.txt ([api_firmen]-Abschnitt) oder api_firmen.json als Fallback."""
+    if config.get("api_firmen"):
+        return config["api_firmen"]
+    if API_FIRMEN_PFAD.exists():
+        try:
+            return json.loads(API_FIRMEN_PFAD.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"❌ Fehler beim Laden von api_firmen.json: {e}")
+    return []
 
 
 def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list[dict]:
@@ -703,7 +565,11 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             titel = job.get("title", "")
             standort = job.get("locationsText", "")
             external_path = job.get("externalPath", "")
-            url = basis_url + external_path
+            locale = api_config.get("locale")
+            if locale:
+                url = f"{basis_url}/{locale}/{portal}{external_path}"
+            else:
+                url = basis_url + external_path
 
             if titel in gesehen:
                 continue
@@ -797,11 +663,22 @@ def speichere_json(pfad: Path, daten):
 # =============================================================================
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--firma", default=None, help="Nur diese Firma scannen (Name)")
+    args = parser.parse_args()
+    nur_firma = args.firma.strip() if args.firma else None
+
     print("\n" + "=" * 60)
     print("  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden")
+    if nur_firma:
+        print(f"  Filter: nur '{nur_firma}'")
     print("=" * 60)
 
     config = lade_config()
+    api_firmen = lade_api_firmen(config)
+    if nur_firma:
+        api_firmen      = [f for f in api_firmen      if f["name"].lower() == nur_firma.lower()]
+        config["firmen"] = [f for f in config["firmen"] if f["name"].strip().lower() == nur_firma.lower()]
     BASIS_PFAD.mkdir(parents=True, exist_ok=True)
 
     bekannte:   dict = lade_json(BEKANNTE_JSON, {})
@@ -893,7 +770,7 @@ def main():
                 print(f"  📥 Rohtext ergänzt: {t['titel'][:60]}")
 
     # API-Firmen zuerst scannen (kein Playwright nötig)
-    for api_firma in API_FIRMEN:
+    for api_firma in api_firmen:
         try:
             if api_firma.get("typ") == "workday":
                 treffer_liste = scanne_workday_firma(api_firma, set(bekannte.keys()), config)
@@ -958,7 +835,7 @@ def main():
     ts = jetzt()
     deaktiviert = 0
     gescannte_domains = {domain(f["url"]) for f in config["firmen"]}
-    for f in API_FIRMEN:
+    for f in api_firmen:
         if f.get("typ") == "workday":
             gescannte_domains.add(f"{f['tenant']}.wd3.myworkdayjobs.com")
         elif "url" in f:
