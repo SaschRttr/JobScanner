@@ -30,6 +30,7 @@ import platform
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+import urllib.parse
 
 try:
     from playwright.sync_api import sync_playwright
@@ -202,7 +203,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list
             if api_config.get("methode", "POST").upper() == "GET":
                 params = dict(api_config["payload"])
                 params[api_config["seiten_parameter"]] = seiten_wert
-                query = "&".join(f"{k}={v}" for k, v in params.items())
+                query = urllib.parse.urlencode(params)
                 url_mit_seite = f"{api_config['url']}?{query}"
                 #print(url_mit_seite)  # <- hier
                 req = urllib.request.Request(
@@ -248,12 +249,12 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list
         print(f"  📋 Seite {seite+1}: {len(jobs)} Jobs gefunden")
 
         for job in jobs:
-            titel = job.get(api_config["feld_titel"], "")
+            titel = _get_nested(job, api_config["feld_titel"])
 
-            standort_roh = job.get(api_config.get("feld_standort", ""), "")
+            standort_roh = _get_nested(job, api_config.get("feld_standort", ""))
             standort = " ".join(standort_roh) if isinstance(standort_roh, list) else standort_roh
 
-            job_id = str(job.get(api_config.get("feld_id", ""), ""))
+            job_id = str(_get_nested(job, api_config.get("feld_id", "")))
             url_vorlage = api_config["url_vorlage"]
             titel_fuer_url = titel.lower().replace(" ", "-")
             if api_config.get("feld_url_titel"):
@@ -265,6 +266,10 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list
                     .replace("{id}", job_id)
                     .replace("{titel}", titel_fuer_url)
                     .replace("{url_titel}", titel_fuer_url))
+
+            if not url or not url.startswith("http"):
+                print(f"  ⚠️  Leere/ungültige URL für '{titel[:50]}' – übersprungen (id={job_id!r})")
+                continue
 
             volltext = f"{titel} {standort}"
 
@@ -280,12 +285,22 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list
                     and not ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
                     and not standort_verboten(volltext, config["verbotene_standorte"])):
                 ist_neu = url not in bekannte_urls
+
+                # Rohtext direkt aus API-Feldern zusammensetzen (verhindert 403 beim Playwright-Laden)
+                rohtext = None
+                feld_rohtext = api_config.get("feld_rohtext")
+                if feld_rohtext:
+                    teile = [str(_get_nested(job, f)).strip()
+                             for f in (feld_rohtext if isinstance(feld_rohtext, list) else [feld_rohtext])]
+                    rohtext = "\n\n".join(t for t in teile if t and t != "None") or None
+
                 stellen.append({
                     "firma": name,
                     "titel": titel,
                     "url": url,
                     "treffer": treffer,
                     "neu": ist_neu,
+                    "rohtext": rohtext,
                 })
                 neu_label = "🆕 " if ist_neu else "   "
                 print(f"  ✅ {neu_label}{titel}")
@@ -341,6 +356,15 @@ def standort_verboten(text: str, verbotene: list) -> bool:
 
 def ist_job_link(href: str) -> bool:
     return any(m in href for m in JOB_LINK_MUSTER)
+
+
+def _get_nested(obj: dict, pfad: str, standard="") -> any:
+    """Liest einen verschachtelten Wert per Punkt-Notation: 'data.title' → obj['data']['title']."""
+    for schluessel in pfad.split("."):
+        if not isinstance(obj, dict):
+            return standard
+        obj = obj.get(schluessel, standard)
+    return obj if obj is not None else standard
 
 
 # =============================================================================
@@ -714,14 +738,28 @@ def main():
                 stellen_index[url] = len(stellen) - 1
                 print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
         elif url not in bekannte:
-            bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None}
+            rohtext = t.get("rohtext")
+            bekannte[url] = {"status": 2 if rohtext else 1, "gefunden_am": ts, "geloescht_am": None}
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
                 "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
-                "neu": True, "rohtext": None, "stellentext": None, "bewertung": None,
+                "neu": True, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
             stellen_index[url] = len(stellen) - 1
             print(f"  🆕 Neu: {t['titel'][:60]}")
+        elif idx is None:
+            # In bekannte vorhanden aber fehlt in stellen.json → wiederherstellen
+            rohtext = t.get("rohtext")
+            status = bekannte[url]["status"]
+            stellen.append({
+                "firma": t["firma"], "titel": t["titel"], "url": url,
+                "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
+                "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
+            })
+            stellen_index[url] = len(stellen) - 1
+            if rohtext and status < 2:
+                bekannte[url]["status"] = 2
+            print(f"  🔧 Wiederhergestellt (fehlte in stellen.json): {t['titel'][:60]}")
 
     def reaktiviere_oder_neu_playwright(t, rohtext, ts):
         url = t["url"]
@@ -822,6 +860,8 @@ def main():
         # Rohtext für API-Firmen nachladen (Status 1, kein Rohtext)
         for stelle in stellen:
             url = stelle["url"]
+            if not url or not url.startswith("http"):
+                continue
             if bekannte.get(url, {}).get("status") == 1 and not stelle.get("rohtext"):
                 print(f"  📄 Lade Rohtext (API): {stelle['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
