@@ -194,6 +194,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     stelle_dir = BEWERBUNGEN_DIR / firma_safe / titel_safe
     lv_docx = Path(s["lebenslauf_pfad"]) if s.get("lebenslauf_pfad") else None
     as_docx = Path(s["anschreiben_pfad"]) if s.get("anschreiben_pfad") else None
+    # Fallback: falls Pfade nicht in stellen.json, neueste Datei im Ordner suchen
     if lv_docx is None or not lv_docx.exists():
         treffer = sorted(stelle_dir.glob("Lebenslauf*.docx")) if stelle_dir.exists() else []
         lv_docx = treffer[-1] if treffer else None

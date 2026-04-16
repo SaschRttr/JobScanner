@@ -238,7 +238,20 @@ def bewerbung_erstellen():
     except Exception as e:
         print(f"⚠️ Anschreiben-Fehler (nicht kritisch): {e}")
 
-    # Schritt 4: Report neu generieren damit Links dauerhaft erscheinen
+    # Schritt 4: Pfade in stellen.json speichern damit report.py sie findet
+    try:
+        stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+        for s in stellen:
+            if s.get("url") == stellen_url:
+                s["lebenslauf_pfad"] = str(lv_pfad)
+                if as_pfad.exists():
+                    s["anschreiben_pfad"] = str(as_pfad)
+                break
+        STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️ Konnte stellen.json nicht aktualisieren: {e}")
+
+    # Schritt 5: Report neu generieren damit Links dauerhaft erscheinen
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py")],
         cwd=str(BASIS_PFAD),
