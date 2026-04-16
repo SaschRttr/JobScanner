@@ -30,10 +30,11 @@ print("WEBUI GESTARTET - Version mit manuell-stream")
 # KONFIGURATION
 # =============================================================================
 
-BASIS_PFAD  = Path(__file__).parent
-REPORT_HTML = BASIS_PFAD / "report.html"
-LOG_DATEI   = BASIS_PFAD / "scan.log"
-PORT        = 5000
+BASIS_PFAD   = Path(__file__).parent
+REPORT_HTML  = BASIS_PFAD / "report.html"
+LOG_DATEI    = BASIS_PFAD / "scan.log"
+STELLEN_JSON = BASIS_PFAD / "stellen.json"
+PORT         = 5000
 
 # Globaler Status: läuft gerade ein Scan?
 scan_laeuft = False
