@@ -21,7 +21,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from pathlib import Path
-import urllib.parse
 
 
 # =============================================================================
@@ -191,23 +190,15 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     titel_safe = sicherer_pfadname(s["titel"])
     score      = (s.get("bewertung") or {}).get("score", 0)
 
-    stelle_dir = BEWERBUNGEN_DIR / firma_safe / titel_safe
-    lv_docx = Path(s["lebenslauf_pfad"]) if s.get("lebenslauf_pfad") else None
-    as_docx = Path(s["anschreiben_pfad"]) if s.get("anschreiben_pfad") else None
-    # Fallback: falls Pfade nicht in stellen.json, neueste Datei im Ordner suchen
-    if lv_docx is None or not lv_docx.exists():
-        treffer = sorted(stelle_dir.glob("Lebenslauf*.docx")) if stelle_dir.exists() else []
-        lv_docx = treffer[-1] if treffer else None
-    if as_docx is None or not as_docx.exists():
-        treffer = sorted(stelle_dir.glob("Anschreiben*.docx")) if stelle_dir.exists() else []
-        as_docx = treffer[-1] if treffer else None
+    lv_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Lebenslauf.docx"
+    as_docx  = BEWERBUNGEN_DIR / firma_safe / titel_safe / "Anschreiben.docx"
 
     if score >= 70:
-        if lv_docx and as_docx:
+        if lv_docx.exists() and as_docx.exists():
             # Beide DOCX vorhanden → Download-Links anzeigen
             css = "stelle stelle-bewerbung"
-            lv_dl  = f"/download?pfad={urllib.parse.quote(str(lv_docx))}"
-            as_dl  = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
+            lv_dl  = f"http://{RASPI_IP}:5000/download?pfad={lv_docx}"
+            as_dl  = f"http://{RASPI_IP}:5000/download?pfad={as_docx}"
             lebenslauf_html = f"""
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
             📄 <a href="{lv_dl}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
