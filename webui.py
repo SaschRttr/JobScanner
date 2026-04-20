@@ -246,7 +246,7 @@ def firma_testen():
             [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
             [sys.executable, str(BASIS_PFAD / "extraktor.py")],
             [sys.executable, str(BASIS_PFAD / "bewertung.py")],
-            [sys.executable, str(BASIS_PFAD / "report.py")],
+            [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         ]
         for cmd in pipeline:
             prozess = subprocess.Popen(
@@ -361,7 +361,7 @@ def bewerbung_erstellen():
 
     # Schritt 5: Report neu generieren damit Links dauerhaft erscheinen
     subprocess.run(
-        [sys.executable, str(BASIS_PFAD / "report.py")],
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         cwd=str(BASIS_PFAD),
         env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
     )
@@ -430,6 +430,80 @@ def post_status():
         """, (data["url"], data["wert"]))
         con.commit()
     return jsonify({"ok": True})
+
+@app.route("/steckbrief-erstellen", methods=["POST"])
+def steckbrief_erstellen():
+    data = request.get_json()
+    if not data or "url" not in data:
+        return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
+
+    url = data["url"]
+    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+    stelle = next((s for s in stellen if s["url"] == url), None)
+    if not stelle:
+        return jsonify({"fehler": "Stelle nicht gefunden"}), 404
+
+    config_pfad = BASIS_PFAD / "config.txt"
+    api_key = ""
+    steckbrief_prompt = ""
+    aktiver_abschnitt = None
+    puffer = []
+    for zeile in config_pfad.read_text(encoding="utf-8").splitlines():
+        z = zeile.strip()
+        if z.startswith("[\\") and z.endswith("]"):
+            if z[2:-1].lower() == "steckbrief_prompt":
+                steckbrief_prompt = "\n".join(puffer).strip()
+            aktiver_abschnitt = None
+            puffer = []
+            continue
+        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
+            aktiver_abschnitt = z[1:-1].lower()
+            puffer = []
+            continue
+        if aktiver_abschnitt == "steckbrief_prompt":
+            puffer.append(zeile)
+        elif aktiver_abschnitt is None and z.upper().startswith("API_KEY"):
+            api_key = z.split("=", 1)[1].strip()
+
+    if not api_key or not steckbrief_prompt:
+        return jsonify({"fehler": "API-Key oder Steckbrief-Prompt fehlt"}), 500
+
+    lebenslauf_pfad = BASIS_PFAD / "lebenslauf.txt"
+    lebenslauf = lebenslauf_pfad.read_text(encoding="utf-8") if lebenslauf_pfad.exists() else ""
+    stellentext = stelle.get("stellentext") or stelle.get("rohtext") or ""
+
+    prompt = (steckbrief_prompt
+        .replace("{titel}", stelle.get("titel", ""))
+        .replace("{firma}", stelle.get("firma", ""))
+        .replace("{stellentext}", stellentext[:6000])
+        .replace("{lebenslauf}", lebenslauf[:4000])
+    )
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        antwort = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = antwort.content[0].text.strip()
+        text = text.removeprefix("```json").removesuffix("```").strip()
+        steckbrief = json.loads(text)
+    except Exception as e:
+        return jsonify({"fehler": f"Claude-Fehler: {e}"}), 500
+
+    stelle["steckbrief"] = steckbrief
+    STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    return jsonify({"ok": True, "steckbrief": steckbrief})
+
 
 @app.route("/stelle-einfuegen", methods=["POST"])
 def stelle_einfuegen():
@@ -543,8 +617,9 @@ def manuell_stream():
                     script_pfad = BASIS_PFAD / script
                     log.write(f"\n Starte {script} ...\n")
                     log.flush()
+                    extra_args = ["--keine-mail"] if script == "report.py" else []
                     prozess = subprocess.Popen(
-                        [sys.executable, str(script_pfad)],
+                        [sys.executable, str(script_pfad)] + extra_args,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,

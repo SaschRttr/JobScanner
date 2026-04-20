@@ -226,13 +226,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
         </div>"""
     else:
         lebenslauf_html = ""
+    import html as html_mod
+
     # Stellentext-Block (aufklappbar)
     stellentext = s.get("stellentext") or s.get("rohtext") or ""
     if stellentext:
-        # HTML-Sonderzeichen escapen, Zeilenumbrüche als <br>
-        import html as html_mod
-        st_escaped = html_mod.escape(stellentext[:4000])
-        st_escaped = st_escaped.replace("\n", "<br>")
+        st_escaped = html_mod.escape(stellentext[:4000]).replace("\n", "<br>")
         stellentext_html = f"""
         <details class="stellentext-details">
             <summary>📄 Stellentext anzeigen</summary>
@@ -241,11 +240,38 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     else:
         stellentext_html = ""
 
+    # Steckbrief-Block
+    steckbrief = s.get("steckbrief")
+    if steckbrief:
+        fragen_html = ""
+        for fq in steckbrief.get("interview_fragen", []):
+            fragen_html += f"""
+            <details style="margin:4px 0;">
+                <summary style="cursor:pointer;">{html_mod.escape(str(fq.get('frage', '')))}</summary>
+                <p style="margin:6px 0 0 16px; color:#444;">{html_mod.escape(str(fq.get('antwort', '')))}</p>
+            </details>"""
+        steckbrief_html = f"""
+        <details class="steckbrief-details">
+            <summary>🧠 Steckbrief anzeigen</summary>
+            <div class="steckbrief-inhalt">
+                <p><strong>Firma:</strong> {html_mod.escape(str(steckbrief.get('firma_beschreibung', '')))}</p>
+                <p><strong>Warum ich passe:</strong> {html_mod.escape(str(steckbrief.get('warum_ich_passe', '')))}</p>
+                <p><strong>Interview-Fragen:</strong></p>
+                {fragen_html}
+            </div>
+        </details>"""
+    else:
+        steckbrief_html = ""
+
+    steckbrief_btn = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
+
     return f"""<div class="{css}" data-url="{url_escaped}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{datum_label}
     <div class="tags">{tags}</div>
     {bewertung_html}
     {stellentext_html}
+    {steckbrief_html}
+    {steckbrief_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -331,6 +357,22 @@ CSS = """
     .stufen-ts {
         font-size: 0.78em; color: #888; margin-left: 6px;
     }
+    .steckbrief-details { margin-top: 8px; }
+    .steckbrief-details summary {
+        cursor: pointer; color: #555; font-size: 0.9em;
+        padding: 4px 0; user-select: none;
+    }
+    .steckbrief-inhalt {
+        margin-top: 8px; padding: 12px; background: #fff;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 0.85em; line-height: 1.6; color: #333;
+    }
+    .steckbrief-btn {
+        margin-top: 8px; background: none; color: inherit;
+        border: none; padding: 0; font-size: 0.85em;
+        cursor: pointer; text-decoration: none;
+    }
+    .steckbrief-btn:disabled { color: #aaa; cursor: not-allowed; }
     .scan-box {
         background: white; border-radius: 8px; padding: 20px;
         margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -532,6 +574,30 @@ JS = """
             status.textContent = d.nachricht || 'Abbruch angefordert';
         } catch(e) {
             status.textContent = '❌ Fehler beim Abbrechen';
+        }
+    }
+
+    async function steckbriefGenerieren(btn, stellenUrl) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Generiere...';
+        try {
+            const res = await fetch(SERVER + '/steckbrief-erstellen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: stellenUrl })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                location.reload();
+            } else {
+                btn.disabled = false;
+                btn.textContent = '🧠 Steckbrief generieren';
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+            }
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '🧠 Steckbrief generieren';
+            alert('Server nicht erreichbar');
         }
     }
 
@@ -858,6 +924,11 @@ def sende_mail(aenderungs_html: str, config: dict):
 # =============================================================================
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keine-mail", action="store_true", help="Mail-Versand unterdrücken")
+    args = parser.parse_args()
+
     print("\n" + "=" * 60)
     print("  REPORT  –  Schritt 4: HTML erstellen & Mail senden")
     print("=" * 60)
@@ -880,7 +951,9 @@ def main():
     neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]
     geloescht = [s for s in stellen if s.get("geloescht_am")]
 
-    if config["email_aktiv"]:
+    if args.keine_mail:
+        print("  ℹ️  Mail-Versand unterdrückt (--keine-mail)")
+    elif config["email_aktiv"]:
         if neue or geloescht:
             print(f"  📧 Sende Änderungs-Mail ({len(neue)} neu, {len(geloescht)} vergeben)...")
             aenderungs_html = erstelle_aenderungs_html(stellen)

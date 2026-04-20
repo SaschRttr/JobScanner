@@ -28,9 +28,47 @@ BASIS_PFAD      = Path(__file__).parent
 STATUS_JSON     = BASIS_PFAD / "status.json"
 REPORT_HTML     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
+STELLEN_JSON    = BASIS_PFAD / "stellen.json"
+CONFIG_PFAD     = BASIS_PFAD / "config.txt"
+LEBENSLAUF_TXT  = BASIS_PFAD / "lebenslauf.txt"
 
 app = Flask(__name__)
 CORS(app)  # Erlaubt Browser-Zugriff von beliebiger Herkunft
+
+
+def lade_stellen() -> list:
+    if STELLEN_JSON.exists():
+        try:
+            return json.loads(STELLEN_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return []
+
+
+def lade_steckbrief_config() -> dict:
+    result = {"api_key": "", "steckbrief_prompt": ""}
+    if not CONFIG_PFAD.exists():
+        return result
+    aktiver_abschnitt = None
+    puffer = []
+    for zeile in CONFIG_PFAD.read_text(encoding="utf-8").splitlines():
+        z = zeile.strip()
+        if z.startswith("[\\") and z.endswith("]"):
+            abschnitt = z[2:-1].lower()
+            if abschnitt == "steckbrief_prompt":
+                result["steckbrief_prompt"] = "\n".join(puffer).strip()
+            aktiver_abschnitt = None
+            puffer = []
+            continue
+        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
+            aktiver_abschnitt = z[1:-1].lower()
+            puffer = []
+            continue
+        if aktiver_abschnitt == "steckbrief_prompt":
+            puffer.append(zeile)
+        elif aktiver_abschnitt is None and z.upper().startswith("API_KEY"):
+            result["api_key"] = z.split("=", 1)[1].strip()
+    return result
 
 
 def lade_status() -> dict:
@@ -77,6 +115,55 @@ def post_status():
 
     speichere_status(status)
     return jsonify({"ok": True})
+
+
+@app.route("/steckbrief-erstellen", methods=["POST"])
+def post_steckbrief():
+    data = request.get_json()
+    if not data or "url" not in data:
+        return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
+
+    url = data["url"]
+    stellen = lade_stellen()
+    stelle = next((s for s in stellen if s["url"] == url), None)
+    if not stelle:
+        return jsonify({"fehler": "Stelle nicht gefunden"}), 404
+
+    config = lade_steckbrief_config()
+    if not config["api_key"]:
+        return jsonify({"fehler": "Kein API-Key in config.txt"}), 500
+    if not config["steckbrief_prompt"]:
+        return jsonify({"fehler": "Kein [steckbrief_prompt] in config.txt"}), 500
+
+    lebenslauf = LEBENSLAUF_TXT.read_text(encoding="utf-8") if LEBENSLAUF_TXT.exists() else ""
+    stellentext = stelle.get("stellentext") or stelle.get("rohtext") or ""
+
+    prompt = (config["steckbrief_prompt"]
+        .replace("{titel}", stelle.get("titel", ""))
+        .replace("{firma}", stelle.get("firma", ""))
+        .replace("{stellentext}", stellentext[:6000])
+        .replace("{lebenslauf}", lebenslauf[:4000])
+    )
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=config["api_key"])
+        antwort = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = antwort.content[0].text.strip()
+        text = text.removeprefix("```json").removesuffix("```").strip()
+        steckbrief = json.loads(text)
+    except Exception as e:
+        return jsonify({"fehler": f"Claude-Fehler: {e}"}), 500
+
+    stelle["steckbrief"] = steckbrief
+    STELLEN_JSON.write_text(
+        json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return jsonify({"ok": True, "steckbrief": steckbrief})
 
 
 @app.route("/lebenslauf")
