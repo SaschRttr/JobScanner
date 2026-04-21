@@ -53,6 +53,8 @@ def lade_config() -> dict:
         "email_empfaenger": "",
         "firmen_reihenfolge": [],
         "raspi_ip": "",
+        "ausschlussbegriffe": [],
+        "verbotene_standorte": [],
     }
 
     aktiver_abschnitt = None
@@ -89,6 +91,12 @@ def lade_config() -> dict:
                 if name:
                     result["firmen_reihenfolge"].append(name)
 
+        elif aktiver_abschnitt == "ausschlussbegriffe":
+            result["ausschlussbegriffe"].append(z.lower())
+
+        elif aktiver_abschnitt == "verbotene_standorte":
+            result["verbotene_standorte"].append(z.lower())
+
     return result
 
 
@@ -103,6 +111,7 @@ def lade_json(pfad: Path, standard):
         except Exception:
             pass
     return standard
+
 
 
 def sicherer_pfadname(text: str, max_len: int = 50) -> str:
@@ -1040,12 +1049,39 @@ def main():
             if eintrag.get("status", 0) != 0:
                 s["geloescht_am"] = None
                 repariert += 1
-    if repariert:
-        import json as _json
+
+    # Ausschluss-Prüfung: aktive Stellen gegen aktuelle Config prüfen
+    # nicht_passend zuerst zurücksetzen damit eine veränderte Config greift
+    ausschlussbegriffe  = config["ausschlussbegriffe"]
+    verbotene_standorte = config["verbotene_standorte"]
+    neu_ausgeschlossen = 0
+    for s in stellen:
+        if s.get("nicht_passend") and not s.get("geloescht_am"):
+            s["nicht_passend"] = False
+    if ausschlussbegriffe or verbotene_standorte:
+        for s in stellen:
+            if s.get("geloescht_am") or s.get("nicht_passend"):
+                continue
+            titel    = s.get("titel", "").lower()
+            volltext = " ".join(filter(None, [
+                s.get("stellentext", ""),
+                s.get("rohtext", ""),
+            ]))[:2000].lower()
+            # Ausschlussbegriffe nur gegen Titel (substring)
+            ausgeschlossen = any(b in titel for b in ausschlussbegriffe)
+            # Verbotene Standorte gegen Anfang des Textes (max 2000 Zeichen)
+            standort_weg   = any(v in volltext for v in verbotene_standorte)
+            if ausgeschlossen or standort_weg:
+                s["nicht_passend"] = True
+                neu_ausgeschlossen += 1
+    if repariert or neu_ausgeschlossen:
         STELLEN_JSON.write_text(
-            _json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        print(f"  🔧 {repariert} Stelle(n) reaktiviert (geloescht_am-Datenreparatur)")
+        if repariert:
+            print(f"  🔧 {repariert} Stelle(n) reaktiviert (geloescht_am-Datenreparatur)")
+        if neu_ausgeschlossen:
+            print(f"  🚫 {neu_ausgeschlossen} Stelle(n) als nicht passend markiert (Ausschluss-Prüfung)")
 
     # Vollständigen Report erstellen
     print("  📄 Erstelle Report...")

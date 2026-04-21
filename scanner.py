@@ -28,7 +28,6 @@ import re
 import sys
 import io
 import urllib.request
-import urllib.error
 import platform
 from datetime import datetime
 from pathlib import Path
@@ -289,8 +288,6 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             gesehen.add(titel)
 
             treffer = text_matched(titel, config["suchbegriffe"])
-            if not treffer:
-                treffer = text_matched(volltext, config["suchbegriffe"])
 
             if treffer:
                 if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
@@ -338,6 +335,12 @@ def domain(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 
 
+def root_domain(url: str) -> str:
+    """Gibt die Root-Domain zurück (z.B. 'helmut-fischer.com' für 'stellenangebote.helmut-fischer.com')."""
+    teile = urlparse(url).netloc.replace("www.", "").split(".")
+    return ".".join(teile[-2:]) if len(teile) >= 2 else teile[0]
+
+
 def text_matched(text: str, begriffe: list) -> list:
     t = text.lower()
     treffer = []
@@ -351,8 +354,8 @@ def text_matched(text: str, begriffe: list) -> list:
     return treffer
 
 
-def ist_ausgeschlossen(text: str, begriffe: list) -> bool:
-    t = text.lower()
+def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
+    t = titel.lower()
     for b in begriffe:
         if "+" in b:
             if all(teil in t for teil in b.split("+")):
@@ -364,7 +367,7 @@ def ist_ausgeschlossen(text: str, begriffe: list) -> bool:
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:
-    t = text.lower()
+    t = text[:2000].lower()
     return any(v in t for v in verbotene)
 
 
@@ -546,6 +549,13 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
                 return []
 
+    # Domain-Filter: nur Links der eigenen Root-Domain übernehmen
+    rd = root_domain(url_boerse)
+    vor_filter = len(kandidaten)
+    kandidaten = [l for l in kandidaten if root_domain(l["href"]) == rd]
+    if len(kandidaten) < vor_filter:
+        print(f"  🔒 Domain-Filter: {vor_filter - len(kandidaten)} Fremd-Links entfernt (nur '{rd}' erlaubt)")
+
     # Bewerbungsformular-Links rausfiltern
     kandidaten = [l for l in kandidaten if not ist_bewerbungslink(l["href"])]
 
@@ -591,8 +601,6 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         volltext = titel_roh.lower()
 
         treffer = text_matched(titel, config["suchbegriffe"])
-        if not treffer:
-            treffer = text_matched(volltext, config["suchbegriffe"])
 
         if not treffer:
             continue
@@ -679,8 +687,6 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
 
             volltext = f"{titel} {standort}"
             treffer = text_matched(titel, config["suchbegriffe"])
-            if not treffer:
-                treffer = text_matched(volltext, config["suchbegriffe"])
 
             if treffer:
                 if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
@@ -947,6 +953,9 @@ def main():
                 stellen[idx]["geloescht_am"] = None
             print(f"  🚫 Nicht passend: {t['titel'][:60]}")
 
+    # Domains die erfolgreich gescannt wurden (mind. 1 Treffer oder Ausschluss)
+    erfolgreich_gescannte_domains: set = set()
+
     # API-Firmen zuerst scannen (kein Playwright nötig)
     for api_firma in api_firmen:
         try:
@@ -954,6 +963,11 @@ def main():
                 treffer_liste, ausgeschlossen_liste = scanne_workday_firma(api_firma, set(bekannte.keys()), config)
             else:
                 treffer_liste, ausgeschlossen_liste = scanne_api_firma(api_firma, set(bekannte.keys()), config)
+            if treffer_liste or ausgeschlossen_liste:
+                if api_firma.get("typ") == "workday":
+                    erfolgreich_gescannte_domains.add(f"{api_firma['tenant']}.wd3.myworkdayjobs.com")
+                elif "url" in api_firma:
+                    erfolgreich_gescannte_domains.add(domain(api_firma["url"]))
             for t in ausgeschlossen_liste:
                 if t["url"] not in gesehen_urls:
                     markiere_nicht_passend(t, jetzt())
@@ -992,6 +1006,9 @@ def main():
                 if t["url"] not in gesehen_urls:
                     markiere_nicht_passend(t, jetzt())
 
+            if treffer_liste or ausgeschlossen_liste:
+                erfolgreich_gescannte_domains.add(domain(firma["url"]))
+
             for t in treffer_liste:
                 url = t["url"]
                 if url in gesehen_urls:
@@ -1009,7 +1026,7 @@ def main():
             url = stelle["url"]
             if not url or not url.startswith("http"):
                 continue
-            if bekannte.get(url, {}).get("status") == 1 and not stelle.get("rohtext"):
+            if bekannte.get(url, {}).get("status") == 1 and not stelle.get("rohtext") and not stelle.get("nicht_passend"):
                 print(f"  📄 Lade Rohtext (API): {stelle['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
                 if rohtext:
@@ -1017,103 +1034,115 @@ def main():
                     bekannte[url]["status"] = 2
                     print(f"  ✅ Rohtext geladen")
 
-    # Nicht mehr gefundene Stellen → HTTP-Check vor Vergaben-Markierung
-    # Nur wenn die Firma auch wirklich gescannt wurde (Schutz gegen auskommentierte Firmen)
-    ts = jetzt()
-    deaktiviert = 0
-    gescannte_domains = {domain(f["url"]) for f in config["firmen"]}
-    for f in api_firmen:
-        if f.get("typ") == "workday":
-            gescannte_domains.add(f"{f['tenant']}.wd3.myworkdayjobs.com")
-        elif "url" in f:
-            gescannte_domains.add(domain(f["url"]))
+        # Vergaben-Repair: bereits vergaben-markierte Stellen per Playwright prüfen
+        # (Playwright statt urllib damit JS-Redirects korrekt gefolgt wird)
+        if not nur_firma:
+            vergaben_repair = [
+                url for url, eintrag in bekannte.items()
+                if eintrag.get("status") == 0
+                and not eintrag.get("vergaben_bestaetigt")
+                and stellen_index.get(url) is not None
+                and stellen[stellen_index[url]].get("geloescht_am")
+                and not stellen[stellen_index[url]].get("nicht_passend")
+            ]
+            if vergaben_repair:
+                print(f"\n  🔍 Prüfe {len(vergaben_repair)} vergaben-markierte Stelle(n) auf Erreichbarkeit...")
+                reaktiviert = 0
+                for url in vergaben_repair:
+                    erreichbar = None
+                    try:
+                        resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                        if resp:
+                            if resp.ok:
+                                erreichbar = True
+                            elif resp.status in (404, 410):
+                                erreichbar = False
+                    except Exception:
+                        pass  # Timeout → unbekannt, beim nächsten Mal nochmal
+                    if erreichbar is True:
+                        idx = stellen_index[url]
+                        stellen[idx]["nicht_passend"] = True
+                        stellen[idx]["geloescht_am"] = None
+                        reaktiviert += 1
+                        print(f"  🚫 Vergaben→nicht_passend (noch erreichbar): {url[:70]}")
+                    elif erreichbar is False:
+                        bekannte[url]["vergaben_bestaetigt"] = True
+                if reaktiviert:
+                    print(f"  ✅ {reaktiviert} Stelle(n) von vergaben zu nicht_passend verschoben")
 
-    kandidaten_vergaben = []
-    for url, eintrag in bekannte.items():
-        if url not in gesehen_urls and eintrag["status"] != 0:
-            if any(d in url for d in gescannte_domains):
-                kandidaten_vergaben.append(url)
+        # Nicht mehr gefundene Stellen → Playwright-Check vor Vergaben-Markierung
+        # Nur für Domains die in diesem Scan mind. 1 Ergebnis hatten (Schutz gegen Ladeprobleme)
+        ts = jetzt()
+        deaktiviert = 0
 
-    if kandidaten_vergaben and not nur_firma:
-        print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per HTTP...")
-        ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-        for url in kandidaten_vergaben:
-            eintrag = bekannte[url]
-            erreichbar = None
-            for methode in ("HEAD", "GET"):
+        kandidaten_vergaben = []
+        for url, eintrag in bekannte.items():
+            if url not in gesehen_urls and eintrag["status"] != 0:
+                if any(d in url for d in erfolgreich_gescannte_domains):
+                    kandidaten_vergaben.append(url)
+
+        if kandidaten_vergaben:
+            print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per Playwright...")
+            for url in kandidaten_vergaben:
+                eintrag = bekannte[url]
+                erreichbar = None
                 try:
-                    req = urllib.request.Request(url, method=methode,
-                        headers={"User-Agent": ua})
-                    with urllib.request.urlopen(req, timeout=10):
-                        erreichbar = True
-                    break
-                except urllib.error.HTTPError as e:
-                    if e.code == 405 and methode == "HEAD":
-                        continue
-                    if e.code in (404, 410):
-                        erreichbar = False
-                    break
+                    resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    if resp:
+                        if resp.ok:
+                            erreichbar = True
+                        elif resp.status in (404, 410):
+                            erreichbar = False
                 except Exception:
-                    break  # Timeout/DNS → unbekannt, nicht markieren
-            if erreichbar is False:
-                eintrag["status"] = 0
-                eintrag["geloescht_am"] = ts
-                idx = stellen_index.get(url)
-                if idx is not None:
-                    stellen[idx]["geloescht_am"] = ts
-                deaktiviert += 1
-                print(f"  🗑️  Vergeben (404/410): {url[:80]}")
-            elif erreichbar:
-                print(f"  ✅ Noch aktiv (Scan hat's übersehen): {url[:80]}")
-            # erreichbar is None → kein Urteil, Status bleibt
-    elif kandidaten_vergaben and nur_firma:
-        # Beim Einzelfirmen-Test kein HTTP-Check, direkt markieren
-        for url in kandidaten_vergaben:
-            eintrag = bekannte[url]
-            eintrag["status"] = 0
-            eintrag["geloescht_am"] = ts
-            idx = stellen_index.get(url)
-            if idx is not None:
-                stellen[idx]["geloescht_am"] = ts
-            deaktiviert += 1
+                    pass  # Timeout → unbekannt, nicht markieren
+                if erreichbar is False:
+                    eintrag["status"] = 0
+                    eintrag["geloescht_am"] = ts
+                    eintrag["vergaben_bestaetigt"] = True
+                    idx = stellen_index.get(url)
+                    if idx is not None:
+                        stellen[idx]["geloescht_am"] = ts
+                    deaktiviert += 1
+                    print(f"  🗑️  Vergeben (404/410): {url[:80]}")
+                elif erreichbar is True:
+                    # Stelle ist noch erreichbar aber nicht mehr in den Listings → nicht_passend
+                    idx = stellen_index.get(url)
+                    if idx is not None:
+                        stellen[idx]["nicht_passend"] = True
+                        stellen[idx]["geloescht_am"] = None
+                    print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
+                # erreichbar is None → kein Urteil, Status bleibt
 
-    # Manuell eingefügte Stellen: direkte HTTP-Prüfung (Domain nicht in config)
-    # Wird beim Einzelfirmen-Test übersprungen
-    if not nur_firma:
-        print("\n  🔍 Prüfe manuell eingefügte Stellen auf Verfügbarkeit...")
-        ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-        for url, eintrag in list(bekannte.items()):
-            if eintrag["status"] == 0 or url in gesehen_urls:
-                continue
-            if any(d in url for d in gescannte_domains):
-                continue
-            # URL gehört zu keiner gescannten Domain → manuell eingefügt
-            erreichbar = None
-            for methode in ("HEAD", "GET"):
+        # Manuell eingefügte Stellen: direkte HTTP-Prüfung (Domain nicht in config)
+        # Wird beim Einzelfirmen-Test übersprungen
+        if not nur_firma:
+            print("\n  🔍 Prüfe manuell eingefügte Stellen auf Verfügbarkeit...")
+            for url, eintrag in list(bekannte.items()):
+                if eintrag["status"] == 0 or url in gesehen_urls:
+                    continue
+                if any(d in url for d in erfolgreich_gescannte_domains):
+                    continue
+                # URL gehört zu keiner gescannten Domain → manuell eingefügt
+                erreichbar = None
                 try:
-                    req = urllib.request.Request(url, method=methode,
-                        headers={"User-Agent": ua})
-                    with urllib.request.urlopen(req, timeout=10):
-                        erreichbar = True
-                    break
-                except urllib.error.HTTPError as e:
-                    if e.code == 405 and methode == "HEAD":
-                        continue  # HEAD nicht erlaubt → GET versuchen
-                    if e.code in (404, 410):
-                        erreichbar = False
-                    break
+                    resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    if resp:
+                        if resp.ok:
+                            erreichbar = True
+                        elif resp.status in (404, 410):
+                            erreichbar = False
                 except Exception:
-                    break  # Timeout, DNS-Fehler → unbekannt, nicht markieren
-            if erreichbar is False:
-                eintrag["status"] = 0
-                eintrag["geloescht_am"] = ts
-                idx = stellen_index.get(url)
-                if idx is not None:
-                    stellen[idx]["geloescht_am"] = ts
-                deaktiviert += 1
-                print(f"  🗑️  Vergeben (404/410): {url[:80]}")
-            elif erreichbar:
-                print(f"  ✅ Noch aktiv: {url[:80]}")
+                    pass  # Timeout → unbekannt, nicht markieren
+                if erreichbar is False:
+                    eintrag["status"] = 0
+                    eintrag["geloescht_am"] = ts
+                    idx = stellen_index.get(url)
+                    if idx is not None:
+                        stellen[idx]["geloescht_am"] = ts
+                    deaktiviert += 1
+                    print(f"  🗑️  Vergeben (404/410): {url[:80]}")
+                elif erreichbar:
+                    print(f"  ✅ Noch aktiv: {url[:80]}")
 
     speichere_json(STRUKTUREN_JSON, strukturen)
     speichere_json(BEKANNTE_JSON, bekannte)
