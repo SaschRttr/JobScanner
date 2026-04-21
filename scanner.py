@@ -1113,36 +1113,6 @@ def main():
                     print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
                 # erreichbar is None → kein Urteil, Status bleibt
 
-        # Manuell eingefügte Stellen: direkte HTTP-Prüfung (Domain nicht in config)
-        # Wird beim Einzelfirmen-Test übersprungen
-        if not nur_firma:
-            print("\n  🔍 Prüfe manuell eingefügte Stellen auf Verfügbarkeit...")
-            for url, eintrag in list(bekannte.items()):
-                if eintrag["status"] == 0 or url in gesehen_urls:
-                    continue
-                if any(d in url for d in erfolgreich_gescannte_domains):
-                    continue
-                # URL gehört zu keiner gescannten Domain → manuell eingefügt
-                erreichbar = None
-                try:
-                    resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    if resp:
-                        if resp.ok:
-                            erreichbar = True
-                        elif resp.status in (404, 410):
-                            erreichbar = False
-                except Exception:
-                    pass  # Timeout → unbekannt, nicht markieren
-                if erreichbar is False:
-                    eintrag["status"] = 0
-                    eintrag["geloescht_am"] = ts
-                    idx = stellen_index.get(url)
-                    if idx is not None:
-                        stellen[idx]["geloescht_am"] = ts
-                    deaktiviert += 1
-                    print(f"  🗑️  Vergeben (404/410): {url[:80]}")
-                elif erreichbar:
-                    print(f"  ✅ Noch aktiv: {url[:80]}")
 
     speichere_json(STRUKTUREN_JSON, strukturen)
     speichere_json(BEKANNTE_JSON, bekannte)
