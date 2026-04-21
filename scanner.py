@@ -26,7 +26,9 @@ import argparse
 import json
 import re
 import sys
+import io
 import urllib.request
+import urllib.error
 import platform
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +53,12 @@ try:
     import anthropic as anthropic_lib
 except ImportError:
     anthropic_lib = None
+
+try:
+    import pypdf
+    PYPDF_OK = True
+except ImportError:
+    PYPDF_OK = False
 
 
 # =============================================================================
@@ -186,14 +194,16 @@ def lade_api_firmen(config: dict) -> list:
     return []
 
 
-def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list[dict]:
-    """Scannt eine Firma über deren JSON-API (kein Playwright nötig)."""
+def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
+    """Scannt eine Firma über deren JSON-API (kein Playwright nötig).
+    Gibt (passende_stellen, ausgeschlossene_stellen) zurück."""
     name = api_config["name"]
     print(f"\n{'='*60}")
     print(f"  Scanne: {name} (API)")
     print(f"{'='*60}")
 
     stellen = []
+    ausgeschlossen = []
     gesehen = set()
 
     for seite in range(api_config["seiten"]):
@@ -282,35 +292,38 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> list
             if not treffer:
                 treffer = text_matched(volltext, config["suchbegriffe"])
 
-            if (treffer
-                    and not ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                    and not standort_verboten(volltext, config["verbotene_standorte"])):
-                ist_neu = url not in bekannte_urls
+            if treffer:
+                if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
+                        or standort_verboten(volltext, config["verbotene_standorte"])):
+                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                    print(f"  🚫 Nicht passend: {titel[:70]}")
+                else:
+                    ist_neu = url not in bekannte_urls
 
-                # Rohtext direkt aus API-Feldern zusammensetzen (verhindert 403 beim Playwright-Laden)
-                rohtext = None
-                feld_rohtext = api_config.get("feld_rohtext")
-                if feld_rohtext:
-                    teile = [str(_get_nested(job, f)).strip()
-                             for f in (feld_rohtext if isinstance(feld_rohtext, list) else [feld_rohtext])]
-                    rohtext = "\n\n".join(t for t in teile if t and t != "None") or None
+                    # Rohtext direkt aus API-Feldern zusammensetzen (verhindert 403 beim Playwright-Laden)
+                    rohtext = None
+                    feld_rohtext = api_config.get("feld_rohtext")
+                    if feld_rohtext:
+                        teile = [str(_get_nested(job, f)).strip()
+                                 for f in (feld_rohtext if isinstance(feld_rohtext, list) else [feld_rohtext])]
+                        rohtext = "\n\n".join(t for t in teile if t and t != "None") or None
 
-                stellen.append({
-                    "firma": name,
-                    "titel": titel,
-                    "url": url,
-                    "treffer": treffer,
-                    "neu": ist_neu,
-                    "rohtext": rohtext,
-                })
-                neu_label = "🆕 " if ist_neu else "   "
-                print(f"  ✅ {neu_label}{titel}")
-                print(f"     Treffer: {', '.join(treffer)}")
+                    stellen.append({
+                        "firma": name,
+                        "titel": titel,
+                        "url": url,
+                        "treffer": treffer,
+                        "neu": ist_neu,
+                        "rohtext": rohtext,
+                    })
+                    neu_label = "🆕 " if ist_neu else "   "
+                    print(f"  ✅ {neu_label}{titel}")
+                    print(f"     Treffer: {', '.join(treffer)}")
 
-    if not stellen:
+    if not stellen and not ausgeschlossen:
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
 
-    return stellen
+    return stellen, ausgeschlossen
 
 
 # =============================================================================
@@ -469,7 +482,9 @@ def klick_cookie_banner(page):
 # STELLENBÖRSE SCANNEN
 # =============================================================================
 
-def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dict]:
+def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
+    """Scannt eine Stellenbörse per Playwright.
+    Gibt (passende_stellen, ausgeschlossene_stellen) zurück."""
     name = firma["name"]
     url_boerse = firma["url"]
     dom = domain(url_boerse)
@@ -534,9 +549,24 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dic
     # Bewerbungsformular-Links rausfiltern
     kandidaten = [l for l in kandidaten if not ist_bewerbungslink(l["href"])]
 
+    # Fallback: PDF-Links mit jobrelevanten Begriffen im Pfad
+    if not kandidaten:
+        pdf_begriffe = ("stellenausschreibung", "ausschreibung", "karriere",
+                        "job", "stelle", "position", "bewerbung", "wp-content/uploads")
+        for l in alle_links:
+            href_lower = l["href"].lower()
+            if href_lower.endswith(".pdf") and any(b in href_lower for b in pdf_begriffe):
+                dateiname = l["href"].rstrip("/").split("/")[-1]
+                titel = dateiname[:-4].replace("-", " ").replace("_", " ")
+                titel = titel[:1].upper() + titel[1:] if titel else dateiname
+                kandidaten.append({"href": l["href"], "text": titel})
+        if kandidaten:
+            print(f"  📄 PDF-Fallback: {len(kandidaten)} PDF-Stelle(n) gefunden")
+
     print(f"  📋 {len(kandidaten)} Kandidaten")
 
     gefunden = []
+    ausgeschlossen = []
     gesehen_urls = set()
     gesehen_titel = set()
 
@@ -566,25 +596,27 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> list[dic
 
         if not treffer:
             continue
-        if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
-            continue
-        if standort_verboten(volltext, config["verbotene_standorte"]):
+        if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
+                or standort_verboten(volltext, config["verbotene_standorte"])):
+            ausgeschlossen.append({"firma": name, "titel": titel, "url": href, "treffer": treffer})
+            print(f"  🚫 Nicht passend: {titel[:70]}")
             continue
 
         gefunden.append({"firma": name, "titel": titel, "url": href, "treffer": treffer})
         print(f"  ✅ {titel[:70]}")
         print(f"     Treffer: {', '.join(treffer)}")
 
-    if not gefunden:
+    if not gefunden and not ausgeschlossen:
         print(f"  ℹ️  Keine passenden Stellen.")
         for k in kandidaten[:10]:
             t = k["text"].split("\n")[0].strip()
             print(f"     - {t[:80]}")
 
-    return gefunden
+    return gefunden, ausgeschlossen
 
-def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> list[dict]:
-    """Scannt eine Firma über die Workday JSON-API."""
+def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
+    """Scannt eine Firma über die Workday JSON-API.
+    Gibt (passende_stellen, ausgeschlossene_stellen) zurück."""
     name = api_config["name"]
     tenant = api_config["tenant"]
     portal = api_config["portal"]
@@ -597,6 +629,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
     print(f"{'='*60}")
 
     stellen = []
+    ausgeschlossen = []
     gesehen = set()
     limit = api_config["payload"].get("limit", 20)
 
@@ -649,35 +682,53 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             if not treffer:
                 treffer = text_matched(volltext, config["suchbegriffe"])
 
-            if (treffer
-                    and not ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                    and not standort_verboten(volltext, config["verbotene_standorte"])):
-                ist_neu = url not in bekannte_urls
-                stellen.append({
-                    "firma": name,
-                    "titel": titel,
-                    "url": url,
-                    "treffer": treffer,
-                    "neu": ist_neu,
-                })
-                neu_label = "🆕 " if ist_neu else "   "
-                print(f"  ✅ {neu_label}{titel}")
-                print(f"     {standort} | Treffer: {', '.join(treffer)}")
+            if treffer:
+                if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
+                        or standort_verboten(volltext, config["verbotene_standorte"])):
+                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                    print(f"  🚫 Nicht passend: {titel[:70]}")
+                else:
+                    ist_neu = url not in bekannte_urls
+                    stellen.append({
+                        "firma": name,
+                        "titel": titel,
+                        "url": url,
+                        "treffer": treffer,
+                        "neu": ist_neu,
+                    })
+                    neu_label = "🆕 " if ist_neu else "   "
+                    print(f"  ✅ {neu_label}{titel}")
+                    print(f"     {standort} | Treffer: {', '.join(treffer)}")
 
         # Abbruch wenn alle Jobs geladen
         if payload["offset"] + len(jobs) >= total:
             break
 
-    if not stellen:
+    if not stellen and not ausgeschlossen:
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
 
-    return stellen
+    return stellen, ausgeschlossen
 
 # =============================================================================
 # ROHTEXT LADEN
 # =============================================================================
 
 def lade_rohtext(page, url: str) -> str | None:
+    if url.lower().endswith(".pdf"):
+        if not PYPDF_OK:
+            print(f"  ⚠️  pypdf nicht installiert – PDF übersprungen: {url[:60]}")
+            return None
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+            reader = pypdf.PdfReader(io.BytesIO(data))
+            seiten = [p.extract_text() or "" for p in reader.pages]
+            return "\n".join(seiten)
+        except Exception as e:
+            print(f"  ❌ PDF-Fehler ({url[:60]}): {e}")
+            return None
+
     try:
         # Bertrandt onlyfy: spezielle URL für Volltext
         if "onlyfy.jobs" in url:
@@ -765,20 +816,31 @@ def main():
             if idx is not None and stellen[idx].get("bewertung"):
                 bekannte[url]["status"] = 4
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                stellen[idx]["geloescht_am"] = None
+                stellen[idx]["nicht_passend"] = False
                 print(f"  ♻️  Reaktiviert (Bewertung vorhanden): {t['titel'][:60]}")
             elif idx is not None and stellen[idx].get("stellentext"):
                 bekannte[url]["status"] = 3
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                stellen[idx]["geloescht_am"] = None
+                stellen[idx]["nicht_passend"] = False
                 print(f"  ♻️  Reaktiviert (Stellentext vorhanden): {t['titel'][:60]}")
             else:
                 bekannte[url]["status"] = 1
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                if idx is not None:
+                    stellen[idx]["geloescht_am"] = None
+                    stellen[idx]["nicht_passend"] = False
                 print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
             if idx is None:
                 stellen.append({
                     "firma": t["firma"], "titel": t["titel"], "url": url,
                     "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                     "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
+                    "nicht_passend": False,
                 })
                 stellen_index[url] = len(stellen) - 1
                 print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
@@ -814,14 +876,24 @@ def main():
             if idx is not None and stellen[idx].get("bewertung"):
                 bekannte[url]["status"] = 4
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                stellen[idx]["geloescht_am"] = None
+                stellen[idx]["nicht_passend"] = False
                 print(f"  ♻️  Reaktiviert (Bewertung vorhanden): {t['titel'][:60]}")
             elif idx is not None and stellen[idx].get("stellentext"):
                 bekannte[url]["status"] = 3
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                stellen[idx]["geloescht_am"] = None
+                stellen[idx]["nicht_passend"] = False
                 print(f"  ♻️  Reaktiviert (Stellentext vorhanden): {t['titel'][:60]}")
             else:
                 bekannte[url]["status"] = 2 if rohtext else 1
                 bekannte[url]["geloescht_am"] = None
+                bekannte[url]["nicht_passend"] = False
+                if idx is not None:
+                    stellen[idx]["geloescht_am"] = None
+                    stellen[idx]["nicht_passend"] = False
                 if idx is not None and rohtext:
                     stellen[idx]["rohtext"] = rohtext
                 print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
@@ -830,6 +902,7 @@ def main():
                     "firma": t["firma"], "titel": t["titel"], "url": url,
                     "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                     "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
+                    "nicht_passend": False,
                 })
                 stellen_index[url] = len(stellen) - 1
                 print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
@@ -852,13 +925,38 @@ def main():
                     stellen[idx]["rohtext"] = rohtext
                 print(f"  📥 Rohtext ergänzt: {t['titel'][:60]}")
 
+    def markiere_nicht_passend(t, ts):
+        url = t["url"]
+        gesehen_urls.add(url)  # verhindert Auto-Vergaben durch den "nicht mehr gefunden"-Loop
+        idx = stellen_index.get(url)
+        if url not in bekannte:
+            bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None, "nicht_passend": True}
+            stellen.append({
+                "firma": t["firma"], "titel": t["titel"], "url": url,
+                "treffer": t.get("treffer", []), "gefunden_am": ts, "geloescht_am": None,
+                "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
+                "nicht_passend": True,
+            })
+            stellen_index[url] = len(stellen) - 1
+            print(f"  🚫 Nicht passend (neu erfasst): {t['titel'][:60]}")
+        else:
+            bekannte[url]["nicht_passend"] = True
+            bekannte[url]["geloescht_am"] = None
+            if idx is not None:
+                stellen[idx]["nicht_passend"] = True
+                stellen[idx]["geloescht_am"] = None
+            print(f"  🚫 Nicht passend: {t['titel'][:60]}")
+
     # API-Firmen zuerst scannen (kein Playwright nötig)
     for api_firma in api_firmen:
         try:
             if api_firma.get("typ") == "workday":
-                treffer_liste = scanne_workday_firma(api_firma, set(bekannte.keys()), config)
+                treffer_liste, ausgeschlossen_liste = scanne_workday_firma(api_firma, set(bekannte.keys()), config)
             else:
-                treffer_liste = scanne_api_firma(api_firma, set(bekannte.keys()), config)
+                treffer_liste, ausgeschlossen_liste = scanne_api_firma(api_firma, set(bekannte.keys()), config)
+            for t in ausgeschlossen_liste:
+                if t["url"] not in gesehen_urls:
+                    markiere_nicht_passend(t, jetzt())
             for t in treffer_liste:
                 if t["url"] in gesehen_urls:
                     continue
@@ -885,10 +983,14 @@ def main():
 
         for firma in config["firmen"]:
             try:
-                treffer_liste = scanne_boerse(page, firma, strukturen, config)
+                treffer_liste, ausgeschlossen_liste = scanne_boerse(page, firma, strukturen, config)
             except Exception as e:
                 print(f"\n❌ Fehler bei {firma['name']}: {e}")
                 continue
+
+            for t in ausgeschlossen_liste:
+                if t["url"] not in gesehen_urls:
+                    markiere_nicht_passend(t, jetzt())
 
             for t in treffer_liste:
                 url = t["url"]
@@ -915,7 +1017,7 @@ def main():
                     bekannte[url]["status"] = 2
                     print(f"  ✅ Rohtext geladen")
 
-    # Nicht mehr gefundene Stellen → Status 0
+    # Nicht mehr gefundene Stellen → HTTP-Check vor Vergaben-Markierung
     # Nur wenn die Firma auch wirklich gescannt wurde (Schutz gegen auskommentierte Firmen)
     ts = jetzt()
     deaktiviert = 0
@@ -925,15 +1027,93 @@ def main():
             gescannte_domains.add(f"{f['tenant']}.wd3.myworkdayjobs.com")
         elif "url" in f:
             gescannte_domains.add(domain(f["url"]))
+
+    kandidaten_vergaben = []
     for url, eintrag in bekannte.items():
         if url not in gesehen_urls and eintrag["status"] != 0:
             if any(d in url for d in gescannte_domains):
+                kandidaten_vergaben.append(url)
+
+    if kandidaten_vergaben and not nur_firma:
+        print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per HTTP...")
+        ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+        for url in kandidaten_vergaben:
+            eintrag = bekannte[url]
+            erreichbar = None
+            for methode in ("HEAD", "GET"):
+                try:
+                    req = urllib.request.Request(url, method=methode,
+                        headers={"User-Agent": ua})
+                    with urllib.request.urlopen(req, timeout=10):
+                        erreichbar = True
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 405 and methode == "HEAD":
+                        continue
+                    if e.code in (404, 410):
+                        erreichbar = False
+                    break
+                except Exception:
+                    break  # Timeout/DNS → unbekannt, nicht markieren
+            if erreichbar is False:
                 eintrag["status"] = 0
                 eintrag["geloescht_am"] = ts
                 idx = stellen_index.get(url)
                 if idx is not None:
                     stellen[idx]["geloescht_am"] = ts
                 deaktiviert += 1
+                print(f"  🗑️  Vergeben (404/410): {url[:80]}")
+            elif erreichbar:
+                print(f"  ✅ Noch aktiv (Scan hat's übersehen): {url[:80]}")
+            # erreichbar is None → kein Urteil, Status bleibt
+    elif kandidaten_vergaben and nur_firma:
+        # Beim Einzelfirmen-Test kein HTTP-Check, direkt markieren
+        for url in kandidaten_vergaben:
+            eintrag = bekannte[url]
+            eintrag["status"] = 0
+            eintrag["geloescht_am"] = ts
+            idx = stellen_index.get(url)
+            if idx is not None:
+                stellen[idx]["geloescht_am"] = ts
+            deaktiviert += 1
+
+    # Manuell eingefügte Stellen: direkte HTTP-Prüfung (Domain nicht in config)
+    # Wird beim Einzelfirmen-Test übersprungen
+    if not nur_firma:
+        print("\n  🔍 Prüfe manuell eingefügte Stellen auf Verfügbarkeit...")
+        ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+        for url, eintrag in list(bekannte.items()):
+            if eintrag["status"] == 0 or url in gesehen_urls:
+                continue
+            if any(d in url for d in gescannte_domains):
+                continue
+            # URL gehört zu keiner gescannten Domain → manuell eingefügt
+            erreichbar = None
+            for methode in ("HEAD", "GET"):
+                try:
+                    req = urllib.request.Request(url, method=methode,
+                        headers={"User-Agent": ua})
+                    with urllib.request.urlopen(req, timeout=10):
+                        erreichbar = True
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 405 and methode == "HEAD":
+                        continue  # HEAD nicht erlaubt → GET versuchen
+                    if e.code in (404, 410):
+                        erreichbar = False
+                    break
+                except Exception:
+                    break  # Timeout, DNS-Fehler → unbekannt, nicht markieren
+            if erreichbar is False:
+                eintrag["status"] = 0
+                eintrag["geloescht_am"] = ts
+                idx = stellen_index.get(url)
+                if idx is not None:
+                    stellen[idx]["geloescht_am"] = ts
+                deaktiviert += 1
+                print(f"  🗑️  Vergeben (404/410): {url[:80]}")
+            elif erreichbar:
+                print(f"  ✅ Noch aktiv: {url[:80]}")
 
     speichere_json(STRUKTUREN_JSON, strukturen)
     speichere_json(BEKANNTE_JSON, bekannte)

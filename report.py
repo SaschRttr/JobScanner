@@ -752,10 +752,10 @@ JS = """
 def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
 
-    # Nur aktive Stellen (nicht gelöscht) für Zählung
-    aktive   = [s for s in stellen if not s.get("geloescht_am")]
-    neue     = [s for s in aktive  if s.get("neu")]
-    geloescht = [s for s in stellen if s.get("geloescht_am")]
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
+    neue          = [s for s in aktive  if s.get("neu")]
+    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    geloescht     = [s for s in stellen if s.get("geloescht_am")]
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -770,6 +770,7 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     <div class="summary-box">
         <strong>{len(aktive)}</strong> aktive Stellen &nbsp;|&nbsp;
         <strong>{len(neue)}</strong> neu &nbsp;|&nbsp;
+        <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         Stand: {datum}
     </div>
@@ -887,12 +888,24 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         html += f'''<details style="margin: 15px 0;">
     <summary style="cursor:pointer; background:#e0e0e0; padding:12px 20px;
         border-radius:8px; font-weight:bold; font-size:1.05em;">
-        🗑️ Nicht mehr verfügbar ({len(geloescht)})
+        🗑️ Vergeben / Nicht mehr verfügbar ({len(geloescht)})
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in geloescht:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n</details>\n'
+
+    if nicht_passend:
+        html += f'''<details style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#fdebd0; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        🚫 Nicht passend – Ausschlusskriterium ({len(nicht_passend)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in nicht_passend:
+            html += stelle_zu_html(s, zeige_firma=True)
+        html += '</div>\n</details>\n'
+
     html += f"""
     <hr>
     <p style="color:#999; font-size:0.85em;">Generiert am {datum}</p>
@@ -907,9 +920,10 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
 # =============================================================================
 
 def erstelle_aenderungs_html(stellen: list) -> str:
-    datum     = datetime.now().strftime("%d.%m.%Y %H:%M")
-    neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]
-    geloescht = [s for s in stellen if s.get("geloescht_am")]
+    datum         = datetime.now().strftime("%d.%m.%Y %H:%M")
+    neue          = [s for s in stellen if s.get("neu") and not s.get("geloescht_am") and not s.get("nicht_passend")]
+    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    geloescht     = [s for s in stellen if s.get("geloescht_am")]
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -922,6 +936,7 @@ def erstelle_aenderungs_html(stellen: list) -> str:
     <h1>🔍 Job-Scanner Änderungen</h1>
     <div class="summary-box">
         <strong>{len(neue)}</strong> neue Stellen &nbsp;|&nbsp;
+        <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         {datum}
     </div>
@@ -934,9 +949,16 @@ def erstelle_aenderungs_html(stellen: list) -> str:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n'
 
+    if nicht_passend:
+        html += '<div class="firma-block">\n'
+        html += f'<h2>🚫 Nicht passend – Ausschlusskriterium ({len(nicht_passend)})</h2>\n'
+        for s in nicht_passend:
+            html += stelle_zu_html(s, zeige_firma=True)
+        html += '</div>\n'
+
     if geloescht:
         html += '<div class="firma-block">\n'
-        html += f'<h2>🗑️ Nicht mehr verfügbar ({len(geloescht)})</h2>\n'
+        html += f'<h2>🗑️ Vergeben / Nicht mehr verfügbar ({len(geloescht)})</h2>\n'
         for s in geloescht:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n'
@@ -1001,13 +1023,29 @@ def main():
     print("  REPORT  –  Schritt 4: HTML erstellen & Mail senden")
     print("=" * 60)
     config  = lade_config()
-    global RASPI_IP                    # ← neu
-    RASPI_IP = config["raspi_ip"]      # ← neu
+    global RASPI_IP
+    RASPI_IP = config["raspi_ip"]
     stellen = lade_json(STELLEN_JSON, [])
 
     if not stellen:
         print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
         return
+
+    # Datenreparatur: geloescht_am in stellen.json löschen wenn bekannte_stellen aktiv zeigt
+    bekannte = lade_json(BEKANNTE_JSON, {})
+    repariert = 0
+    for s in stellen:
+        if s.get("geloescht_am") and not s.get("nicht_passend"):
+            eintrag = bekannte.get(s["url"], {})
+            if eintrag.get("status", 0) != 0:
+                s["geloescht_am"] = None
+                repariert += 1
+    if repariert:
+        import json as _json
+        STELLEN_JSON.write_text(
+            _json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"  🔧 {repariert} Stelle(n) reaktiviert (geloescht_am-Datenreparatur)")
 
     # Vollständigen Report erstellen
     print("  📄 Erstelle Report...")
@@ -1034,7 +1072,6 @@ def main():
     # neu-Flag zurücksetzen nach Report-Erstellung
     # (damit beim nächsten Lauf nur wirklich neue Stellen als NEU markiert sind)
     geaendert = 0
-    bekannte = lade_json(BEKANNTE_JSON, {})
     for s in stellen:
         if s.get("neu"):
             s["neu"] = False
@@ -1047,7 +1084,8 @@ def main():
 
     # Auch in Datenbank zurücksetzen
     try:
-        from db import neu_flag_zuruecksetzen
+        from db import neu_flag_zuruecksetzen, erstelle_schema
+        erstelle_schema()
         neu_flag_zuruecksetzen()
     except Exception as e:
         print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")

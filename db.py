@@ -315,6 +315,13 @@ def status_von(url: str) -> int | None:
     return r["status"] if r else None
 
 
+def lade_bewerbungsstatus_urls() -> set:
+    """Gibt alle URLs zurück, für die ein Bewerbungsstatus-Eintrag existiert."""
+    with verbindung() as con:
+        rows = con.execute("SELECT url FROM bewerbungsstatus").fetchall()
+    return {r["url"] for r in rows}
+
+
 def alle_aktiven_urls() -> set:
     with verbindung() as con:
         rows = con.execute(
