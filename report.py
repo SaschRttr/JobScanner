@@ -691,6 +691,57 @@ JS = """
             statusEl.style.color = '#e74c3c';
         };
     }
+
+    async function neueFirmaTesten() {
+        const url      = document.getElementById('firma-test-url').value.trim();
+        const name     = document.getElementById('firma-test-name').value.trim();
+        const checkbox = document.getElementById('firma-config-cb');
+        const output   = document.getElementById('scan-output');
+        const status   = document.getElementById('scan-status');
+
+        if (!url || !name) {
+            status.textContent = '⚠️ Karriere-URL und Firmenname sind Pflichtfelder';
+            return;
+        }
+
+        output.style.display = 'block';
+        output.textContent   = '';
+        status.textContent   = '⏳ Teste ' + name + '...';
+
+        let letzteZeile = '';
+
+        const params = new URLSearchParams({url, firmenname: name});
+        const quelle = new EventSource('/firmen-testen-stream?' + params.toString());
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                status.textContent = '✅ Test abgeschlossen';
+                if (checkbox.checked && letzteZeile.includes('✅')) {
+                    fetch('/firmen-config-hinzufuegen', {
+                        method:  'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body:    JSON.stringify({firmenname: name, url})
+                    }).then(r => r.json()).then(d => {
+                        output.textContent += d.ok
+                            ? '\\n✅ ' + name + ' zur config.txt hinzugefügt'
+                            : '\\n❌ config.txt Fehler: ' + (d.fehler || '');
+                        output.scrollTop = output.scrollHeight;
+                    }).catch(() => {
+                        output.textContent += '\\n❌ Netzwerkfehler beim Speichern in config.txt';
+                        output.scrollTop = output.scrollHeight;
+                    });
+                }
+                return;
+            }
+            letzteZeile = e.data;
+            output.textContent += e.data + '\\n';
+            output.scrollTop = output.scrollHeight;
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            status.textContent = '❌ Verbindungsfehler zum Server';
+        };
+    }
 """
 
 
@@ -758,6 +809,23 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         </div>
         <div id="manuell-status"></div>
         <pre id="manuell-output" style="display:none;"></pre>
+        </div>
+
+       <div class="scan-box">
+        <h3 style="margin-top:0;">🏢 Neue Firma testen</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="url" id="firma-test-url" placeholder="https://careers.firma.de/jobs"
+                style="flex:2; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <input type="text" id="firma-test-name" placeholder="Firmenname"
+                style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:0.9em; cursor:pointer;">
+                <input type="checkbox" id="firma-config-cb">
+                &nbsp;Zur config.txt hinzufügen, wenn Jobtitel gefunden
+            </label>
+        </div>
+        <button class="scan-btn" onclick="neueFirmaTesten()">🔍 Testen</button>
         </div>
     """
 

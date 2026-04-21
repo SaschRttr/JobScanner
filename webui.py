@@ -678,6 +678,126 @@ def manuell_stream():
         "X-Accel-Buffering": "no",
     }
     return Response(log_lesen(), mimetype="text/event-stream", headers=headers)
+
+
+# =============================================================================
+# NEUE FIRMA TESTEN (SSE-Stream via Playwright)
+# =============================================================================
+
+_NAVIGATION_BEGRIFFE = {
+    "impressum", "kontakt", "home", "datenschutz", "karriere", "jobs",
+    "about", "über uns", "startseite", "login", "registrieren",
+    "newsletter", "blog", "news", "presse", "agb", "cookies",
+    "sitemap", "zurück", "weiter", "mehr", "alle stellen", "alle jobs",
+    "stellenangebote", "zur übersicht", "english", "deutsch",
+}
+
+
+@app.route("/firmen-testen-stream")
+def firmen_testen_stream():
+    """SSE-Endpoint: öffnet Karriere-URL per Playwright, filtert Jobtitel-Links."""
+    test_url   = request.args.get("url", "").strip()
+    firmenname = request.args.get("firmenname", "").strip()
+    if not test_url or not firmenname:
+        return "url und firmenname erforderlich", 400
+
+    def stream_generator():
+        try:
+            import platform
+            from playwright.sync_api import sync_playwright
+
+            yield f"data: ⏳ Öffne {test_url} ...\n\n"
+
+            with sync_playwright() as pw:
+                if platform.system() == "Linux":
+                    browser = pw.chromium.launch(
+                        headless=True,
+                        executable_path="/usr/bin/chromium-browser",
+                        args=["--no-sandbox", "--disable-gpu"],
+                    )
+                else:
+                    browser = pw.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-gpu"],
+                    )
+
+                page = browser.new_page(viewport={"width": 1920, "height": 1080})
+                page.goto(test_url, timeout=30000)
+                page.wait_for_timeout(3000)
+
+                link_elemente = page.query_selector_all("a")
+                rohtexte = []
+                for el in link_elemente:
+                    try:
+                        t = el.inner_text().strip()
+                        if t:
+                            rohtexte.append(t)
+                    except Exception:
+                        pass
+
+                browser.close()
+
+            yield f"data: 🔍 {len(rohtexte)} Links gefunden – filtere Jobtitel...\n\n"
+
+            gesehen   = set()
+            gefunden  = []
+            for text in rohtexte:
+                if len(text) < 15:
+                    continue
+                if text.lower().strip() in _NAVIGATION_BEGRIFFE:
+                    continue
+                if text in gesehen:
+                    continue
+                gesehen.add(text)
+                gefunden.append(text)
+
+            if gefunden:
+                for titel in gefunden:
+                    yield f"data: {titel}\n\n"
+                yield f"data: ✅ {len(gefunden)} Jobtitel gefunden\n\n"
+            else:
+                yield f"data: ❌ Keine Jobtitel gefunden\n\n"
+
+        except Exception as e:
+            yield f"data: ❌ Fehler: {e}\n\n"
+
+        yield "data: FERTIG\n\n"
+
+    return Response(
+        stream_generator(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/firmen-config-hinzufuegen", methods=["POST"])
+def firmen_config_hinzufuegen():
+    """Fügt eine neue Zeile in den [firmen]-Block von config.txt ein."""
+    data = request.get_json()
+    if not data or not data.get("firmenname") or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "firmenname und url erforderlich"}), 400
+
+    firmenname = data["firmenname"].strip()
+    url        = data["url"].strip()
+
+    try:
+        config_pfad = BASIS_PFAD / "config.txt"
+        inhalt      = config_pfad.read_text(encoding="utf-8")
+
+        marker = "[\\firmen]"
+        idx    = inhalt.find(marker)
+        if idx == -1:
+            return jsonify({"ok": False, "fehler": "[\\firmen] nicht in config.txt gefunden"}), 500
+
+        neue_zeile = f"{firmenname:<20} | {url}\n"
+        inhalt     = inhalt[:idx] + neue_zeile + inhalt[idx:]
+        config_pfad.write_text(inhalt, encoding="utf-8")
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+
+
 # =============================================================================
 # START
 # =============================================================================

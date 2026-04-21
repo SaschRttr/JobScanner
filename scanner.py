@@ -404,7 +404,15 @@ def ki_lerne_muster(domain_name: str, beispiel_links: list, api_key: str) -> str
 
 {links_text}
 
-Welches URL-Teilmuster kennzeichnet Job-Detail-Links (also Links zu einzelnen Stellenanzeigen)?
+Analysiere die Links und finde das kürzeste gemeinsame URL-Teilstück,
+das NUR in Job-Detail-Links vorkommt (nicht in Navigation, Login, etc.).
+
+Wichtige Regeln:
+- Gib einen echten Teilstring zurück, der wörtlich in den URLs vorkommt
+- KEINE Platzhalter wie {{id}}, :id oder [slug]
+- Zahlen in URLs sind OK – nimm den stabilen Präfix davor (z.B. "/Vacancies/" statt "/Vacancies/1593/")
+- Möglichst kurz, aber eindeutig
+
 Antworte NUR als JSON ohne Markdown:
 {{"muster": "/das/muster/"}}
 
