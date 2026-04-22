@@ -304,6 +304,10 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                         teile = [str(_get_nested(job, f)).strip()
                                  for f in (feld_rohtext if isinstance(feld_rohtext, list) else [feld_rohtext])]
                         rohtext = "\n\n".join(t for t in teile if t and t != "None") or None
+                    if standort and rohtext:
+                        rohtext = f"Standort: {standort}\n\n{rohtext}"
+                    elif standort:
+                        rohtext = f"Standort: {standort}"
 
                     stellen.append({
                         "firma": name,

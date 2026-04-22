@@ -34,6 +34,7 @@ BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
 REPORT_PFAD   = BASIS_PFAD / "report.html"
 CONFIG_PFAD   = Path(__file__).parent / "config.txt"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
+STATUS_JSON   = BASIS_PFAD / "status.json"
 RASPI_IP = ""
 
 
@@ -788,13 +789,23 @@ def _hat_geringen_score(s: dict) -> bool:
 def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
 
+    # Absagen aus status.json laden
+    job_status = {}
+    if STATUS_JSON.exists():
+        try:
+            job_status = json.loads(STATUS_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
+
     aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
-    neue          = [s for s in aktive  if s.get("neu")]
+    neue          = [s for s in aktive  if s.get("neu") and s["url"] not in absage_urls]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
-    geringer_match = [s for s in aktive if _hat_geringen_score(s)]
+    absagen       = [s for s in aktive  if s["url"] in absage_urls]
+    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
-    aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls]
+    aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -810,6 +821,7 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         <strong>{len(aktive_haupt)}</strong> aktive Stellen &nbsp;|&nbsp;
         <strong>{len(neue)}</strong> neu &nbsp;|&nbsp;
         <strong>{len(geringer_match)}</strong> geringer Match &nbsp;|&nbsp;
+        <strong>{len(absagen)}</strong> Absagen &nbsp;|&nbsp;
         <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         Stand: {datum}
@@ -950,6 +962,17 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in geloescht:
+            html += stelle_zu_html(s, zeige_firma=True)
+        html += '</div>\n</details>\n'
+
+    if absagen:
+        html += f'''<details style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#fde8e8; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        ❌ Absagen ({len(absagen)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in absagen:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n</details>\n'
 
