@@ -758,6 +758,15 @@ JS = """
 # REPORT ERSTELLEN
 # =============================================================================
 
+GERINGER_MATCH_SCHWELLE = 65
+
+def _hat_geringen_score(s: dict) -> bool:
+    b = s.get("bewertung")
+    if not b:
+        return False
+    return (b.get("score") or 0) <= GERINGER_MATCH_SCHWELLE
+
+
 def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
 
@@ -765,6 +774,9 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     neue          = [s for s in aktive  if s.get("neu")]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
+    geringer_match = [s for s in aktive if _hat_geringen_score(s)]
+    geringer_urls  = {s["url"] for s in geringer_match}
+    aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls]
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -777,8 +789,9 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
 <body>
     <h1>🔍 Job-Scanner Report</h1>
     <div class="summary-box">
-        <strong>{len(aktive)}</strong> aktive Stellen &nbsp;|&nbsp;
+        <strong>{len(aktive_haupt)}</strong> aktive Stellen &nbsp;|&nbsp;
         <strong>{len(neue)}</strong> neu &nbsp;|&nbsp;
+        <strong>{len(geringer_match)}</strong> geringer Match &nbsp;|&nbsp;
         <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         Stand: {datum}
@@ -840,16 +853,17 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     """
 
     # ── Neue Stellen ────────────────────────────────────────────────
-    if neue:
+    neue_haupt = [s for s in neue if s["url"] not in geringer_urls]
+    if neue_haupt:
         html += '<div class="firma-block">\n'
-        html += f'<h2>🆕 Neue Stellen ({len(neue)})</h2>\n'
-        for s in neue:
+        html += f'<h2>🆕 Neue Stellen ({len(neue_haupt)})</h2>\n'
+        for s in neue_haupt:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n'
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
     top10 = sorted(
-        [s for s in aktive if (s.get("bewertung") or {}).get("score", 0) > 0],
+        [s for s in aktive_haupt if (s.get("bewertung") or {}).get("score", 0) > 0],
         key=lambda s: s["bewertung"]["score"],
         reverse=True
     )[:10]
@@ -862,7 +876,7 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
 
     # ── Pro Firma ───────────────────────────────────────────────────
     firmen_dict = {}
-    for s in aktive:
+    for s in aktive_haupt:
         firmen_dict.setdefault(s["firma"], []).append(s)
 
     # Reihenfolge aus config, dann alphabetisch für unbekannte
@@ -891,6 +905,23 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
             html += '<p class="leer">Keine passenden Stellen gefunden.</p>\n'
 
         html += '</div>\n'
+
+    # ── Geringer Match (≤ 65 %, eingeklappt) ──────────────────────
+    if geringer_match:
+        geringer_match_sorted = sorted(
+            geringer_match,
+            key=lambda s: (s.get("bewertung") or {}).get("score", 0),
+            reverse=True
+        )
+        html += f'''<details style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#fef9e7; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        📉 Geringer Match – Score ≤ {GERINGER_MATCH_SCHWELLE}% ({len(geringer_match)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in geringer_match_sorted:
+            html += stelle_zu_html(s, zeige_firma=True)
+        html += '</div>\n</details>\n'
 
     # ── Vergangene Stellen (am Ende, eingeklappt) ───────────────────
     if geloescht:
@@ -1057,7 +1088,10 @@ def main():
     neu_ausgeschlossen = 0
     for s in stellen:
         if s.get("nicht_passend") and not s.get("geloescht_am"):
-            s["nicht_passend"] = False
+            # Nicht zurücksetzen wenn bekannte_stellen die Stelle dauerhaft ausschließt
+            # (z.B. vom Scanner als "nicht mehr gelistet" oder "verbotener Standort" markiert)
+            if not bekannte.get(s.get("url", ""), {}).get("nicht_passend"):
+                s["nicht_passend"] = False
     if ausschlussbegriffe or verbotene_standorte:
         for s in stellen:
             if s.get("geloescht_am") or s.get("nicht_passend"):

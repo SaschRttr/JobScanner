@@ -309,6 +309,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                         "firma": name,
                         "titel": titel,
                         "url": url,
+                        "standort": standort,
                         "treffer": treffer,
                         "neu": ist_neu,
                         "rohtext": rohtext,
@@ -367,7 +368,7 @@ def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:
-    t = text[:2000].lower()
+    t = text[:3000].lower()
     return any(v in t for v in verbotene)
 
 
@@ -581,7 +582,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     gesehen_titel = set()
 
     for link in kandidaten:
-        href = link["href"]
+        href = link["href"].split("#")[0].rstrip("/") or link["href"]
         titel_roh = link["text"]
 
         zeilen = [z.strip() for z in titel_roh.split("\n") if len(z.strip()) >= MIN_TITEL_LAENGE]
@@ -699,6 +700,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
                         "firma": name,
                         "titel": titel,
                         "url": url,
+                        "standort": standort,
                         "treffer": treffer,
                         "neu": ist_neu,
                     })
@@ -767,6 +769,51 @@ def lade_rohtext(page, url: str) -> str | None:
 
 
 # =============================================================================
+# BEREINIGUNG: VERBOTENE STANDORTE AUS BESTAND ENTFERNEN
+# =============================================================================
+
+def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list) -> int:
+    """Entfernt bereits gespeicherte Stellen, deren Text einen verbotenen Standort enthält.
+    Markiert den bekannte-Eintrag als nicht_passend (statt löschen), damit die Stelle
+    im selben Scan-Lauf nicht neu hinzugefügt wird.
+    Gibt die Anzahl entfernter Stellen zurück."""
+    if not verbotene:
+        return 0
+
+    def _verboten(text: str) -> bool:
+        t = text[:5000].lower()
+        return any(v in t for v in verbotene)
+
+    zu_entfernen = []
+    for stelle in stellen:
+        # Standort-Feld hat Vorrang (zuverlässig, vom API direkt)
+        # Fallback: Anfang von rohtext/stellentext (max. 2000 Zeichen)
+        prueftext = " ".join(filter(None, [
+            stelle.get("standort") or "",
+            stelle.get("titel") or "",
+            (stelle.get("stellentext") or stelle.get("rohtext") or "")[:2000],
+        ]))
+        if _verboten(prueftext):
+            zu_entfernen.append(stelle)
+
+    if zu_entfernen:
+        print(f"\n🧹 {len(zu_entfernen)} Stelle(n) wegen verbotenem Standort entfernt:")
+        for s in zu_entfernen:
+            print(f"   🗑️  {s.get('firma', '?')} – {s.get('titel', '?')}")
+            url = s.get("url")
+            if url:
+                if url in bekannte:
+                    bekannte[url]["nicht_passend"] = True
+                else:
+                    bekannte[url] = {"status": 0, "nicht_passend": True, "geloescht_am": jetzt()}
+
+        entfernte_urls = {s.get("url") for s in zu_entfernen}
+        stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
+
+    return len(zu_entfernen)
+
+
+# =============================================================================
 # JSON-HILFSFUNKTIONEN
 # =============================================================================
 
@@ -811,6 +858,9 @@ def main():
     stellen:    list = lade_json(STELLEN_JSON, [])
     strukturen: dict = lade_json(STRUKTUREN_JSON, {})
     print(f"  📂 Stellen geladen: {len(stellen)}")
+
+    bereinige_verbotene_standorte(stellen, bekannte, config["verbotene_standorte"])
+
     stellen_index = {s["url"]: i for i, s in enumerate(stellen)}
     gesehen_urls: set = set()
 
@@ -818,6 +868,9 @@ def main():
         url = t["url"]
         gesehen_urls.add(url)
         idx = stellen_index.get(url)
+        # Standort nachrüsten wenn Stelle schon bekannt aber Feld fehlt
+        if idx is not None and t.get("standort") and not stellen[idx].get("standort"):
+            stellen[idx]["standort"] = t["standort"]
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
                 bekannte[url]["status"] = 4
@@ -844,6 +897,7 @@ def main():
             if idx is None:
                 stellen.append({
                     "firma": t["firma"], "titel": t["titel"], "url": url,
+                    "standort": t.get("standort", ""),
                     "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                     "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
                     "nicht_passend": False,
@@ -855,6 +909,7 @@ def main():
             bekannte[url] = {"status": 2 if rohtext else 1, "gefunden_am": ts, "geloescht_am": None}
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
+                "standort": t.get("standort", ""),
                 "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                 "neu": True, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
@@ -866,6 +921,7 @@ def main():
             status = bekannte[url]["status"]
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
+                "standort": t.get("standort", ""),
                 "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                 "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
@@ -1019,7 +1075,11 @@ def main():
                     continue
                 print(f"  📄 Lade Rohtext: {t['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
-                reaktiviere_oder_neu_playwright(t, rohtext, jetzt())
+                if rohtext and standort_verboten(rohtext[:5000], config["verbotene_standorte"]):
+                    markiere_nicht_passend(t, jetzt())
+                    print(f"  🚫 Verbotener Standort im Rohtext: {t['titel'][:60]}")
+                else:
+                    reaktiviere_oder_neu_playwright(t, rohtext, jetzt())
 
         # Rohtext für API-Firmen nachladen (Status 1, kein Rohtext)
         for stelle in stellen:
@@ -1110,9 +1170,14 @@ def main():
                     if idx is not None:
                         stellen[idx]["nicht_passend"] = True
                         stellen[idx]["geloescht_am"] = None
+                    bekannte[url]["nicht_passend"] = True
                     print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
                 # erreichbar is None → kein Urteil, Status bleibt
 
+
+    # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
+    # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.
+    bereinige_verbotene_standorte(stellen, bekannte, config["verbotene_standorte"])
 
     speichere_json(STRUKTUREN_JSON, strukturen)
     speichere_json(BEKANNTE_JSON, bekannte)
