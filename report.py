@@ -274,7 +274,9 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
 
     steckbrief_btn = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
 
-    return f"""<div class="{css}" data-url="{url_escaped}">
+    hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
+
+    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{datum_label}
     <div class="tags">{tags}</div>
     {bewertung_html}
@@ -315,6 +317,7 @@ CSS = """
     .stelle.zusage        { background: #d5f5e3; border-left-color: #27ae60; }
     .stelle.absage        { background: #fde8e8; border-left-color: #e74c3c; }
     .stelle-bewerbung { background: #d6eaf8; border-left-color: #2980b9; }
+    .stelle.mit-aktivitaet { background: #fefaf0; border-left-color: #e8c547; }
     .tags { margin-top: 5px; }
     .tag {
         display: inline-block; background: #e8f4fd; color: #2980b9;
@@ -426,7 +429,14 @@ JS = """
             const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
             if (el) {
                 ['beworben','kennenlernen','einladung','zusage','absage'].forEach(k => el.classList.remove(k));
-                if (wert) el.classList.add(wert);
+                if (wert) {
+                    el.classList.add(wert);
+                    el.classList.remove('mit-aktivitaet');
+                } else {
+                    // Status zurückgesetzt → ggf. wieder ockergelb wenn Aktivität vorhanden
+                    const hatAkt = el.dataset.hatLebenslauf === '1' || !!status[url]?.kommentar;
+                    if (hatAkt) el.classList.add('mit-aktivitaet');
+                }
             }
             // Timestamp anzeigen
             const tsEl = document.querySelector(`[data-url="${CSS.escape(url)}"] .stufen-ts`);
@@ -485,6 +495,14 @@ JS = """
             // Kommentar wiederherstellen
             const ta = el.querySelector('.kommentar');
             if (s.kommentar && ta) ta.value = s.kommentar;
+
+            // Ockergelb: Lebenslauf oder Notizen vorhanden, aber kein Status gesetzt
+            const hatAktivitaet = el.dataset.hatLebenslauf === '1' || !!s.kommentar;
+            if (hatAktivitaet && !stufe) {
+                el.classList.add('mit-aktivitaet');
+            } else {
+                el.classList.remove('mit-aktivitaet');
+            }
         });
     }
 
