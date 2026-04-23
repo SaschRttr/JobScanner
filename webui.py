@@ -505,6 +505,82 @@ def steckbrief_erstellen():
     return jsonify({"ok": True, "steckbrief": steckbrief})
 
 
+@app.route("/bewertung-erstellen", methods=["POST"])
+def bewertung_erstellen():
+    data = request.get_json()
+    if not data or "url" not in data:
+        return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
+
+    url = data["url"]
+    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+    stelle = next((s for s in stellen if s["url"] == url), None)
+    if not stelle:
+        return jsonify({"fehler": "Stelle nicht gefunden"}), 404
+
+    stellentext = stelle.get("stellentext") or stelle.get("rohtext") or ""
+    if not stellentext:
+        return jsonify({"fehler": "Kein Stellentext vorhanden"}), 400
+
+    config_pfad = BASIS_PFAD / "config.txt"
+    api_key = ""
+    prompt_vorlage = ""
+    aktiver_abschnitt = None
+    puffer = []
+    for zeile in config_pfad.read_text(encoding="utf-8").splitlines():
+        z = zeile.strip()
+        if z.startswith("[\\") and z.endswith("]"):
+            if z[2:-1].lower() == "prompt":
+                prompt_vorlage = "\n".join(puffer).strip()
+            aktiver_abschnitt = None
+            puffer = []
+            continue
+        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
+            aktiver_abschnitt = z[1:-1].lower()
+            puffer = []
+            continue
+        if aktiver_abschnitt == "prompt":
+            puffer.append(zeile)
+        elif aktiver_abschnitt is None and z.upper().startswith("API_KEY"):
+            api_key = z.split("=", 1)[1].strip()
+
+    if not api_key or not prompt_vorlage:
+        return jsonify({"fehler": "API-Key oder Prompt fehlt"}), 500
+
+    lebenslauf_pfad = BASIS_PFAD / "lebenslauf.txt"
+    lebenslauf = lebenslauf_pfad.read_text(encoding="utf-8") if lebenslauf_pfad.exists() else ""
+
+    try:
+        import anthropic
+        from bewertung import bewerte_stelle
+        client = anthropic.Anthropic(api_key=api_key)
+        bewertung = bewerte_stelle(stellentext, lebenslauf, prompt_vorlage, client)
+    except Exception as e:
+        return jsonify({"fehler": f"Bewertungs-Fehler: {e}"}), 500
+
+    if not bewertung:
+        return jsonify({"fehler": "KI-Bewertung fehlgeschlagen"}), 500
+
+    stelle["bewertung"] = bewertung
+    stelle["nicht_passend"] = False  # manuelles Bewerten überschreibt Ausschluss
+    STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
+    if bekannte_pfad.exists():
+        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8"))
+        if url in bekannte:
+            bekannte[url]["status"] = 4
+            bekannte[url]["nicht_passend"] = False
+            bekannte_pfad.write_text(json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    return jsonify({"ok": True})
+
+
 @app.route("/stelle-einfuegen", methods=["POST"])
 def stelle_einfuegen():
     """
@@ -727,17 +803,23 @@ def firmen_testen_stream():
 
                 link_elemente = page.query_selector_all("a")
                 rohtexte = []
+                pdf_links = []
                 for el in link_elemente:
                     try:
+                        href = el.get_attribute("href") or ""
                         t = el.inner_text().strip()
-                        if t:
+                        if href.lower().endswith(".pdf"):
+                            dateiname = href.rstrip("/").split("/")[-1]
+                            label = t if len(t) >= 5 else dateiname[:-4].replace("-", " ").replace("_", " ")
+                            pdf_links.append(label)
+                        elif t:
                             rohtexte.append(t)
                     except Exception:
                         pass
 
                 browser.close()
 
-            yield f"data: 🔍 {len(rohtexte)} Links gefunden – filtere Jobtitel...\n\n"
+            yield f"data: 🔍 {len(rohtexte)} Links + {len(pdf_links)} PDF(s) gefunden – filtere Jobtitel...\n\n"
 
             gesehen   = set()
             gefunden  = []
@@ -750,6 +832,11 @@ def firmen_testen_stream():
                     continue
                 gesehen.add(text)
                 gefunden.append(text)
+
+            for label in pdf_links:
+                if label not in gesehen:
+                    gesehen.add(label)
+                    gefunden.append(f"[PDF] {label}")
 
             if gefunden:
                 for titel in gefunden:

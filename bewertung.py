@@ -45,7 +45,7 @@ def lade_config() -> dict:
         print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
         sys.exit(1)
 
-    result = {"api_key": "", "prompt": ""}
+    result = {"api_key": "", "prompt": "", "verbotene_standorte": []}
     zeilen = CONFIG_PFAD.read_text(encoding="utf-8").splitlines()
     aktiver_abschnitt = None
     puffer = []
@@ -75,6 +75,9 @@ def lade_config() -> dict:
 
         if aktiver_abschnitt == "prompt":
             puffer.append(zeile)
+        elif aktiver_abschnitt == "verbotene_standorte":
+            if z and not z.startswith("#"):
+                result["verbotene_standorte"].append(z.lower())
 
     return result
 
@@ -167,10 +170,37 @@ def main():
         print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
         return
 
+    verbotene = config["verbotene_standorte"]
+
+    def standort_ok(s: dict) -> bool:
+        standort = (s.get("standort") or "").lower()
+        if not standort or standort == "ok":
+            return True
+        return not any(v in standort for v in verbotene)
+
+    # Stellen mit verbotenem Standort explizit als nicht_passend markieren
+    zu_markieren = [
+        (i, s) for i, s in enumerate(stellen)
+        if bekannte.get(s["url"], {}).get("status") == 3
+        and s.get("stellentext")
+        and not standort_ok(s)
+        and not s.get("nicht_passend")
+    ]
+    if zu_markieren:
+        print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
+        for idx, stelle in zu_markieren:
+            stellen[idx]["nicht_passend"] = True
+            bekannte[stelle["url"]]["nicht_passend"] = True
+            print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('standort','')})")
+        speichere_json(STELLEN_JSON, stellen)
+        speichere_json(BEKANNTE_JSON, bekannte)
+
     zu_bearbeiten = [
         (i, s) for i, s in enumerate(stellen)
         if bekannte.get(s["url"], {}).get("status") == 3
         and s.get("stellentext")
+        and standort_ok(s)
+        and not s.get("nicht_passend")
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bewerten (Status 3)")

@@ -140,6 +140,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     neu_badge      = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
     geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>' if ist_geloescht else ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
+    standort = s.get("standort") or ""
+    standort_label = f' <span class="standort-label">📍 {standort}</span>' if standort and standort != "ok" else ""
     firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else ""
     gefunden_am    = s.get("gefunden_am", "")[:10]
     geloescht_am   = s.get("geloescht_am", "")
@@ -273,17 +275,19 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     else:
         steckbrief_html = ""
 
-    steckbrief_btn = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
+    steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
+    bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_escaped}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
 
     return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}">
-    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{datum_label}
+    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{standort_label}{datum_label}
     <div class="tags">{tags}</div>
     {bewertung_html}
     {stellentext_html}
     {steckbrief_html}
     {steckbrief_btn}
+    {bewertung_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -331,6 +335,7 @@ CSS = """
     .badge-neu { background: #e74c3c; }
     .badge-weg { background: #aaa; }
     .firma-label { color: #999; font-size: 0.85em; }
+    .standort-label { color: #888; font-size: 0.82em; margin-left: 6px; }
     .bewertung {
         margin-top: 10px; padding: 10px; background: #fff;
         border-radius: 6px; font-size: 0.9em;
@@ -625,6 +630,30 @@ JS = """
         } catch(e) {
             btn.disabled = false;
             btn.textContent = '🧠 Steckbrief generieren';
+            alert('Server nicht erreichbar');
+        }
+    }
+
+    async function bewertungStarten(btn, stellenUrl) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Bewerte...';
+        try {
+            const res = await fetch(SERVER + '/bewertung-erstellen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: stellenUrl })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                location.reload();
+            } else {
+                btn.disabled = false;
+                btn.textContent = '⭐ Bewertung starten';
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+            }
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '⭐ Bewertung starten';
             alert('Server nicht erreichbar');
         }
     }
@@ -1122,37 +1151,48 @@ def main():
                 s["geloescht_am"] = None
                 repariert += 1
 
-    # Ausschluss-Prüfung: aktive Stellen gegen aktuelle Config prüfen
-    # nicht_passend zuerst zurücksetzen damit eine veränderte Config greift
+    # Ausschluss-Prüfung: bekannte ist authoritative Quelle, Config greift auf Titel+Standort
     ausschlussbegriffe  = config["ausschlussbegriffe"]
     verbotene_standorte = config["verbotene_standorte"]
-    neu_ausgeschlossen = 0
+    neu_ausgeschlossen  = 0
+    bekannte_geaendert  = False
+
     for s in stellen:
-        if s.get("nicht_passend") and not s.get("geloescht_am"):
-            # Nicht zurücksetzen wenn bekannte_stellen die Stelle dauerhaft ausschließt
-            # (z.B. vom Scanner als "nicht mehr gelistet" oder "verbotener Standort" markiert)
-            if not bekannte.get(s.get("url", ""), {}).get("nicht_passend"):
-                s["nicht_passend"] = False
-    if ausschlussbegriffe or verbotene_standorte:
-        for s in stellen:
-            if s.get("geloescht_am") or s.get("nicht_passend"):
-                continue
-            titel    = s.get("titel", "").lower()
-            volltext = " ".join(filter(None, [
-                s.get("stellentext", ""),
-                s.get("rohtext", ""),
-            ]))[:2000].lower()
-            # Ausschlussbegriffe nur gegen Titel (substring)
-            ausgeschlossen = any(b in titel for b in ausschlussbegriffe)
-            # Verbotene Standorte gegen Anfang des Textes (max 2000 Zeichen)
-            standort_weg   = any(v in volltext for v in verbotene_standorte)
-            if ausgeschlossen or standort_weg:
-                s["nicht_passend"] = True
-                neu_ausgeschlossen += 1
-    if repariert or neu_ausgeschlossen:
+        if s.get("geloescht_am"):
+            continue
+        url = s.get("url", "")
+        b   = bekannte.get(url, {})
+
+        # Regel 1: re-evaluiere gegen aktuelle Config (Titel + Standort-Feld)
+        # bekannte["nicht_passend"] wird ebenfalls aktualisiert, damit es nicht
+        # dauerhaft auf True stecken bleibt (z.B. wegen falschem Rohtext-Treffer)
+        titel     = s.get("titel", "").lower()
+        standort  = (s.get("standort") or "").lower()
+        ausgeschlossen = any(t in titel   for t in ausschlussbegriffe)
+        # Standort nur prüfen wenn bekannt — leer oder "ok" (geprüft, nicht gefunden) → durchlassen
+        standort_weg   = bool(standort) and standort != "ok" and any(v in standort for v in verbotene_standorte)
+
+        if ausgeschlossen or standort_weg:
+            s["nicht_passend"] = True
+            b["nicht_passend"] = True
+            bekannte[url]      = b
+            bekannte_geaendert = True
+            neu_ausgeschlossen += 1
+        else:
+            s["nicht_passend"] = False
+            if b.get("nicht_passend"):
+                b["nicht_passend"] = False
+                bekannte[url]      = b
+                bekannte_geaendert = True
+
+    if repariert or neu_ausgeschlossen or bekannte_geaendert:
         STELLEN_JSON.write_text(
             json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        if bekannte_geaendert:
+            BEKANNTE_JSON.write_text(
+                json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         if repariert:
             print(f"  🔧 {repariert} Stelle(n) reaktiviert (geloescht_am-Datenreparatur)")
         if neu_ausgeschlossen:

@@ -87,6 +87,24 @@ def domain(url: str) -> str:
 # EXTRAKTION
 # =============================================================================
 
+def ki_extrahiere_standort(text: str, dom: str, client) -> str:
+    """Extrahiert nur den Standort aus dem Stellentext – günstiger Fallback."""
+    prompt = f"""Aus dem folgenden Stellentext von '{dom}': Welche Stadt/Ort ist der Arbeitsstandort?
+Antworte NUR mit dem Ortsnamen (z.B. "Böblingen"). Wenn unklar, antworte mit "".
+
+=== TEXT (Anfang) ===
+{text[:2000]}"""
+    try:
+        antwort = client.messages.create(
+            model=KI_MODELL, max_tokens=50,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        standort = antwort.content[0].text.strip().strip('"').strip("'")
+        return standort if len(standort) < 60 else ""
+    except Exception:
+        return ""
+
+
 def extrahiere_mit_markern(rohtext: str, start_marker: str, ende_marker: str) -> str:
     start = rohtext.find(start_marker)
     if start == -1:
@@ -107,11 +125,14 @@ Deine Aufgaben:
    Lass weg: Navigation, Footer, Cookie-Hinweise, "Ähnliche Stellen", Login-Bereiche.
 2. Identifiziere einen eindeutigen START-Marker (erste Zeile des relevanten Teils)
    und einen ENDE-Marker (erste Zeile NACH dem relevanten Teil).
+   START-Marker darf KEIN Jobtitel sein – wähle eine strukturelle Zeile wie "Deine Aufgaben", "Responsibilities", "Über uns" o.ä.
+3. Extrahiere den Arbeitsstandort (Stadt/Ort) der Stelle. Nur die Stadt, kein Land.
 
 Antworte NUR als JSON ohne Markdown:
 {{
   "stellentext": "der extrahierte Text hier",
-  "start_marker": "exakter Text der ersten relevanten Zeile",
+  "standort": "Böblingen",
+  "start_marker": "strukturelle Zeile (kein Jobtitel)",
   "ende_marker": "exakter Text der ersten nicht mehr relevanten Zeile"
 }}
 
@@ -141,8 +162,9 @@ Antworte NUR als JSON ohne Markdown:
             }
 
         stellentext = ergebnis.get("stellentext", rohtext_gekuerzt)
-        start = ergebnis.get("start_marker")
-        ende  = ergebnis.get("ende_marker")
+        start    = ergebnis.get("start_marker")
+        ende     = ergebnis.get("ende_marker")
+        standort = ergebnis.get("standort") or ""
 
         struktur = None
         if start and ende and len(start) > 5 and len(ende) > 5:
@@ -152,11 +174,11 @@ Antworte NUR als JSON ohne Markdown:
                 "gelernt_am":   jetzt(),
             }
 
-        return stellentext, struktur
+        return stellentext, standort, struktur
 
     except Exception as e:
         print(f"  ⚠️  KI-Extraktion fehlgeschlagen: {e}")
-        return rohtext[:5000], None
+        return rohtext[:5000], "", None
 
 
 # =============================================================================
@@ -182,13 +204,34 @@ def main():
         print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
         return
 
+    # Repair: Status 4 ohne bewertung/stellentext aber mit rohtext → zurück auf Status 2
+    repariert = 0
+    for s in stellen:
+        url = s.get("url", "")
+        eintrag = bekannte.get(url, {})
+        if eintrag.get("status") == 4 and not s.get("bewertung") and s.get("rohtext") and not s.get("stellentext"):
+            eintrag["status"] = 2
+            repariert += 1
+            print(f"  🔧 Repariert (Status 4 ohne Bewertung/Stellentext): {s.get('titel','?')[:50]}")
+    if repariert:
+        speichere_json(BEKANNTE_JSON, bekannte)
+
     zu_bearbeiten = [
         (i, s) for i, s in enumerate(stellen)
         if bekannte.get(s["url"], {}).get("status") == 2
         and s.get("rohtext")
     ]
 
+    # Backfill: Stellen mit Stellentext aber ohne Standort nachträglich verarbeiten
+    standort_backfill = [
+        (i, s) for i, s in enumerate(stellen)
+        if bekannte.get(s["url"], {}).get("status") in (3, 4)
+        and not s.get("standort")
+        and (s.get("stellentext") or s.get("rohtext"))
+    ]
+
     print(f"  {len(zu_bearbeiten)} Stellen zu bearbeiten (Status 2)")
+    print(f"  {len(standort_backfill)} Stellen ohne Standort (Backfill)")
 
     extrahiert = 0
 
@@ -206,17 +249,27 @@ def main():
         start = dom_struktur.get("start_marker")
         ende  = dom_struktur.get("ende_marker")
 
+        standort = stelle.get("standort") or ""
+
         if start and ende:
             print(f"  ✂️  Bekannte Marker – extrahiere direkt...")
             stellentext = extrahiere_mit_markern(rohtext, start, ende)
             print(f"  ✅ {len(stellentext)} Zeichen extrahiert")
+            if not standort:
+                standort = ki_extrahiere_standort(stellentext or rohtext, dom, client)
+                if standort:
+                    print(f"  📍 Standort: {standort}")
         else:
             print(f"  🤖 Unbekannte Struktur – KI extrahiert...")
-            stellentext, neue_struktur = ki_extrahiere_und_lerne(rohtext, dom, client)
+            stellentext, standort, neue_struktur = ki_extrahiere_und_lerne(rohtext, dom, client)
             print(f"  ✅ {len(stellentext)} Zeichen extrahiert")
+            if standort:
+                print(f"  📍 Standort: {standort}")
             if neue_struktur:
                 strukturen.setdefault(dom, {}).update(neue_struktur)
                 print(f"  💾 Struktur für '{dom}' gelernt")
+
+        stellen[idx]["standort"] = standort or "ok"
 
         if stellentext and len(stellentext) > 100:
             stellen[idx]["stellentext"] = stellentext
@@ -243,10 +296,27 @@ def main():
             except Exception as e:
                 print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")
 
+    # Standort-Backfill für bestehende Stellen ohne Standort
+    backfilled = 0
+    for idx, stelle in standort_backfill:
+        url  = stelle["url"]
+        dom  = domain(url)
+        text = stelle.get("stellentext") or stelle.get("rohtext") or ""
+        print(f"\n  📍 Standort-Backfill: {stelle['firma']}: {stelle['titel'][:50]}")
+        standort = ki_extrahiere_standort(text, dom, client)
+        stellen[idx]["standort"] = standort or "ok"
+        if standort:
+            print(f"     → {standort}")
+            backfilled += 1
+        else:
+            print(f"     → nicht erkannt, als 'ok' markiert")
+        speichere_json(STELLEN_JSON, stellen)
+
     print(f"\n{'='*60}")
     print(f"  FERTIG")
-    print(f"  Texte extrahiert: {extrahiert}")
-    print(f"  Weiter mit:       python bewertung.py")
+    print(f"  Texte extrahiert:       {extrahiert}")
+    print(f"  Standorte nachgefüllt:  {backfilled}")
+    print(f"  Weiter mit:             python bewertung.py")
     print(f"{'='*60}\n")
 
 

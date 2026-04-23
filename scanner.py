@@ -574,7 +574,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 dateiname = l["href"].rstrip("/").split("/")[-1]
                 titel = dateiname[:-4].replace("-", " ").replace("_", " ")
                 titel = titel[:1].upper() + titel[1:] if titel else dateiname
-                kandidaten.append({"href": l["href"], "text": titel})
+                kandidaten.append({"href": l["href"], "text": titel, "is_pdf": True})
         if kandidaten:
             print(f"  📄 PDF-Fallback: {len(kandidaten)} PDF-Stelle(n) gefunden")
 
@@ -589,11 +589,17 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         href = link["href"].split("#")[0].rstrip("/") or link["href"]
         titel_roh = link["text"]
 
+        ist_pdf_link = link.get("is_pdf") or href.lower().endswith(".pdf")
+
         zeilen = [z.strip() for z in titel_roh.split("\n") if len(z.strip()) >= MIN_TITEL_LAENGE]
         titel = zeilen[0] if zeilen else titel_roh.strip()
 
-        # Fallback: Titel aus URL-Slug wenn Link-Text wie ein Button aussieht
-        if not titel or len(titel) < MIN_TITEL_LAENGE or titel.lower() in _BUTTON_TEXTE:
+        # Bei PDF-Links immer Dateinamen als Titel verwenden (Linktext ist oft "Mehr erfahren")
+        if ist_pdf_link:
+            dateiname = href.rstrip("/").split("/")[-1]
+            titel = dateiname[:-4].replace("-", " ").replace("_", " ").strip()
+            titel = titel[:1].upper() + titel[1:] if titel else dateiname
+        elif not titel or len(titel) < MIN_TITEL_LAENGE or titel.lower() in _BUTTON_TEXTE:
             titel = titel_aus_slug(href)
 
         if not titel or len(titel) < MIN_TITEL_LAENGE:
@@ -603,19 +609,25 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         gesehen_urls.add(href)
         gesehen_titel.add(titel)
 
-        volltext = titel_roh.lower()
+        # Standort aus Link-Text extrahieren: letzte Zeile nach dem Titel (z.B. "Böblingen")
+        standort_aus_text = zeilen[-1] if len(zeilen) >= 2 and zeilen[-1] != titel else ""
 
         treffer = text_matched(titel, config["suchbegriffe"])
 
-        if not treffer:
+        # PDF-Stellen: Dateiname enthält selten Suchbegriffe → immer einschließen
+        if not treffer and not ist_pdf_link:
             continue
+        if not treffer:
+            treffer = ["pdf"]
+        # Standort nur prüfen wenn bekannt (leer = durchlassen)
         if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                or standort_verboten(volltext, config["verbotene_standorte"])):
+                or (standort_aus_text and standort_verboten(standort_aus_text.lower(), config["verbotene_standorte"]))):
             ausgeschlossen.append({"firma": name, "titel": titel, "url": href, "treffer": treffer})
             print(f"  🚫 Nicht passend: {titel[:70]}")
             continue
 
-        gefunden.append({"firma": name, "titel": titel, "url": href, "treffer": treffer})
+        gefunden.append({"firma": name, "titel": titel, "url": href,
+                         "treffer": treffer, "standort": standort_aus_text})
         print(f"  ✅ {titel[:70]}")
         print(f"     Treffer: {', '.join(treffer)}")
 
@@ -790,14 +802,11 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list
 
     zu_entfernen = []
     for stelle in stellen:
-        # Standort-Feld hat Vorrang (zuverlässig, vom API direkt)
-        # Fallback: Anfang von rohtext/stellentext (max. 2000 Zeichen)
-        prueftext = " ".join(filter(None, [
-            stelle.get("standort") or "",
-            stelle.get("titel") or "",
-            (stelle.get("stellentext") or stelle.get("rohtext") or "")[:2000],
-        ]))
-        if _verboten(prueftext):
+        standort = stelle.get("standort") or ""
+        if not standort:
+            # Kein Standort bekannt → kein Filter (sicher durchlassen)
+            continue
+        if _verboten(standort):
             zu_entfernen.append(stelle)
 
     if zu_entfernen:
@@ -938,6 +947,9 @@ def main():
         url = t["url"]
         gesehen_urls.add(url)
         idx = stellen_index.get(url)
+        # Standort nachrüsten wenn Stelle schon bekannt aber Feld fehlt
+        if idx is not None and t.get("standort") and not stellen[idx].get("standort"):
+            stellen[idx]["standort"] = t["standort"]
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
                 bekannte[url]["status"] = 4
@@ -979,6 +991,7 @@ def main():
             }
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
+                "standort": t.get("standort", ""),
                 "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                 "neu": True, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
