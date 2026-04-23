@@ -662,6 +662,74 @@ def stelle_einfuegen():
     return jsonify({"ok": True})
 
 
+@app.route("/stelle-einzeln-stream")
+def stelle_einzeln_stream():
+    """Lädt Rohtext, extrahiert und bewertet genau eine Stelle (per URL-Parameter)."""
+    url = request.args.get("url", "").strip()
+    if not url:
+        return "url Parameter fehlt", 400
+
+    def pipeline():
+        schritte = [
+            [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--url", url],
+            [sys.executable, str(BASIS_PFAD / "extraktor.py"),     "--url", url],
+            [sys.executable, str(BASIS_PFAD / "bewertung.py"),     "--url", url],
+            [sys.executable, str(BASIS_PFAD / "report.py"),        "--keine-mail"],
+        ]
+        for cmd in schritte:
+            skript = cmd[2] if "--url" not in cmd[1] else cmd[1]
+            yield f"data: ▶️  {skript.split('/')[-1].split(chr(92))[-1]} ...\n\n"
+            prozess = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                cwd=str(BASIS_PFAD),
+                env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+            )
+            for zeile in prozess.stdout:
+                zeile = zeile.rstrip("\n")
+                if zeile:
+                    yield f"data: {zeile}\n\n"
+            prozess.wait()
+        yield "data: FERTIG\n\n"
+
+    return Response(pipeline(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/stelle-neu-laden", methods=["POST"])
+def stelle_neu_laden():
+    """Setzt eine Stelle auf Status 1 zurück, löscht rohtext und nicht_passend,
+    damit die manuell-stream-Pipeline sie neu lädt und bewertet."""
+    data = request.get_json()
+    if not data or "url" not in data:
+        return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
+
+    url = data["url"]
+    stellen_pfad  = BASIS_PFAD / "stellen.json"
+    bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
+
+    stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8"))  if stellen_pfad.exists()  else []
+    bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8")) if bekannte_pfad.exists() else {}
+
+    stelle = next((s for s in stellen if s["url"] == url), None)
+    if not stelle:
+        return jsonify({"fehler": "Stelle nicht gefunden"}), 404
+
+    stelle["rohtext"]      = None
+    stelle["stellentext"]  = None
+    stelle["nicht_passend"] = False
+
+    stellen_pfad.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if url in bekannte:
+        bekannte[url]["status"]       = 1
+        bekannte[url]["nicht_passend"] = False
+        bekannte_pfad.write_text(json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return jsonify({"ok": True})
+
+
 @app.route("/manuell-stream")
 def manuell_stream():
     global scan_laeuft

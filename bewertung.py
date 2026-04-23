@@ -11,6 +11,7 @@ Nutzung:
   python bewertung.py
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -143,8 +144,14 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
 # =============================================================================
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default=None, help="Nur diese URL bewerten")
+    args = parser.parse_args()
+
     print("\n" + "=" * 60)
     print("  BEWERTUNG  –  Schritt 3: KI-Bewertung")
+    if args.url:
+        print(f"  Filter: nur {args.url[:60]}")
     print("=" * 60)
 
     config = lade_config()
@@ -201,6 +208,7 @@ def main():
         and s.get("stellentext")
         and standort_ok(s)
         and not s.get("nicht_passend")
+        and (args.url is None or s["url"] == args.url)
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bewerten (Status 3)")

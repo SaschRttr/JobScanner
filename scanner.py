@@ -1092,11 +1092,7 @@ def main():
                     continue
                 print(f"  📄 Lade Rohtext: {t['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
-                if rohtext and standort_verboten(rohtext[:5000], config["verbotene_standorte"]):
-                    markiere_nicht_passend(t, jetzt())
-                    print(f"  🚫 Verbotener Standort im Rohtext: {t['titel'][:60]}")
-                else:
-                    reaktiviere_oder_neu_playwright(t, rohtext, jetzt())
+                reaktiviere_oder_neu_playwright(t, rohtext, jetzt())
 
         # Rohtext für API-Firmen nachladen (Status 1, kein Rohtext)
         for stelle in stellen:

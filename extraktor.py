@@ -15,6 +15,7 @@ Nutzung:
   python extraktor.py
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -186,8 +187,14 @@ Antworte NUR als JSON ohne Markdown:
 # =============================================================================
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default=None, help="Nur diese URL verarbeiten")
+    args = parser.parse_args()
+
     print("\n" + "=" * 60)
     print("  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren")
+    if args.url:
+        print(f"  Filter: nur {args.url[:60]}")
     print("=" * 60)
 
     config = lade_config()
@@ -220,6 +227,7 @@ def main():
         (i, s) for i, s in enumerate(stellen)
         if bekannte.get(s["url"], {}).get("status") == 2
         and s.get("rohtext")
+        and (args.url is None or s["url"] == args.url)
     ]
 
     # Backfill: Stellen mit Stellentext aber ohne Standort nachträglich verarbeiten
@@ -228,6 +236,7 @@ def main():
         if bekannte.get(s["url"], {}).get("status") in (3, 4)
         and not s.get("standort")
         and (s.get("stellentext") or s.get("rohtext"))
+        and (args.url is None or s["url"] == args.url)
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bearbeiten (Status 2)")
@@ -281,7 +290,9 @@ def main():
             bekannte[url]["status"] = 3
             extrahiert += 1
         else:
-            print(f"  ⚠️  Extraktion fehlgeschlagen – kein Rohtext vorhanden")
+            print(f"  ⚠️  Rohtext zu kurz oder leer – Status auf 1 zurückgesetzt (scanner.py lädt neu)")
+            stellen[idx]["rohtext"] = None
+            bekannte[url]["status"] = 1
 
         # Zwischenspeichern nach jeder Stelle
         speichere_json(STELLEN_JSON, stellen)

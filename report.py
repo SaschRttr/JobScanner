@@ -277,6 +277,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
 
     steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
     bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_escaped}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
+    neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_escaped}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
 
@@ -288,6 +289,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     {steckbrief_html}
     {steckbrief_btn}
     {bewertung_btn}
+    {neu_laden_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -746,6 +748,53 @@ JS = """
             quelle.close();
             statusEl.textContent = 'Verbindungsfehler zum Server';
             statusEl.style.color = '#e74c3c';
+        };
+    }
+
+    async function neuLadenUndBewerten(btn, stellenUrl) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Vorbereitung...';
+        try {
+            const res = await fetch(SERVER + '/stelle-neu-laden', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: stellenUrl })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                btn.disabled = false;
+                btn.textContent = '🔄 Neu laden & bewerten';
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                return;
+            }
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '🔄 Neu laden & bewerten';
+            alert('Server nicht erreichbar');
+            return;
+        }
+        const output = document.getElementById('scan-output');
+        const status = document.getElementById('scan-status');
+        output.style.display = 'block';
+        output.textContent = '';
+        status.textContent = '⏳ Pipeline läuft...';
+        output.scrollIntoView({ behavior: 'smooth' });
+        const quelle = new EventSource(SERVER + '/stelle-einzeln-stream?url=' + encodeURIComponent(stellenUrl));
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                status.textContent = '✅ Fertig – Seite wird neu geladen...';
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+            output.textContent += e.data + '\\n';
+            output.scrollTop = output.scrollHeight;
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            btn.disabled = false;
+            btn.textContent = '🔄 Neu laden & bewerten';
+            status.textContent = '❌ Verbindungsfehler';
         };
     }
 

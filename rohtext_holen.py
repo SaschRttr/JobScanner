@@ -8,6 +8,7 @@ Nutzung:
   python rohtext_holen.py
 """
 
+import argparse
 import json
 import platform
 import sys
@@ -120,12 +121,18 @@ def bereinige_rohtext(rohtext: str) -> str:
 def hole_rohtext(page, url: str) -> str | None:
     try:
         # networkidle wartet bis keine Netzwerk-Requests mehr laufen (wichtig für SPAs)
+        antwort = None
         try:
-            page.goto(url, wait_until="networkidle", timeout=45000)
+            antwort = page.goto(url, wait_until="networkidle", timeout=45000)
         except Exception:
             # Fallback: domcontentloaded wenn networkidle timeout
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            antwort = page.goto(url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(6000)
+
+        # 403/404/410 → sofort abbrechen, kein Retry
+        if antwort and antwort.status in (403, 404, 410):
+            print(f"  ❌ HTTP {antwort.status} – Seite blockiert/nicht vorhanden")
+            return None
 
         page.wait_for_timeout(3000)
         klick_cookie_banner(page)
@@ -169,18 +176,26 @@ def lade_json(pfad: Path, standard):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default=None, help="Nur diese URL verarbeiten")
+    args = parser.parse_args()
+
     print("\n" + "=" * 60)
     print("  ROHTEXT-HOLEN  –  Schritt 1b: Playwright-Fetch")
+    if args.url:
+        print(f"  Filter: nur {args.url[:60]}")
     print("=" * 60)
 
     stellen  = lade_json(STELLEN_JSON,  [])
     bekannte = lade_json(BEKANNTE_JSON, {})
 
-    # Nur Stellen ohne Rohtext und status=1
+    # Nur Stellen ohne Rohtext und status=1 (nicht bereits als nicht ladbar markiert)
     zu_laden = [
         (i, s) for i, s in enumerate(stellen)
         if not s.get("rohtext")
         and bekannte.get(s["url"], {}).get("status", 0) <= 1
+        and not bekannte.get(s["url"], {}).get("nicht_ladbar")
+        and (args.url is None or s["url"] == args.url)
     ]
 
     if not zu_laden:
@@ -191,25 +206,53 @@ def main():
 
     geladen = 0
 
+    BROWSER_ARGS = [
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-features=IsolateOrigins,site-per-process",
+    ]
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+
     with sync_playwright() as p:
         if platform.system() == "Linux":
             browser = p.chromium.launch(
                 headless=True,
                 executable_path="/usr/bin/chromium-browser",
-                args=["--no-sandbox", "--disable-gpu"],
+                args=BROWSER_ARGS,
             )
         else:
             browser = p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-gpu"],
+                args=BROWSER_ARGS,
             )
 
         context = browser.new_context(
-            viewport={"width": 1920, "height": 1080}, locale="de-DE"
+            viewport={"width": 1920, "height": 1080},
+            locale="de-DE",
+            user_agent=USER_AGENT,
+            extra_http_headers={
+                "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-User": "?1",
+                "Sec-Fetch-Dest": "document",
+                "Upgrade-Insecure-Requests": "1",
+            },
         )
         page = context.new_page()
         if STEALTH_VERFUEGBAR:
-            Stealth().apply_stealth_sync(page)
+            try:
+                Stealth().apply_stealth_sync(page)
+            except Exception:
+                pass
+        # Zusätzlich: navigator.webdriver entfernen falls stealth nicht verfügbar
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         for idx, stelle in zu_laden:
             url = stelle["url"]
@@ -249,7 +292,12 @@ def main():
                     json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
             else:
-                print(f"  ⚠️  Kein verwertbarer Inhalt – Status bleibt 1")
+                # URL nicht ladbar (403, Timeout, zu kurz) → nicht nochmal versuchen
+                bekannte.setdefault(url, {})["nicht_ladbar"] = True
+                BEKANNTE_JSON.write_text(
+                    json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                print(f"  ⚠️  Kein verwertbarer Inhalt – als nicht ladbar markiert (wird übersprungen)")
 
         browser.close()
 
