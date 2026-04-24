@@ -19,7 +19,6 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
 from pathlib import Path
 import urllib.parse
 
@@ -1079,50 +1078,103 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
 # =============================================================================
 
 def erstelle_aenderungs_html(stellen: list) -> str:
-    datum         = datetime.now().strftime("%d.%m.%Y %H:%M")
-    neue          = [s for s in stellen if s.get("neu") and not s.get("geloescht_am") and not s.get("nicht_passend")]
-    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    datum    = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    job_status: dict = {}
+    if STATUS_JSON.exists():
+        try:
+            job_status = json.loads(STATUS_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
+
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
+    neue          = [s for s in aktive  if s.get("neu") and s["url"] not in absage_urls]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
+    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    absagen       = [s for s in aktive  if s["url"] in absage_urls]
+    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
+    aktive_haupt  = [s for s in aktive  if not _hat_geringen_score(s) and s["url"] not in absage_urls]
+
+    def score_farbe(score: int) -> str:
+        if score >= 70: return "#27ae60"
+        if score >= 40: return "#f39c12"
+        return "#e74c3c"
+
+    def stelle_zeile(s: dict) -> str:
+        titel    = s.get("titel", "–")
+        firma    = s.get("firma", "")
+        url      = s.get("url", "#")
+        standort = s.get("standort") or ""
+        standort_text = f" · {standort}" if standort and standort != "ok" else ""
+        score    = (s.get("bewertung") or {}).get("score")
+        score_text = (
+            f'<span style="color:{score_farbe(score)};font-weight:bold;">{score}%</span>'
+        ) if score else ""
+        meta = " · ".join(filter(None, [firma + standort_text, score_text]))
+        return (
+            f'<tr>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
+            f'<a href="{url}" style="color:#2c7be5;text-decoration:none;font-weight:500;font-size:0.95em;">{titel}</a>'
+            f'<br><span style="color:#999;font-size:0.82em;">{meta}</span>'
+            f'</td>'
+            f'</tr>'
+        )
+
+    def sektion(label: str, farbe: str, liste: list) -> str:
+        if not liste:
+            return ""
+        zeilen = "\n".join(stelle_zeile(s) for s in liste)
+        return f"""
+<tr><td style="padding:16px 0 6px 0;">
+  <span style="color:{farbe};font-weight:bold;font-size:0.95em;">{label} ({len(liste)})</span>
+</td></tr>
+<tr><td style="background:#fff;border-radius:8px;border:1px solid #e8e8e8;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+    {zeilen}
+  </table>
+</td></tr>"""
+
+    stats = [
+        ("aktive",        len(aktive_haupt), "#2c7be5"),
+        ("neu",           len(neue),         "#27ae60"),
+        ("ger. Match",    len(geringer_match),"#f39c12"),
+        ("Absagen",       len(absagen),       "#e74c3c"),
+        ("n. passend",    len(nicht_passend), "#bbb"),
+        ("vergeben",      len(geloescht),     "#bbb"),
+    ]
+    stats_zellen = "".join(
+        f'<td style="text-align:center;padding:12px 8px;border-right:1px solid #f0f0f0;">'
+        f'<div style="font-size:1.5em;font-weight:bold;color:{farbe};">{wert}</div>'
+        f'<div style="font-size:0.72em;color:#999;margin-top:3px;">{label}</div>'
+        f'</td>'
+        for label, wert, farbe in stats
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <title>Job-Scanner Änderungen – {datum}</title>
-    <style>{CSS}</style>
-</head>
-<body>
-    <h1>🔍 Job-Scanner Änderungen</h1>
-    <div class="summary-box">
-        <strong>{len(neue)}</strong> neue Stellen &nbsp;|&nbsp;
-        <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
-        <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
-        {datum}
-    </div>
-"""
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f0f2f5;padding:20px;margin:0;">
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td align="center"><table width="600" cellpadding="0" cellspacing="0">
 
-    if neue:
-        html += '<div class="firma-block">\n'
-        html += f'<h2>🆕 Neue Stellen ({len(neue)})</h2>\n'
-        for s in neue:
-            html += stelle_zu_html(s, zeige_firma=True)
-        html += '</div>\n'
+  <tr><td style="padding:0 0 14px 0;">
+    <span style="font-size:1.2em;font-weight:bold;color:#222;">🔍 Job-Scanner</span>
+    <span style="color:#bbb;font-size:0.82em;margin-left:10px;">Stand: {datum}</span>
+  </td></tr>
 
-    if nicht_passend:
-        html += '<div class="firma-block">\n'
-        html += f'<h2>🚫 Nicht passend – Ausschlusskriterium ({len(nicht_passend)})</h2>\n'
-        for s in nicht_passend:
-            html += stelle_zu_html(s, zeige_firma=True)
-        html += '</div>\n'
+  <tr><td>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="background:#fff;border-radius:10px;border:1px solid #e0e0e0;margin-bottom:8px;">
+      <tr>{stats_zellen}</tr>
+    </table>
+  </td></tr>
 
-    if geloescht:
-        html += '<div class="firma-block">\n'
-        html += f'<h2>🗑️ Vergeben / Nicht mehr verfügbar ({len(geloescht)})</h2>\n'
-        for s in geloescht:
-            html += stelle_zu_html(s, zeige_firma=True)
-        html += '</div>\n'
+  {sektion("🆕 Neue Stellen", "#27ae60", neue)}
 
-    html += "</body></html>"
+</table></td></tr>
+</table>
+</body></html>"""
     return html
 
 
@@ -1130,36 +1182,24 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 # E-MAIL SENDEN
 # =============================================================================
 
-def sende_mail(aenderungs_html: str, config: dict):
+def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0):
     datum = datetime.now().strftime("%d.%m.%Y")
 
-    neue      = aenderungs_html.count("badge-neu")
-    geloescht = aenderungs_html.count("badge-weg")
-
-    msg = MIMEMultipart()
+    msg = MIMEMultipart("alternative")
     msg["From"]    = config["email_absender"]
     msg["To"]      = config["email_empfaenger"]
     msg["Subject"] = f"Job-Scanner {datum} – {neue} neu, {geloescht} vergeben"
 
-    # Kurztext im Body
-    body = (
+    plain = (
         f"Job-Scanner Änderungen vom {datum}:\n\n"
-        f"  🆕 Neue Stellen:       {neue}\n"
-        f"  🗑️  Nicht mehr verfügbar: {geloescht}\n\n"
-        f"Details im Anhang."
+        f"  Neue Stellen:          {neue}\n"
+        f"  Nicht mehr verfügbar:  {geloescht}\n"
     )
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    # HTML als Anhang
-    anhang = MIMEApplication(
-        aenderungs_html.encode("utf-8"),
-        Name=f"aenderungen_{datum}.html"
-    )
-    anhang["Content-Disposition"] = f'attachment; filename="aenderungen_{datum}.html"'
-    msg.attach(anhang)
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(aenderungs_html, "html", "utf-8"))
 
     try:
-        with smtplib.SMTP("smtp.mail.me.com", 587) as server:
+        with smtplib.SMTP("smtp.mail.me.com", 587, local_hostname="raspberrypi.local") as server:
             server.starttls()
             server.login(config["email_absender"], config["email_passwort"])
             server.send_message(msg)
@@ -1263,7 +1303,7 @@ def main():
         if neue or geloescht:
             print(f"  📧 Sende Änderungs-Mail ({len(neue)} neu, {len(geloescht)} vergeben)...")
             aenderungs_html = erstelle_aenderungs_html(stellen)
-            sende_mail(aenderungs_html, config)
+            sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht))
         else:
             print("  ℹ️  Keine Änderungen – keine Mail gesendet.")
     else:
