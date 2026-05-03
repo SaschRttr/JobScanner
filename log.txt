@@ -12645,3 +12645,3614 @@ KeyError: '\n  "ANREDE"'
   Report: /home/sascha/Jobsuche/report.html
 ============================================================
 
+cron test Thu 30 Apr 08:41:01 CEST 2026
+cron test Thu 30 Apr 08:42:01 CEST 2026
+cron test Thu 30 Apr 08:43:01 CEST 2026
+cron test Thu 30 Apr 08:44:01 CEST 2026
+Thu 30 Apr 08:44:01 CEST 2026: Start
+
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 107 Suchbegriffe, 75 Ausschlussbegriffe, 27 Firmen
+  📂 Stellen geladen: 171
+
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    IT System Administrator - Entwicklung (m/w/d)
+     Treffer: entwicklung
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 9 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  📋 Seite 2: 10 Jobs gefunden
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Systems (m/f/d
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    Staff Product Development Engineer (m/f/d)
+     Treffer: development engineer
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w/d)
+  ✅    Field Application Engineer (m/w/d) - Europe - remote
+     Treffer: field
+  📋 Seite 7: 10 Jobs gefunden
+  ✅    Systems Development Engineer (m/w/d) - Industrial Connectivity & Compliance
+     Treffer: development engineer
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  ✅    Senior Embedded Application Developer (m/w/d)
+     Treffer: embedded, embedded
+  📋 Seite 8: 10 Jobs gefunden
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  ✅    Field Application Engineer - Distribution (m/f/d) - REMOTE EMEA
+     Treffer: field
+  📋 Seite 9: 5 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 10
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Syst
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Entwicklungsingenieur (w/m/d) Fasertechnologie und optische Messtechnik EUV
+     Treffer: messtechnik, entwicklung, messtechnik, entwicklungsingenieur
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 2: 15 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  📋 Seite 2: 18 Jobs gefunden
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  ✅    IT-/Elektrotechniker für Stellwerke (m/w/d)
+     Treffer: elektrotechniker
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elektronik (m/
+  ℹ️  Keine weiteren Jobs auf Seite 3
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elek
+
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/d)
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/
+
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung von Magnetv
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung v
+
+============================================================
+  Scanne: Keysight (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  ✅    Development Engineer for Test Solutions in RF & Photonics Technology
+     Treffer: test, development engineer
+  ✅    Feinmechaniker / Mechatroniker (m/w/d) – Optoelektronik, Messtechnik & Testsysteme (Böblingen)
+     Treffer: test, messtechnik, elektronik, messtechnik, testsystem
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Advanced Electronics Hardware Engineer for Photonics R&D
+     Treffer: hardware, hardware engineer
+  ✅    Senior Photonic Instrument Development Engineer
+     Treffer: development engineer
+  ✅    Feinmechaniker / Mikromonteur (m/w/d) – Optoelektronik & Präzisionsmontage (Labor, Böblingen)
+     Treffer: elektronik
+  ✅    Hardware Engineering Intern – Test & Measurement
+     Treffer: hardware, test, hardware engineer, measurement
+  ✅    Optik & Photonik Test Techniker (m/w/d) – Electronics / Measurement
+     Treffer: test, measurement
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    High-Speed Photonics Instrument Development Engineer
+     Treffer: development engineer
+  ✅    5G-NTN Business Development Engineer
+     Treffer: development engineer
+  🚫 Nicht passend: Test Engineer/Technician
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  ✅    Senior Business Development Engineer
+     Treffer: development engineer
+  📋 Seite 9: 10 Jobs gefunden
+  🚫 Nicht passend: Finance BI Data Analyst
+  ✅    R&D Expert Analog Engineer
+     Treffer: analog
+  📋 Seite 10: 2 Jobs gefunden
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  🚫 Nicht passend: Test Engineer/Technician
+  🚫 Nicht passend: Finance BI Data Analyst
+
+============================================================
+  Scanne: Airbus (Workday API)
+cron test Thu 30 Apr 08:45:01 CEST 2026
+cron test Thu 30 Apr 08:46:01 CEST 2026
+cron test Thu 30 Apr 08:47:01 CEST 2026
+============================================================
+  📋 Seite 1: 13 Jobs (1–13 von 13)
+  ✅    (Senior) Machine Learning & Data Engineer (m/w/d) – KI für Autonome Systeme
+     2 Locations | Treffer: data engineer
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines digitalen
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abgestrahlter N
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation (d/m/w)
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abges
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation 
+
+============================================================
+  Scanne: EnBW (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationstechnik & E
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von AutoCAD-Rou
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukturen (w/m/d)
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 10 Jobs gefunden
+  📋 Seite 10: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationst
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von A
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukture
+
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 78 Links gesamt
+  ✅ Heuristik: 60 Job-Links erkannt
+  📋 60 Kandidaten
+  ✅ AI Data Engineer (Human)
+     Treffer: data engineer
+  ✅ Controls and Embedded Electronics & Firmware Specialist (Human)
+     Treffer: embedded, embedded
+  ✅ Electronics Development Engineer (Human)
+     Treffer: electronics development, development engineer
+  ✅ Electronics Engineer - Humanoid (Human)
+     Treffer: electronics engineer
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  ⏭️  Rohtext bereits vorhanden: AI Data Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Controls and Embedded Electronics & Firmware Specialist (Hum
+  ⏭️  Rohtext bereits vorhanden: Electronics Development Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Electronics Engineer - Humanoid (Human)
+
+============================================================
+  Scanne: Star Cooperation
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '-de-[jf]\d+\.html'
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - (Senior-) Consultant (m/w/d) Managementberatung – Schwerpunkt Artificial Intelli
+     - Controller (m/w/d)
+     - IT Support Mitarbeiter (m/w/d)
+     - Sachbearbeiter Facility Management (m/w/d)
+     - Senior Developer (m/w/d) .NET / C#
+     - Werkstudent (m/w/d) – Managementberatung – Schwerpunkt Artificial Intelligence
+
+============================================================
+  Scanne: GlobeFuelCell
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Bekanntes Muster: '/n-carreers/'
+  📋 2 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Versuchstechniker (m/w/d)
+     - Werkstudent Marketing, Communication & Sales in einem GreenTech Startup (m/w/d)
+
+============================================================
+  Scanne: Hensoldt
+============================================================
+  📜 Scrolle...
+  🔗 96 Links gesamt
+  ✅ Heuristik: 39 Job-Links erkannt
+  📋 39 Kandidaten
+  ✅ Testingenieur für Validation & Verification (m/w/d)
+     Treffer: test, testingenieur, testingenieur, validation, verification, testingenieur
+  ✅ Hardwareentwickler Elektronik (m/w/d)
+     Treffer: hardware, elektronik, hardwareentwickl
+  ✅ Embedded Softwareentwickler - Basissoftware (m/w/d)
+     Treffer: embedded, embedded
+  ⏭️  Rohtext bereits vorhanden: Testingenieur für Validation & Verification (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler Elektronik (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Softwareentwickler - Basissoftware (m/w/d)
+
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 28 Job-Links erkannt
+  📋 28 Kandidaten
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/d) für Tro
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/
+
+============================================================
+  Scanne: Helmut Fischer GmbH
+============================================================
+  📜 Scrolle...
+  🔗 34 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 21 Kandidaten
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik
+     Treffer: hardware, hardwareentwickl, analog
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentwicklung
+     Treffer: hardware, entwicklung, hardwareentwickl, analog
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentw
+
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  📜 Scrolle...
+  🔗 301 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 19 Kandidaten
+  ✅ ATE Engineer - PCB Hardware (m/f/d)
+     Treffer: hardware, pcb
+  ✅ PMU Design Verification Engineer (m/f/d)
+     Treffer: verification
+  ⏭️  Rohtext bereits vorhanden: ATE Engineer - PCB Hardware (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: PMU Design Verification Engineer (m/f/d)
+
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 138 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Software Test Engineer (all genders)
+     Treffer: test, test engineer, test engineer
+  ✅ DevOps Engineer Test Automation (all genders)
+     Treffer: test, test automation
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all genders"
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all 
+  ⏭️  Rohtext bereits vorhanden: Software Test Engineer (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Test Automation (all genders)
+
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 425 Links gesamt
+  ✅ Heuristik: 265 Job-Links erkannt
+  📋 265 Kandidaten
+  ✅ System Ingenieur- Integration & Tests / Funkkommunikationssysteme im R
+     Treffer: test
+  ✅ Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitnehmerüberlas
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten Testsystem
+  ✅ Qualitätsingenieur Produktentwicklung (m/w/d)
+     Treffer: entwicklung
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich der sichere
+  🚫 Nicht passend: Initiativbewerbung als Systemingenieur (m/w/d) Kundenprojekte
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten 
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich d
+  🚫 Nicht passend: Initiativbewerbung als Systemingenieur (m/w/d) Kundenprojekt
+  📄 Lade Rohtext: System Ingenieur- Integration & Tests / Funkkommunikationssy...
+  🆕 Neu: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  📄 Lade Rohtext: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh...
+  🆕 Neu: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ⏭️  Rohtext bereits vorhanden: Senior Test Engineer Java (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Senior Software Developer Test (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Qualitätsingenieur Produktentwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Analog & Power Electronics Design Engineer (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Design Engineer R&D for Analog & Power Electronics (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Expert Digital ASIC Design Engineer (m/f/d)
+     Treffer: asic
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer, test engineer, hardware test engineer
+  ⏭️  Rohtext bereits vorhanden: Analog & Power Electronics Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Design Engineer R&D for Analog & Power Electronics (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Digital ASIC Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Hardware Test Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Electrical Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ⏭️  Rohtext bereits vorhanden: Electrical Product Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Product Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 48 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/d)
+     Treffer: embedded, embedded
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ System Architect (m/f/d) for the SmarTest 8 hardware layer ART
+     Treffer: hardware, test
+  ⏭️  Rohtext bereits vorhanden: R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/
+  ⏭️  Rohtext bereits vorhanden: R&D Software Development Engineer (C++) (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: System Architect (m/f/d) for the SmarTest 8 hardware layer A
+
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+
+============================================================
+  Scanne: Daimler Truck
+============================================================
+  📜 Scrolle...
+  🔗 58 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  🚫 Nicht passend: Praktikum im Bereich Projektmanagement Gesamtfahrzeugentwicklung ab Ok
+  🚫 Nicht passend: Praktikum im Bereich Projektmanagement Gesamtfahrzeugentwick
+
+============================================================
+  Scanne: ZSW
+============================================================
+  📜 Scrolle...
+  🔗 15 Links gesamt
+  ✅ Heuristik: 11 Job-Links erkannt
+  📋 11 Kandidaten
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d) im PV-Tes
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d)
+
+============================================================
+  Scanne: ads-tec Energy
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Heuristik: 20 Job-Links erkannt
+  📋 20 Kandidaten
+  ✅ Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von Ladeinfras
+     Treffer: entwicklung, ladeinfrastruktur, batteriespeicher, elektrotechniker, elektroingenieur, batterie
+  ✅ Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeicher
+     Treffer: ladeinfrastruktur
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von 
+  ⏭️  Rohtext bereits vorhanden: Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeich
+
+============================================================
+  Scanne: SMART TESTSOLUTIONS
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ✅ elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+     Treffer: test, testsystem
+  ⏭️  Rohtext bereits vorhanden: elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+
+============================================================
+  Scanne: Infineon
+============================================================
+  📜 Scrolle...
+  🔗 41 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  ✅ Staff Engineer Field Application Engineering (f/m/div)
+     Treffer: field
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering (f/m/div)
+
+============================================================
+  Scanne: Sereact
+============================================================
+  📜 Scrolle...
+  🔗 32 Links gesamt
+  ✅ Heuristik: 27 Job-Links erkannt
+  📋 27 Kandidaten
+  🚫 Nicht passend: Internship Hardware
+  ✅ Embedded Engineer (m/f/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  🚫 Nicht passend: Internship Hardware
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Engineer (m/f/d)
+
+============================================================
+  Scanne: eta plus electronic
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Einstellungen speichern
+     - Alle Cookies akzeptieren
+     - English
+     - Stellenangebote
+     - Stellenangebote
+     - Stellenangebote
+
+============================================================
+  Scanne: Eberspaecher
+============================================================
+  📜 Scrolle...
+  🔗 94 Links gesamt
+  ✅ Heuristik: 32 Job-Links erkannt
+  🔒 Domain-Filter: 1 Fremd-Links entfernt (nur 'eberspaecher-karriere.de' erlaubt)
+  📋 31 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Werkstudent C-Office und EB-Frauennetzwerk (m/w/d)
+     - Head of BU Controlling (Functions) BU Systems & Solutions (m/w/d)
+     - Duales Studium (DHBW) Wirtschaftsinformatik 2026
+     - Referent Group Strategy & Development (m/w/d)
+     - SAP FI Consultant (m/w/d)
+     - Specialist Production Quality (m/w/d)
+     - Praktikum AI & Digitalization (m/w/d)
+     - Werkstudent Steuern (m/w/d)
+     - Referent Internationale Rechnungslegung (IFRS) (m/w/d)
+     - Werkstudent Center of Excellence Accounting (m/w/d)
+
+============================================================
+  Scanne: Pilz GmbH
+============================================================
+  📜 Scrolle...
+  🔗 19 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/[0-9]+/Description/31'
+  📋 8 Kandidaten
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) ab 2026
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) a
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+
+============================================================
+  Scanne: Dekra
+============================================================
+  📜 Scrolle...
+  🔗 109 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 22 Kandidaten
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+
+============================================================
+  Scanne: Festool
+============================================================
+  📜 Scrolle...
+  🔗 61 Links gesamt
+  ✅ Heuristik: 1 Job-Links erkannt
+  📋 1 Kandidaten
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+
+============================================================
+  Scanne: Balluff
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/'
+  📋 22 Kandidaten
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+
+============================================================
+  Scanne: TK Elevator
+============================================================
+  📜 Scrolle...
+  🔗 110 Links gesamt
+  ✅ Heuristik: 4 Job-Links erkannt
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Technischer Betriebswirt / Ingenieur als Regionalleiter Operations Aufzugsanlage
+     - Sachbearbeiter Zeitwirtschaft (m/w/d)
+     - IT SAP FICO Business Analyst (m/w/d)
+     - Finanzbuchhalter / Sachbearbeiter Rechnungswesen (m/w/d)
+
+============================================================
+  Scanne: AP Sensing
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Bekanntes Muster: '/de/unternehmen/karriere/'
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Lead Software Engineer – Application Platform (m/w/d)
+     - Senior Software Developer - Fullstack .Net + Angular (m/w/d)
+     - Senior Machine Learning Engineer (m/w/d)
+     - Werkstudent (m/w/d) im Bereich Data Science
+
+  🔍 Prüfe 2 vergaben-markierte Stelle(n) auf Erreichbarkeit...
+
+  🔍 Prüfe 35 nicht mehr gesehene Stelle(n) per Playwright...
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200635561-5556/analog-design-engi
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/hardware-test-engineer-m-f-d/09
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/supplier-data-manager-m-f-d/13e
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969924482?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969077296?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012911?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969734917?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012857?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969354424?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382284?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808955939416?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808960095668?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.neura-robotics.com/de/offer-redirect/?offerApiId=dHJpanR4
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/system-integration-engineer-m-f
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Hardwareentwickler-Elektronik-
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Embedded-Softwareentwickler-Ba
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Testingenieur-f%C3%BCr-Validat
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808962112726?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://ag.wd3.myworkdayjobs.com/de-DE/Airbus/job/Marseille-Area/ALT-2
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200658403-5556/pcb-hardware-engin
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969910632?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.thalesgroup.com/global/en/job/R0321506/fpga-design-eng
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-Elektroniker-f%C3%BCr-Ger%C3%A4t
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Seriendisponent-Elektronik-%28mwd%29/149177
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Product-Engineer-Fine-Pitch-Board-Co
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Mechanical-Design-Engineer-%28mfd%29-DATA-P
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobsearch.daimlertruck.com/index.php?ac=jobad&id=421250
+  🚫 Nicht mehr gelistet → nicht_passend: https://adstec-karriere.dvinci-hr.com/de/jobs/50441/pflichtpraktikant-
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.dekra.com/job/Stuttgart-Software-Quality-Engineer-Test
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382272?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Factory-Acceptance-Test-Coordinator-%28mfd%
+  💾 Stellen vor Speichern: 173
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+  🗄️  Datenbank aktualisiert
+
+============================================================
+  FERTIG
+  Stellen gefunden (aktiv):  102
+  Als vergeben markiert:     0
+  stellen.json:              /home/sascha/Jobsuche/stellen.json
+  bekannte_stellen.json:     /home/sascha/Jobsuche/bekannte_stellen.json
+============================================================
+
+/home/sascha/Jobsuche/start.sh: line 6: che/log.txt: No such file or directory
+Thu 30 Apr 09:00:03 CEST 2026: venv ok
+
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 107 Suchbegriffe, 75 Ausschlussbegriffe, 27 Firmen
+  📂 Stellen geladen: 173
+
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    IT System Administrator - Entwicklung (m/w/d)
+     Treffer: entwicklung
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 9 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Senior Product Engineer - Fine-Pitch Board Connectors (m/f/d)
+     Treffer: product engineer
+  🚫 Nicht passend: Ausbildung Elektroniker für Geräte und Systeme 2026 (m/w/d)
+  📋 Seite 3: 10 Jobs gefunden
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Systems (m/f/d
+  📋 Seite 4: 10 Jobs gefunden
+  ✅    Staff Product Development Engineer (m/f/d)
+     Treffer: development engineer
+  📋 Seite 5: 10 Jobs gefunden
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w/d)
+  📋 Seite 6: 10 Jobs gefunden
+  ✅    Field Application Engineer - Distribution (m/f/d) - REMOTE EMEA
+     Treffer: field
+  📋 Seite 7: 10 Jobs gefunden
+  ✅    Systems Development Engineer (m/w/d) - Industrial Connectivity & Compliance
+     Treffer: development engineer
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  ✅    Senior Embedded Application Developer (m/w/d)
+     Treffer: embedded, embedded
+  📋 Seite 8: 10 Jobs gefunden
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  📋 Seite 9: 4 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 10
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  🚫 Nicht passend: Ausbildung Elektroniker für Geräte und Systeme 2026 (m/w/d)
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Syst
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Entwicklungsingenieur (w/m/d) Fasertechnologie und optische Messtechnik EUV
+     Treffer: messtechnik, entwicklung, messtechnik, entwicklungsingenieur
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 2: 15 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  📋 Seite 2: 18 Jobs gefunden
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  ✅    IT-/Elektrotechniker für Stellwerke (m/w/d)
+     Treffer: elektrotechniker
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elektronik (m/
+  ℹ️  Keine weiteren Jobs auf Seite 3
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elek
+
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/d)
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/
+
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung von Magnetv
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung v
+
+============================================================
+  Scanne: Keysight (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  ✅    Development Engineer for Test Solutions in RF & Photonics Technology
+     Treffer: test, development engineer
+  ✅    Feinmechaniker / Mechatroniker (m/w/d) – Optoelektronik, Messtechnik & Testsysteme (Böblingen)
+     Treffer: test, messtechnik, elektronik, messtechnik, testsystem
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Advanced Electronics Hardware Engineer for Photonics R&D
+     Treffer: hardware, hardware engineer
+  ✅    Senior Photonic Instrument Development Engineer
+     Treffer: development engineer
+  ✅    Feinmechaniker / Mikromonteur (m/w/d) – Optoelektronik & Präzisionsmontage (Labor, Böblingen)
+     Treffer: elektronik
+  ✅    Hardware Engineering Intern – Test & Measurement
+     Treffer: hardware, test, hardware engineer, measurement
+  ✅    Optik & Photonik Test Techniker (m/w/d) – Electronics / Measurement
+     Treffer: test, measurement
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    High-Speed Photonics Instrument Development Engineer
+     Treffer: development engineer
+  ✅    5G-NTN Business Development Engineer
+     Treffer: development engineer
+  🚫 Nicht passend: Test Engineer/Technician
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  ✅    Senior Business Development Engineer
+     Treffer: development engineer
+  📋 Seite 9: 10 Jobs gefunden
+  🚫 Nicht passend: Finance BI Data Analyst
+  ✅    R&D Expert Analog Engineer
+     Treffer: analog
+  📋 Seite 10: 2 Jobs gefunden
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  🚫 Nicht passend: Test Engineer/Technician
+  🚫 Nicht passend: Finance BI Data Analyst
+
+============================================================
+  Scanne: Airbus (Workday API)
+============================================================
+  📋 Seite 1: 13 Jobs (1–13 von 13)
+  ✅    (Senior) Machine Learning & Data Engineer (m/w/d) – KI für Autonome Systeme
+     2 Locations | Treffer: data engineer
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines digitalen
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abgestrahlter N
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation (d/m/w)
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abges
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation 
+
+============================================================
+  Scanne: EnBW (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationstechnik & E
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von AutoCAD-Rou
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukturen (w/m/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 10 Jobs gefunden
+  📋 Seite 10: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationst
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von A
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukture
+
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 78 Links gesamt
+  ✅ Heuristik: 60 Job-Links erkannt
+  📋 60 Kandidaten
+  ✅ AI Data Engineer (Human)
+     Treffer: data engineer
+  ✅ Controls and Embedded Electronics & Firmware Specialist (Human)
+     Treffer: embedded, embedded
+  ✅ Electronics Development Engineer (Human)
+     Treffer: electronics development, development engineer
+  ✅ Electronics Engineer - Humanoid (Human)
+     Treffer: electronics engineer
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  ⏭️  Rohtext bereits vorhanden: AI Data Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Controls and Embedded Electronics & Firmware Specialist (Hum
+  ⏭️  Rohtext bereits vorhanden: Electronics Development Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Electronics Engineer - Humanoid (Human)
+
+============================================================
+  Scanne: Star Cooperation
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '-de-[jf]\d+\.html'
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - (Senior-) Consultant (m/w/d) Managementberatung – Schwerpunkt Artificial Intelli
+     - Controller (m/w/d)
+     - IT Support Mitarbeiter (m/w/d)
+     - Sachbearbeiter Facility Management (m/w/d)
+     - Senior Developer (m/w/d) .NET / C#
+     - Werkstudent (m/w/d) – Managementberatung – Schwerpunkt Artificial Intelligence
+
+============================================================
+  Scanne: GlobeFuelCell
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Bekanntes Muster: '/n-carreers/'
+  📋 2 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Versuchstechniker (m/w/d)
+     - Werkstudent Marketing, Communication & Sales in einem GreenTech Startup (m/w/d)
+
+============================================================
+  Scanne: Hensoldt
+============================================================
+  📜 Scrolle...
+  🔗 96 Links gesamt
+  ✅ Heuristik: 39 Job-Links erkannt
+  📋 39 Kandidaten
+  ✅ Testingenieur für Validation & Verification (m/w/d)
+     Treffer: test, testingenieur, testingenieur, validation, verification, testingenieur
+  ✅ Hardwareentwickler Elektronik (m/w/d)
+     Treffer: hardware, elektronik, hardwareentwickl
+  ✅ Embedded Softwareentwickler - Basissoftware (m/w/d)
+     Treffer: embedded, embedded
+  ⏭️  Rohtext bereits vorhanden: Testingenieur für Validation & Verification (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler Elektronik (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Softwareentwickler - Basissoftware (m/w/d)
+
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 28 Job-Links erkannt
+  📋 28 Kandidaten
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/d) für Tro
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/
+
+============================================================
+  Scanne: Helmut Fischer GmbH
+============================================================
+  📜 Scrolle...
+  🔗 34 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 21 Kandidaten
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik
+     Treffer: hardware, hardwareentwickl, analog
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentwicklung
+     Treffer: hardware, entwicklung, hardwareentwickl, analog
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentw
+
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  📜 Scrolle...
+  🔗 301 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 19 Kandidaten
+  ✅ ATE Engineer - PCB Hardware (m/f/d)
+     Treffer: hardware, pcb
+  ✅ PMU Design Verification Engineer (m/f/d)
+     Treffer: verification
+  ⏭️  Rohtext bereits vorhanden: ATE Engineer - PCB Hardware (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: PMU Design Verification Engineer (m/f/d)
+
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 138 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Software Test Engineer (all genders)
+     Treffer: test, test engineer, test engineer
+  ✅ DevOps Engineer Test Automation (all genders)
+     Treffer: test, test automation
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all genders"
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all 
+  ⏭️  Rohtext bereits vorhanden: Software Test Engineer (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Test Automation (all genders)
+
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 425 Links gesamt
+  ✅ Heuristik: 265 Job-Links erkannt
+  📋 265 Kandidaten
+  ✅ System Ingenieur- Integration & Tests / Funkkommunikationssysteme im R
+     Treffer: test
+  ✅ Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitnehmerüberlas
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten Testsystem
+  ✅ Qualitätsingenieur Produktentwicklung (m/w/d)
+     Treffer: entwicklung
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich der sichere
+  🚫 Nicht passend: Initiativbewerbung als Systemingenieur (m/w/d) Kundenprojekte
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten 
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich d
+  🚫 Nicht passend: Initiativbewerbung als Systemingenieur (m/w/d) Kundenprojekt
+  ⏭️  Rohtext bereits vorhanden: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  ⏭️  Rohtext bereits vorhanden: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ⏭️  Rohtext bereits vorhanden: Senior Test Engineer Java (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Senior Software Developer Test (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Qualitätsingenieur Produktentwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Analog & Power Electronics Design Engineer (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Design Engineer R&D for Analog & Power Electronics (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Expert Digital ASIC Design Engineer (m/f/d)
+     Treffer: asic
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer, test engineer, hardware test engineer
+  ⏭️  Rohtext bereits vorhanden: Analog & Power Electronics Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Design Engineer R&D for Analog & Power Electronics (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Digital ASIC Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Hardware Test Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Electrical Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ⏭️  Rohtext bereits vorhanden: Electrical Product Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Product Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 48 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/d)
+     Treffer: embedded, embedded
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ System Architect (m/f/d) for the SmarTest 8 hardware layer ART
+     Treffer: hardware, test
+  ⏭️  Rohtext bereits vorhanden: R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/
+  ⏭️  Rohtext bereits vorhanden: R&D Software Development Engineer (C++) (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: System Architect (m/f/d) for the SmarTest 8 hardware layer A
+
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+
+============================================================
+  Scanne: Daimler Truck
+============================================================
+  📜 Scrolle...
+  🔗 58 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  🚫 Nicht passend: Praktikum im Bereich Projektmanagement Gesamtfahrzeugentwicklung ab Ok
+  🚫 Nicht passend: Praktikum im Bereich Projektmanagement Gesamtfahrzeugentwick
+
+============================================================
+  Scanne: ZSW
+============================================================
+  📜 Scrolle...
+  🔗 15 Links gesamt
+  ✅ Heuristik: 11 Job-Links erkannt
+  📋 11 Kandidaten
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d) im PV-Tes
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d)
+
+============================================================
+  Scanne: ads-tec Energy
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Heuristik: 20 Job-Links erkannt
+  📋 20 Kandidaten
+  ✅ Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von Ladeinfras
+     Treffer: entwicklung, ladeinfrastruktur, batteriespeicher, elektrotechniker, elektroingenieur, batterie
+  ✅ Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeicher
+     Treffer: ladeinfrastruktur
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von 
+  ⏭️  Rohtext bereits vorhanden: Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeich
+
+============================================================
+  Scanne: SMART TESTSOLUTIONS
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ✅ elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+     Treffer: test, testsystem
+  ⏭️  Rohtext bereits vorhanden: elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+
+============================================================
+  Scanne: Infineon
+============================================================
+  📜 Scrolle...
+  🔗 41 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  ✅ Staff Engineer Field Application Engineering (f/m/div)
+     Treffer: field
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering (f/m/div)
+
+============================================================
+  Scanne: Sereact
+============================================================
+  📜 Scrolle...
+  🔗 32 Links gesamt
+  ✅ Heuristik: 27 Job-Links erkannt
+  📋 27 Kandidaten
+  🚫 Nicht passend: Internship Hardware
+  ✅ Embedded Engineer (m/f/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  🚫 Nicht passend: Internship Hardware
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Engineer (m/f/d)
+
+============================================================
+  Scanne: eta plus electronic
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Einstellungen speichern
+     - Alle Cookies akzeptieren
+     - English
+     - Stellenangebote
+     - Stellenangebote
+     - Stellenangebote
+
+============================================================
+  Scanne: Eberspaecher
+============================================================
+  📜 Scrolle...
+  🔗 94 Links gesamt
+  ✅ Heuristik: 32 Job-Links erkannt
+  🔒 Domain-Filter: 1 Fremd-Links entfernt (nur 'eberspaecher-karriere.de' erlaubt)
+  📋 31 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Werkstudent C-Office und EB-Frauennetzwerk (m/w/d)
+     - Head of BU Controlling (Functions) BU Systems & Solutions (m/w/d)
+     - Duales Studium (DHBW) Wirtschaftsinformatik 2026
+     - Referent Group Strategy & Development (m/w/d)
+     - SAP FI Consultant (m/w/d)
+     - Specialist Production Quality (m/w/d)
+     - Praktikum AI & Digitalization (m/w/d)
+     - Werkstudent Steuern (m/w/d)
+     - Referent Internationale Rechnungslegung (IFRS) (m/w/d)
+     - Werkstudent Center of Excellence Accounting (m/w/d)
+
+============================================================
+  Scanne: Pilz GmbH
+============================================================
+  📜 Scrolle...
+  🔗 19 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/[0-9]+/Description/31'
+  📋 8 Kandidaten
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) ab 2026
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) a
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+
+============================================================
+  Scanne: Dekra
+============================================================
+  📜 Scrolle...
+  🔗 109 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 22 Kandidaten
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+
+============================================================
+  Scanne: Festool
+============================================================
+  📜 Scrolle...
+  🔗 61 Links gesamt
+  ✅ Heuristik: 1 Job-Links erkannt
+  📋 1 Kandidaten
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+
+============================================================
+  Scanne: Balluff
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/'
+  📋 22 Kandidaten
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+
+============================================================
+  Scanne: TK Elevator
+============================================================
+  📜 Scrolle...
+  🔗 110 Links gesamt
+  ✅ Heuristik: 4 Job-Links erkannt
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Technischer Betriebswirt / Ingenieur als Regionalleiter Operations Aufzugsanlage
+     - Sachbearbeiter Zeitwirtschaft (m/w/d)
+     - IT SAP FICO Business Analyst (m/w/d)
+     - Finanzbuchhalter / Sachbearbeiter Rechnungswesen (m/w/d)
+
+============================================================
+  Scanne: AP Sensing
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Bekanntes Muster: '/de/unternehmen/karriere/'
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Lead Software Engineer – Application Platform (m/w/d)
+     - Senior Software Developer - Fullstack .Net + Angular (m/w/d)
+     - Senior Machine Learning Engineer (m/w/d)
+     - Werkstudent (m/w/d) im Bereich Data Science
+
+  🔍 Prüfe 2 vergaben-markierte Stelle(n) auf Erreichbarkeit...
+
+  🔍 Prüfe 33 nicht mehr gesehene Stelle(n) per Playwright...
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Field-Application-Engineer-%28mwd%29-Europe
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200635561-5556/analog-design-engi
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/hardware-test-engineer-m-f-d/09
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/supplier-data-manager-m-f-d/13e
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969924482?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969077296?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012911?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969734917?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012857?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969354424?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382284?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808955939416?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808960095668?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.neura-robotics.com/de/offer-redirect/?offerApiId=dHJpanR4
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/system-integration-engineer-m-f
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Hardwareentwickler-Elektronik-
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Embedded-Softwareentwickler-Ba
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Testingenieur-f%C3%BCr-Validat
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808962112726?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://ag.wd3.myworkdayjobs.com/de-DE/Airbus/job/Marseille-Area/ALT-2
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200658403-5556/pcb-hardware-engin
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969910632?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.thalesgroup.com/global/en/job/R0321506/fpga-design-eng
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Mechanical-Design-Engineer-%28mfd%29-DATA-P
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobsearch.daimlertruck.com/index.php?ac=jobad&id=421250
+  🚫 Nicht mehr gelistet → nicht_passend: https://adstec-karriere.dvinci-hr.com/de/jobs/50441/pflichtpraktikant-
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.dekra.com/job/Stuttgart-Software-Quality-Engineer-Test
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382272?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Factory-Acceptance-Test-Coordinator-%28mfd%
+  💾 Stellen vor Speichern: 173
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+  🗄️  Datenbank aktualisiert
+
+============================================================
+  FERTIG
+  Stellen gefunden (aktiv):  104
+  Als vergeben markiert:     0
+  stellen.json:              /home/sascha/Jobsuche/stellen.json
+  bekannte_stellen.json:     /home/sascha/Jobsuche/bekannte_stellen.json
+============================================================
+
+Thu 30 Apr 09:15:37 CEST 2026: scanner ok
+
+============================================================
+  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren
+============================================================
+  2 Stellen zu bearbeiten (Status 2)
+  0 Stellen ohne Standort (Backfill)
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  ✂️  Bekannte Marker – extrahiere direkt...
+  ✅ 4174 Zeichen extrahiert
+  📍 Standort: 
+
+Der Stellentext enthält keine Angabe zum Arbeitsstandort.
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ✂️  Bekannte Marker – extrahiere direkt...
+  ✅ 3746 Zeichen extrahiert
+
+============================================================
+  FERTIG
+  Texte extrahiert:       2
+  Standorte nachgefüllt:  0
+  Weiter mit:             python bewertung.py
+============================================================
+
+Thu 30 Apr 09:15:42 CEST 2026: extraktor ok
+
+============================================================
+  BEWERTUNG  –  Schritt 3: KI-Bewertung
+============================================================
+  2 Stellen zu bewerten (Status 3)
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  🤖 Bewerte...
+  ⭐ Score: 62%  |  NICHT BEWERBEN
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  🤖 Bewerte...
+  ⭐ Score: 28%  |  NICHT BEWERBEN
+
+============================================================
+  FERTIG
+  Stellen bewertet: 2
+============================================================
+
+  🏆 TOP 5:
+      88%  [bewer]  Aviotech: Techniker / Ingenieur für Testaufbauten und Avioni
+      88%  [bewer]  Star Cooperation: Ingenieur / Techniker für Elektronikentwicklung un
+      82%  [bewer]  Advantest Hardware: Hardware Test Engineer (m/f/d)
+      82%  [bewer]  Ivona Koban Personalagentur: Regelungs- und Steuerungstechnik * Hardwareentwick
+      82%  [bewer]  Star Cooperation: Ingenieur / Techniker für Prüftechnik und Sonderau
+
+Thu 30 Apr 09:16:10 CEST 2026: bewertung ok
+
+============================================================
+  REPORT  –  Schritt 4: HTML erstellen & Mail senden
+============================================================
+  🚫 42 Stelle(n) als nicht passend markiert (Ausschluss-Prüfung)
+  📄 Erstelle Report...
+  ✅ Report gespeichert: /home/sascha/Jobsuche/report.html
+  📧 Sende Änderungs-Mail (2 neu, 12 vergeben)...
+  📧 Mail gesendet an Sascha.Ruettiger@icloud.com
+  🔄 neu-Flag für 2 Stellen zurückgesetzt
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+
+============================================================
+  FERTIG
+  Report: /home/sascha/Jobsuche/report.html
+============================================================
+
+Thu 30 Apr 09:16:14 CEST 2026: report ok
+Thu 30 Apr 09:16:14 CEST 2026: Fertig
+Fri  1 May 07:00:01 CEST 2026: Start
+Fri  1 May 07:00:01 CEST 2026: cd ok
+Fri  1 May 07:00:01 CEST 2026: venv ok
+
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 107 Suchbegriffe, 75 Ausschlussbegriffe, 28 Firmen
+  📂 Stellen geladen: 173
+
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    IT System Administrator - Entwicklung (m/w/d)
+     Treffer: entwicklung
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Systems (m/f/d
+  ✅    Staff Product Development Engineer (m/f/d)
+     Treffer: development engineer
+  📋 Seite 4: 10 Jobs gefunden
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w/d)
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  ✅    Field Application Engineer (m/w/d) - Europe - remote
+     Treffer: field
+  ✅    Systems Development Engineer (m/w/d) - Industrial Connectivity & Compliance
+     Treffer: development engineer
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  📋 Seite 7: 10 Jobs gefunden
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 2 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 10
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Syst
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Automatisierungstechnik (m/w
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Entwicklungsingenieur (w/m/d) Fasertechnologie und optische Messtechnik EUV
+     Treffer: messtechnik, entwicklung, messtechnik, entwicklungsingenieur
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 2: 15 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  📋 Seite 2: 18 Jobs gefunden
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  ✅    IT-/Elektrotechniker für Stellwerke (m/w/d)
+     Treffer: elektrotechniker
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elektronik (m/
+  ℹ️  Keine weiteren Jobs auf Seite 3
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elek
+
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/d)
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/
+
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung von Magnetv
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung v
+
+============================================================
+  Scanne: Keysight (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  ✅    Development Engineer for Test Solutions in RF & Photonics Technology
+     Treffer: test, development engineer
+  ✅    Feinmechaniker / Mechatroniker (m/w/d) – Optoelektronik, Messtechnik & Testsysteme (Böblingen)
+     Treffer: test, messtechnik, elektronik, messtechnik, testsystem
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Advanced Electronics Hardware Engineer for Photonics R&D
+     Treffer: hardware, hardware engineer
+  ✅    Senior Photonic Instrument Development Engineer
+     Treffer: development engineer
+  ✅    Feinmechaniker / Mikromonteur (m/w/d) – Optoelektronik & Präzisionsmontage (Labor, Böblingen)
+     Treffer: elektronik
+  ✅    Hardware Engineering Intern – Test & Measurement
+     Treffer: hardware, test, hardware engineer, measurement
+  ✅    Optik & Photonik Test Techniker (m/w/d) – Electronics / Measurement
+     Treffer: test, measurement
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    High-Speed Photonics Instrument Development Engineer
+     Treffer: development engineer
+  🚫 Nicht passend: Test Engineer/Technician
+  📋 Seite 4: 10 Jobs gefunden
+  ✅ 🆕 Territory Account Manager - Test & Measurement Solutions
+     Treffer: test, measurement
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  ✅    Senior Business Development Engineer
+     Treffer: development engineer
+  📋 Seite 9: 10 Jobs gefunden
+  🚫 Nicht passend: Finance BI Data Analyst
+  ✅    R&D Expert Analog Engineer
+     Treffer: analog
+  📋 Seite 10: 1 Jobs gefunden
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  🚫 Nicht passend: Test Engineer/Technician
+  🚫 Nicht passend: Finance BI Data Analyst
+  🆕 Neu: Territory Account Manager - Test & Measurement Solutions
+
+============================================================
+  Scanne: Airbus (Workday API)
+============================================================
+  📋 Seite 1: 13 Jobs (1–13 von 13)
+  ✅    (Senior) Machine Learning & Data Engineer (m/w/d) – KI für Autonome Systeme
+     2 Locations | Treffer: data engineer
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines digitalen
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abgestrahlter N
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation (d/m/w)
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abges
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation 
+
+============================================================
+  Scanne: EnBW (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationstechnik & E
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von AutoCAD-Rou
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukturen (w/m/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 10 Jobs gefunden
+  📋 Seite 10: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationst
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von A
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukture
+
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 78 Links gesamt
+  ✅ Heuristik: 60 Job-Links erkannt
+  📋 60 Kandidaten
+  ✅ AI Data Engineer (Human)
+     Treffer: data engineer
+  ✅ Controls and Embedded Electronics & Firmware Specialist (Human)
+     Treffer: embedded, embedded
+  ✅ Electronics Development Engineer (Human)
+     Treffer: electronics development, development engineer
+  ✅ Electronics Engineer - Humanoid (Human)
+     Treffer: electronics engineer
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  ⏭️  Rohtext bereits vorhanden: AI Data Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Controls and Embedded Electronics & Firmware Specialist (Hum
+  ⏭️  Rohtext bereits vorhanden: Electronics Development Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Electronics Engineer - Humanoid (Human)
+
+============================================================
+  Scanne: Star Cooperation
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '-de-[jf]\d+\.html'
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - (Senior-) Consultant (m/w/d) Managementberatung – Schwerpunkt Artificial Intelli
+     - Controller (m/w/d)
+     - IT Support Mitarbeiter (m/w/d)
+     - Sachbearbeiter Facility Management (m/w/d)
+     - Senior Developer (m/w/d) .NET / C#
+     - Werkstudent (m/w/d) – Managementberatung – Schwerpunkt Artificial Intelligence
+
+============================================================
+  Scanne: GlobeFuelCell
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Bekanntes Muster: '/n-carreers/'
+  📋 2 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Versuchstechniker (m/w/d)
+     - Werkstudent Marketing, Communication & Sales in einem GreenTech Startup (m/w/d)
+
+============================================================
+  Scanne: Hensoldt
+============================================================
+  📜 Scrolle...
+  🔗 96 Links gesamt
+  ✅ Heuristik: 39 Job-Links erkannt
+  📋 39 Kandidaten
+  ✅ Testingenieur für Validation & Verification (m/w/d)
+     Treffer: test, testingenieur, testingenieur, validation, verification, testingenieur
+  ✅ Hardwareentwickler Elektronik (m/w/d)
+     Treffer: hardware, elektronik, hardwareentwickl
+  ✅ Embedded Softwareentwickler - Basissoftware (m/w/d)
+     Treffer: embedded, embedded
+  ⏭️  Rohtext bereits vorhanden: Testingenieur für Validation & Verification (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler Elektronik (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Softwareentwickler - Basissoftware (m/w/d)
+
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 28 Job-Links erkannt
+  📋 28 Kandidaten
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/d) für Tro
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/
+
+============================================================
+  Scanne: Helmut Fischer GmbH
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 18 Kandidaten
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik
+     Treffer: hardware, hardwareentwickl, analog
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentwicklung
+     Treffer: hardware, entwicklung, hardwareentwickl, analog
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentw
+
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  📜 Scrolle...
+  🔗 301 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 19 Kandidaten
+  ✅ ATE Engineer - PCB Hardware (m/f/d)
+     Treffer: hardware, pcb
+  ✅ PMU Design Verification Engineer (m/f/d)
+     Treffer: verification
+  ⏭️  Rohtext bereits vorhanden: ATE Engineer - PCB Hardware (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: PMU Design Verification Engineer (m/f/d)
+
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 136 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ DevOps Engineer Test Automation (all genders)
+     Treffer: test, test automation
+  ✅ Software Test Engineer (all genders)
+     Treffer: test, test engineer, test engineer
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all genders"
+  ✅ DevOps Engineer Testing (all genders)
+     Treffer: test
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all 
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Test Automation (all genders)
+  ⏭️  Rohtext bereits vorhanden: Software Test Engineer (all genders)
+  📄 Lade Rohtext: DevOps Engineer Testing (all genders)...
+  🆕 Neu: DevOps Engineer Testing (all genders)
+
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 424 Links gesamt
+  ✅ Heuristik: 265 Job-Links erkannt
+  📋 265 Kandidaten
+  ✅ Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung befristet 
+     Treffer: test, python, python
+  ✅ System Ingenieur- Integration & Tests / Funkkommunikationssysteme im R
+     Treffer: test
+  ✅ Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitnehmerüberlas
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten Testsystem
+  ✅ Qualitätsingenieur Produktentwicklung (m/w/d)
+     Treffer: entwicklung
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich der sichere
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten 
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich d
+  📄 Lade Rohtext: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung ...
+  🆕 Neu: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung 
+  ⏭️  Rohtext bereits vorhanden: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  ⏭️  Rohtext bereits vorhanden: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ⏭️  Rohtext bereits vorhanden: Senior Test Engineer Java (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Senior Software Developer Test (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Qualitätsingenieur Produktentwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Analog & Power Electronics Design Engineer (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Design Engineer R&D for Analog & Power Electronics (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Expert Digital ASIC Design Engineer (m/f/d)
+     Treffer: asic
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer, test engineer, hardware test engineer
+  ⏭️  Rohtext bereits vorhanden: Analog & Power Electronics Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Design Engineer R&D for Analog & Power Electronics (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Digital ASIC Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Hardware Test Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Electrical Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ⏭️  Rohtext bereits vorhanden: Electrical Product Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Product Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 48 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/d)
+     Treffer: embedded, embedded
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ System Architect (m/f/d) for the SmarTest 8 hardware layer ART
+     Treffer: hardware, test
+  ⏭️  Rohtext bereits vorhanden: R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/
+  ⏭️  Rohtext bereits vorhanden: R&D Software Development Engineer (C++) (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: System Architect (m/f/d) for the SmarTest 8 hardware layer A
+
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Expert Intellectual Property (m/f/d) - min. 35h
+
+============================================================
+  Scanne: Daimler Truck
+============================================================
+  📜 Scrolle...
+  🔗 58 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Praktikum im Bereich Payment und Financial Integration bei Daimler Truck Financi
+     - Praktikum im Bereich Treasury Controlling & M&A ab Mitte Oktober 2026
+     - Praktikum im Personalbereich am Standort Gaggenau ab September 2026
+     - Praktikum (w/m/d) im Projekt Agile@AAP
+     - Praktikum (w/m/d) im Bereich Order Management Daimler Buses Mannheim ab August 2
+     - Praktikum (w/m/d) im Bereich Data Analytics im Qualitätsmanagement bei Daimler B
+     - Praktikum im Bereich Lieferantenmanagement Disposition 15. August 2026 – 28. Feb
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+     - Praktikant (m/w/d) Marketing Kommunikation Deutschland und internationale Custom
+
+============================================================
+  Scanne: ZSW
+============================================================
+  📜 Scrolle...
+  🔗 16 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d) im PV-Tes
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d)
+
+============================================================
+  Scanne: ads-tec Energy
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Heuristik: 20 Job-Links erkannt
+  📋 20 Kandidaten
+  ✅ Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von Ladeinfras
+     Treffer: entwicklung, ladeinfrastruktur, batteriespeicher, elektrotechniker, elektroingenieur, batterie
+  ✅ Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeicher
+     Treffer: ladeinfrastruktur
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von 
+  ⏭️  Rohtext bereits vorhanden: Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeich
+
+============================================================
+  Scanne: SMART TESTSOLUTIONS
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ✅ elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+     Treffer: test, testsystem
+  ⏭️  Rohtext bereits vorhanden: elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+
+============================================================
+  Scanne: Infineon
+============================================================
+  📜 Scrolle...
+  🔗 41 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  ✅ Staff Engineer Field Application Engineering (f/m/div)
+     Treffer: field
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering (f/m/div)
+
+============================================================
+  Scanne: Sereact
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 26 Job-Links erkannt
+  📋 26 Kandidaten
+  🚫 Nicht passend: Internship Hardware
+  ✅ Embedded Engineer (m/f/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  🚫 Nicht passend: Internship Hardware
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Engineer (m/f/d)
+
+============================================================
+  Scanne: eta plus electronic
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Einstellungen speichern
+     - Alle Cookies akzeptieren
+     - English
+     - Stellenangebote
+     - Stellenangebote
+     - Stellenangebote
+
+============================================================
+  Scanne: Eberspaecher
+============================================================
+  📜 Scrolle...
+  🔗 94 Links gesamt
+  ✅ Heuristik: 32 Job-Links erkannt
+  🔒 Domain-Filter: 1 Fremd-Links entfernt (nur 'eberspaecher-karriere.de' erlaubt)
+  📋 31 Kandidaten
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w/d) 2026
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w
+
+============================================================
+  Scanne: Pilz GmbH
+============================================================
+  📜 Scrolle...
+  🔗 19 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/[0-9]+/Description/31'
+  📋 8 Kandidaten
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) ab 2026
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) a
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+
+============================================================
+  Scanne: Dekra
+============================================================
+  📜 Scrolle...
+  🔗 109 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 22 Kandidaten
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+
+============================================================
+  Scanne: Festool
+============================================================
+  📜 Scrolle...
+  🔗 61 Links gesamt
+  ✅ Heuristik: 1 Job-Links erkannt
+  📋 1 Kandidaten
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+
+============================================================
+  Scanne: Balluff
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/'
+  📋 22 Kandidaten
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+
+============================================================
+  Scanne: TK Elevator
+============================================================
+  📜 Scrolle...
+  🔗 110 Links gesamt
+  ✅ Heuristik: 4 Job-Links erkannt
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Technischer Betriebswirt / Ingenieur als Regionalleiter Operations Aufzugsanlage
+     - Sachbearbeiter Zeitwirtschaft (m/w/d)
+     - IT SAP FICO Business Analyst (m/w/d)
+     - Finanzbuchhalter / Sachbearbeiter Rechnungswesen (m/w/d)
+
+============================================================
+  Scanne: AP Sensing
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Bekanntes Muster: '/de/unternehmen/karriere/'
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Lead Software Engineer – Application Platform (m/w/d)
+     - Senior Software Developer - Fullstack .Net + Angular (m/w/d)
+     - Senior Machine Learning Engineer (m/w/d)
+     - Werkstudent (m/w/d) im Bereich Data Science
+
+============================================================
+  Scanne: Sensirion
+============================================================
+  📜 Scrolle...
+  🔗 183 Links gesamt
+  ✅ Heuristik: 7 Job-Links erkannt
+  📋 7 Kandidaten
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+
+  🔍 Prüfe 2 vergaben-markierte Stelle(n) auf Erreichbarkeit...
+
+  🔍 Prüfe 38 nicht mehr gesehene Stelle(n) per Playwright...
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Embedded-Application-Developer-%28mw
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Field-Application-Engineer-Distribution-%28
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200635561-5556/analog-design-engi
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/hardware-test-engineer-m-f-d/09
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/supplier-data-manager-m-f-d/13e
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969924482?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969077296?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012911?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969734917?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012857?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969354424?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382284?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808955939416?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808960095668?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.neura-robotics.com/de/offer-redirect/?offerApiId=dHJpanR4
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/system-integration-engineer-m-f
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Hardwareentwickler-Elektronik-
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Embedded-Softwareentwickler-Ba
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Testingenieur-f%C3%BCr-Validat
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808962112726?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://ag.wd3.myworkdayjobs.com/de-DE/Airbus/job/Marseille-Area/ALT-2
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200658403-5556/pcb-hardware-engin
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969910632?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.thalesgroup.com/global/en/job/R0321506/fpga-design-eng
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-Elektroniker-f%C3%BCr-Ger%C3%A4t
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Product-Engineer-Fine-Pitch-Board-Co
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Mechanical-Design-Engineer-%28mfd%29-DATA-P
+  🗑️  Vergeben (404/410): https://www.rohde-schwarz.com/de/karriere/stellenangebote/initiativbewerbung-als
+  🚫 Nicht mehr gelistet → nicht_passend: https://adstec-karriere.dvinci-hr.com/de/jobs/50441/pflichtpraktikant-
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.dekra.com/job/Stuttgart-Software-Quality-Engineer-Test
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382272?hl=de
+  🗑️  Vergeben (404/410): https://www.eberspaecher-karriere.de/jobboerse/head-m-w-d-of-test-center
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Factory-Acceptance-Test-Coordinator-%28mfd%
+  💾 Stellen vor Speichern: 176
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+  🗄️  Datenbank aktualisiert
+
+============================================================
+  FERTIG
+  Stellen gefunden (aktiv):  103
+  Als vergeben markiert:     2
+  stellen.json:              /home/sascha/Jobsuche/stellen.json
+  bekannte_stellen.json:     /home/sascha/Jobsuche/bekannte_stellen.json
+============================================================
+
+Fri  1 May 07:16:54 CEST 2026: scanner ok
+
+============================================================
+  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren
+============================================================
+  3 Stellen zu bearbeiten (Status 2)
+  0 Stellen ohne Standort (Backfill)
+
+  ──────────────────────────────────────────────────
+  Keysight: Territory Account Manager - Test & Measurement Solutions
+  ✂️  Bekannte Marker – extrahiere direkt...
+  ✅ 2512 Zeichen extrahiert
+
+  ──────────────────────────────────────────────────
+  Philips: DevOps Engineer Testing (all genders)
+  ✂️  Bekannte Marker – extrahiere direkt...
+  ✅ 5979 Zeichen extrahiert
+  📍 Standort: Böblingen
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung 
+  ✂️  Bekannte Marker – extrahiere direkt...
+  ✅ 4601 Zeichen extrahiert
+
+============================================================
+  FERTIG
+  Texte extrahiert:       3
+  Standorte nachgefüllt:  0
+  Weiter mit:             python bewertung.py
+============================================================
+
+Fri  1 May 07:16:58 CEST 2026: extraktor ok
+
+============================================================
+  BEWERTUNG  –  Schritt 3: KI-Bewertung
+============================================================
+  3 Stellen zu bewerten (Status 3)
+
+  ──────────────────────────────────────────────────
+  Keysight: Territory Account Manager - Test & Measurement Solutions
+  🤖 Bewerte...
+  ⭐ Score: 12%  |  NICHT BEWERBEN
+
+  ──────────────────────────────────────────────────
+  Philips: DevOps Engineer Testing (all genders)
+  🤖 Bewerte...
+  ⭐ Score: 32%  |  NICHT BEWERBEN
+
+  ──────────────────────────────────────────────────
+  Rohde & Schwarz: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung 
+  🤖 Bewerte...
+  ⭐ Score: 38%  |  NICHT BEWERBEN
+
+============================================================
+  FERTIG
+  Stellen bewertet: 3
+============================================================
+
+  🏆 TOP 5:
+      88%  [bewer]  Aviotech: Techniker / Ingenieur für Testaufbauten und Avioni
+      88%  [bewer]  Star Cooperation: Ingenieur / Techniker für Elektronikentwicklung un
+      82%  [bewer]  Advantest Hardware: Hardware Test Engineer (m/f/d)
+      82%  [bewer]  Ivona Koban Personalagentur: Regelungs- und Steuerungstechnik * Hardwareentwick
+      82%  [bewer]  Star Cooperation: Ingenieur / Techniker für Prüftechnik und Sonderau
+
+Fri  1 May 07:17:35 CEST 2026: bewertung ok
+
+============================================================
+  REPORT  –  Schritt 4: HTML erstellen & Mail senden
+============================================================
+  🚫 43 Stelle(n) als nicht passend markiert (Ausschluss-Prüfung)
+  📄 Erstelle Report...
+  ✅ Report gespeichert: /home/sascha/Jobsuche/report.html
+  📧 Sende Änderungs-Mail (3 neu, 13 vergeben)...
+  📧 Mail gesendet an Sascha.Ruettiger@icloud.com
+  🔄 neu-Flag für 3 Stellen zurückgesetzt
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+
+============================================================
+  FERTIG
+  Report: /home/sascha/Jobsuche/report.html
+============================================================
+
+Fri  1 May 07:17:39 CEST 2026: report ok
+Fri  1 May 07:17:39 CEST 2026: Fertig
+Sat  2 May 07:00:02 CEST 2026: Start
+Sat  2 May 07:00:02 CEST 2026: cd ok
+Sat  2 May 07:00:02 CEST 2026: venv ok
+
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 107 Suchbegriffe, 75 Ausschlussbegriffe, 28 Firmen
+  📂 Stellen geladen: 176
+
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    IT System Administrator - Entwicklung (m/w/d)
+     Treffer: entwicklung
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  📋 Seite 2: 10 Jobs gefunden
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Systems (m/f/d
+  ✅    Staff Product Development Engineer (m/f/d)
+     Treffer: development engineer
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  ✅    Senior Product Engineer - Fine-Pitch Board Connectors (m/f/d)
+     Treffer: product engineer
+  📋 Seite 6: 10 Jobs gefunden
+  ✅    Field Application Engineer (m/w/d) - Europe - remote
+     Treffer: field
+  ✅    Systems Development Engineer (m/w/d) - Industrial Connectivity & Compliance
+     Treffer: development engineer
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  ✅    Field Application Engineer - Distribution (m/f/d) - REMOTE EMEA
+     Treffer: field
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  📋 Seite 9: 2 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 10
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  🚫 Nicht passend: Senior Product Development Engineer - Industrial Safety Syst
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Entwicklungsingenieur (w/m/d) Fasertechnologie und optische Messtechnik EUV
+     Treffer: messtechnik, entwicklung, messtechnik, entwicklungsingenieur
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 2: 15 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  📋 Seite 2: 18 Jobs gefunden
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  ✅    IT-/Elektrotechniker für Stellwerke (m/w/d)
+     Treffer: elektrotechniker
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elektronik (m/
+  ℹ️  Keine weiteren Jobs auf Seite 3
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elek
+
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/d)
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/
+
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung von Magnetv
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung v
+
+============================================================
+  Scanne: Keysight (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  ✅    Development Engineer for Test Solutions in RF & Photonics Technology
+     Treffer: test, development engineer
+  ✅    Feinmechaniker / Mechatroniker (m/w/d) – Optoelektronik, Messtechnik & Testsysteme (Böblingen)
+     Treffer: test, messtechnik, elektronik, messtechnik, testsystem
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Advanced Electronics Hardware Engineer for Photonics R&D
+     Treffer: hardware, hardware engineer
+  ✅    Senior Photonic Instrument Development Engineer
+     Treffer: development engineer
+  ✅    Feinmechaniker / Mikromonteur (m/w/d) – Optoelektronik & Präzisionsmontage (Labor, Böblingen)
+     Treffer: elektronik
+  ✅    Hardware Engineering Intern – Test & Measurement
+     Treffer: hardware, test, hardware engineer, measurement
+  ✅    Optik & Photonik Test Techniker (m/w/d) – Electronics / Measurement
+     Treffer: test, measurement
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    High-Speed Photonics Instrument Development Engineer
+     Treffer: development engineer
+  🚫 Nicht passend: Test Engineer/Technician
+  📋 Seite 4: 10 Jobs gefunden
+  ✅    Territory Account Manager - Test & Measurement Solutions
+     Treffer: test, measurement
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  ✅    Senior Business Development Engineer
+     Treffer: development engineer
+  📋 Seite 9: 10 Jobs gefunden
+  🚫 Nicht passend: Finance BI Data Analyst
+  ✅    R&D Expert Analog Engineer
+     Treffer: analog
+  📋 Seite 10: 2 Jobs gefunden
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  🚫 Nicht passend: Test Engineer/Technician
+  🚫 Nicht passend: Finance BI Data Analyst
+
+============================================================
+  Scanne: Airbus (Workday API)
+============================================================
+  📋 Seite 1: 13 Jobs (1–13 von 13)
+  ✅    (Senior) Machine Learning & Data Engineer (m/w/d) – KI für Autonome Systeme
+     2 Locations | Treffer: data engineer
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines digitalen
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abgestrahlter N
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation (d/m/w)
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abges
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation 
+
+============================================================
+  Scanne: EnBW (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationstechnik & E
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von AutoCAD-Rou
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukturen (w/m/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 10 Jobs gefunden
+  📋 Seite 10: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationst
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von A
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukture
+
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 78 Links gesamt
+  ✅ Heuristik: 60 Job-Links erkannt
+  📋 60 Kandidaten
+  ✅ AI Data Engineer (Human)
+     Treffer: data engineer
+  ✅ Controls and Embedded Electronics & Firmware Specialist (Human)
+     Treffer: embedded, embedded
+  ✅ Electronics Development Engineer (Human)
+     Treffer: electronics development, development engineer
+  ✅ Electronics Engineer - Humanoid (Human)
+     Treffer: electronics engineer
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  🚫 Nicht passend: Embedded Software Engineer - Sensors (Human)
+  ⏭️  Rohtext bereits vorhanden: AI Data Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Controls and Embedded Electronics & Firmware Specialist (Hum
+  ⏭️  Rohtext bereits vorhanden: Electronics Development Engineer (Human)
+  ⏭️  Rohtext bereits vorhanden: Electronics Engineer - Humanoid (Human)
+
+============================================================
+  Scanne: Star Cooperation
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '-de-[jf]\d+\.html'
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - (Senior-) Consultant (m/w/d) Managementberatung – Schwerpunkt Artificial Intelli
+     - Controller (m/w/d)
+     - IT Support Mitarbeiter (m/w/d)
+     - Sachbearbeiter Facility Management (m/w/d)
+     - Senior Developer (m/w/d) .NET / C#
+     - Werkstudent (m/w/d) – Managementberatung – Schwerpunkt Artificial Intelligence
+
+============================================================
+  Scanne: GlobeFuelCell
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Bekanntes Muster: '/n-carreers/'
+  📋 2 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Versuchstechniker (m/w/d)
+     - Werkstudent Marketing, Communication & Sales in einem GreenTech Startup (m/w/d)
+
+============================================================
+  Scanne: Hensoldt
+============================================================
+  📜 Scrolle...
+  🔗 96 Links gesamt
+  ✅ Heuristik: 39 Job-Links erkannt
+  📋 39 Kandidaten
+  ✅ Testingenieur für Validation & Verification (m/w/d)
+     Treffer: test, testingenieur, testingenieur, validation, verification, testingenieur
+  ✅ Hardwareentwickler Elektronik (m/w/d)
+     Treffer: hardware, elektronik, hardwareentwickl
+  ✅ Embedded Softwareentwickler - Basissoftware (m/w/d)
+     Treffer: embedded, embedded
+  ⏭️  Rohtext bereits vorhanden: Testingenieur für Validation & Verification (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler Elektronik (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Softwareentwickler - Basissoftware (m/w/d)
+
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 28 Job-Links erkannt
+  📋 28 Kandidaten
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/d) für Tro
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/
+
+============================================================
+  Scanne: Helmut Fischer GmbH
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 18 Kandidaten
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik
+     Treffer: hardware, hardwareentwickl, analog
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentwicklung
+     Treffer: hardware, entwicklung, hardwareentwickl, analog
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentw
+
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  ❌ Seite nicht erreichbar: Page.goto: Timeout 45000ms exceeded.
+Call log:
+  - navigating to "https://jobs.apple.com/de-de/search?location=nabern-NA55", waiting until "domcontentloaded"
+
+
+❌ Fehler bei Apple Nabern: not enough values to unpack (expected 2, got 0)
+
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 133 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Software Test Engineer (all genders)
+     Treffer: test, test engineer, test engineer
+  ✅ DevOps Engineer Test Automation (all genders)
+     Treffer: test, test automation
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all genders"
+  ✅ DevOps Engineer Testing (all genders)
+     Treffer: test
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all 
+  ⏭️  Rohtext bereits vorhanden: Software Test Engineer (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Test Automation (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Testing (all genders)
+
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 424 Links gesamt
+  ✅ Heuristik: 265 Job-Links erkannt
+  📋 265 Kandidaten
+  ✅ Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung befristet 
+     Treffer: test, python, python
+  ✅ System Ingenieur- Integration & Tests / Funkkommunikationssysteme im R
+     Treffer: test
+  ✅ Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitnehmerüberlas
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten Testsystem
+  ✅ Qualitätsingenieur Produktentwicklung (m/w/d)
+     Treffer: entwicklung
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich der sichere
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten 
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich d
+  ⏭️  Rohtext bereits vorhanden: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung 
+  ⏭️  Rohtext bereits vorhanden: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  ⏭️  Rohtext bereits vorhanden: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ⏭️  Rohtext bereits vorhanden: Senior Test Engineer Java (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Senior Software Developer Test (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Qualitätsingenieur Produktentwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Analog & Power Electronics Design Engineer (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Design Engineer R&D for Analog & Power Electronics (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Expert Digital ASIC Design Engineer (m/f/d)
+     Treffer: asic
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer, test engineer, hardware test engineer
+  ⏭️  Rohtext bereits vorhanden: Analog & Power Electronics Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Design Engineer R&D for Analog & Power Electronics (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Digital ASIC Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Hardware Test Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Electrical Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ⏭️  Rohtext bereits vorhanden: Electrical Product Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Product Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 48 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/d)
+     Treffer: embedded, embedded
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ System Architect (m/f/d) for the SmarTest 8 hardware layer ART
+     Treffer: hardware, test
+  ⏭️  Rohtext bereits vorhanden: R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/
+  ⏭️  Rohtext bereits vorhanden: R&D Software Development Engineer (C++) (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: System Architect (m/f/d) for the SmarTest 8 hardware layer A
+
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Expert Intellectual Property (m/f/d) - min. 35h
+
+============================================================
+  Scanne: Daimler Truck
+============================================================
+  📜 Scrolle...
+  🔗 58 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Praktikum im Bereich Treasury Controlling & M&A ab Mitte Oktober 2026
+     - Praktikum im Bereich Payment und Financial Integration bei Daimler Truck Financi
+     - Praktikum im Personalbereich am Standort Gaggenau ab September 2026
+     - Praktikum (w/m/d) im Bereich Order Management Daimler Buses Mannheim ab August 2
+     - Praktikum (w/m/d) im Projekt Agile@AAP
+     - Praktikum im Bereich Lieferantenmanagement Disposition 15. August 2026 – 28. Feb
+     - Praktikum (w/m/d) im Bereich Data Analytics im Qualitätsmanagement bei Daimler B
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+     - Rechtsreferendariat im Bereich Arbeits- und Sozialrecht
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+
+============================================================
+  Scanne: ZSW
+============================================================
+  📜 Scrolle...
+  🔗 16 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d) im PV-Tes
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d)
+
+============================================================
+  Scanne: ads-tec Energy
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Heuristik: 20 Job-Links erkannt
+  📋 20 Kandidaten
+  ✅ Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von Ladeinfras
+     Treffer: entwicklung, ladeinfrastruktur, batteriespeicher, elektrotechniker, elektroingenieur, batterie
+  ✅ Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeicher
+     Treffer: ladeinfrastruktur
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von 
+  ⏭️  Rohtext bereits vorhanden: Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeich
+
+============================================================
+  Scanne: SMART TESTSOLUTIONS
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ✅ elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+     Treffer: test, testsystem
+  ⏭️  Rohtext bereits vorhanden: elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+
+============================================================
+  Scanne: Infineon
+============================================================
+  📜 Scrolle...
+  🔗 41 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  ✅ Staff Engineer Field Application Engineering (f/m/div)
+     Treffer: field
+  ✅ Staff Engineer Field Application Engineering_3148
+     Treffer: field
+  ✅ Principal Engineer Field Application Engineering
+     Treffer: field
+  ✅ Staff Engineer Field Application Engineering
+     Treffer: field
+  ✅ Senior Staff Field Application Engineer
+     Treffer: field
+  ✅ Senior Engineer Field Application Engineering
+     Treffer: field
+  ✅ Principal Field Application Engineer (f/m/div)
+     Treffer: field
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering (f/m/div)
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering_3148
+  ⏭️  Rohtext bereits vorhanden: Principal Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Senior Staff Field Application Engineer
+  ⏭️  Rohtext bereits vorhanden: Senior Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Principal Field Application Engineer (f/m/div)
+
+============================================================
+  Scanne: Sereact
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 26 Job-Links erkannt
+  📋 26 Kandidaten
+  🚫 Nicht passend: Internship Hardware
+  ✅ Embedded Engineer (m/f/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  🚫 Nicht passend: Internship Hardware
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Engineer (m/f/d)
+
+============================================================
+  Scanne: eta plus electronic
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Einstellungen speichern
+     - Alle Cookies akzeptieren
+     - English
+     - Stellenangebote
+     - Stellenangebote
+     - Stellenangebote
+
+============================================================
+  Scanne: Eberspaecher
+============================================================
+  📜 Scrolle...
+  🔗 94 Links gesamt
+  ✅ Heuristik: 32 Job-Links erkannt
+  🔒 Domain-Filter: 1 Fremd-Links entfernt (nur 'eberspaecher-karriere.de' erlaubt)
+  📋 31 Kandidaten
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w/d) 2026
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w
+
+============================================================
+  Scanne: Pilz GmbH
+============================================================
+  📜 Scrolle...
+  🔗 19 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/[0-9]+/Description/31'
+  📋 8 Kandidaten
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) ab 2026
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) a
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+
+============================================================
+  Scanne: Dekra
+============================================================
+  📜 Scrolle...
+  🔗 109 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 22 Kandidaten
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+
+============================================================
+  Scanne: Festool
+============================================================
+  📜 Scrolle...
+  🔗 61 Links gesamt
+  ✅ Heuristik: 1 Job-Links erkannt
+  📋 1 Kandidaten
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+
+============================================================
+  Scanne: Balluff
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/'
+  📋 22 Kandidaten
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+
+============================================================
+  Scanne: TK Elevator
+============================================================
+  📜 Scrolle...
+  🔗 110 Links gesamt
+  ✅ Heuristik: 4 Job-Links erkannt
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Technischer Betriebswirt / Ingenieur als Regionalleiter Operations Aufzugsanlage
+     - Sachbearbeiter Zeitwirtschaft (m/w/d)
+     - IT SAP FICO Business Analyst (m/w/d)
+     - Finanzbuchhalter / Sachbearbeiter Rechnungswesen (m/w/d)
+
+============================================================
+  Scanne: AP Sensing
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Bekanntes Muster: '/de/unternehmen/karriere/'
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Lead Software Engineer – Application Platform (m/w/d)
+     - Senior Software Developer - Fullstack .Net + Angular (m/w/d)
+     - Senior Machine Learning Engineer (m/w/d)
+     - Werkstudent (m/w/d) im Bereich Data Science
+
+============================================================
+  Scanne: Sensirion
+============================================================
+  📜 Scrolle...
+  🔗 183 Links gesamt
+  ✅ Heuristik: 7 Job-Links erkannt
+  📋 7 Kandidaten
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+
+  🔍 Prüfe 2 vergaben-markierte Stelle(n) auf Erreichbarkeit...
+
+  🔍 Prüfe 27 nicht mehr gesehene Stelle(n) per Playwright...
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Embedded-Application-Developer-%28mw
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/hardware-test-engineer-m-f-d/09
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/supplier-data-manager-m-f-d/13e
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969924482?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969734917?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012857?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382284?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808955939416?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.neura-robotics.com/de/offer-redirect/?offerApiId=dHJpanR4
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/system-integration-engineer-m-f
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Hardwareentwickler-Elektronik-
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Embedded-Softwareentwickler-Ba
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Testingenieur-f%C3%BCr-Validat
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808962112726?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://ag.wd3.myworkdayjobs.com/de-DE/Airbus/job/Marseille-Area/ALT-2
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.thalesgroup.com/global/en/job/R0321506/fpga-design-eng
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-Elektroniker-f%C3%BCr-Ger%C3%A4t
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-zum-Elektroniker-f%C3%BCr-Automa
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Mechanical-Design-Engineer-%28mfd%29-DATA-P
+  🚫 Nicht mehr gelistet → nicht_passend: https://adstec-karriere.dvinci-hr.com/de/jobs/50441/pflichtpraktikant-
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.dekra.com/job/Stuttgart-Software-Quality-Engineer-Test
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Factory-Acceptance-Test-Coordinator-%28mfd%
+  💾 Stellen vor Speichern: 176
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+  🗄️  Datenbank aktualisiert
+
+============================================================
+  FERTIG
+  Stellen gefunden (aktiv):  108
+  Als vergeben markiert:     0
+  stellen.json:              /home/sascha/Jobsuche/stellen.json
+  bekannte_stellen.json:     /home/sascha/Jobsuche/bekannte_stellen.json
+============================================================
+
+Sat  2 May 07:15:51 CEST 2026: scanner ok
+
+============================================================
+  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren
+============================================================
+  0 Stellen zu bearbeiten (Status 2)
+  0 Stellen ohne Standort (Backfill)
+
+============================================================
+  FERTIG
+  Texte extrahiert:       0
+  Standorte nachgefüllt:  0
+  Weiter mit:             python bewertung.py
+============================================================
+
+Sat  2 May 07:15:53 CEST 2026: extraktor ok
+
+============================================================
+  BEWERTUNG  –  Schritt 3: KI-Bewertung
+============================================================
+  0 Stellen zu bewerten (Status 3)
+
+============================================================
+  FERTIG
+  Stellen bewertet: 0
+============================================================
+
+  🏆 TOP 5:
+      88%  [bewer]  Aviotech: Techniker / Ingenieur für Testaufbauten und Avioni
+      88%  [bewer]  Star Cooperation: Ingenieur / Techniker für Elektronikentwicklung un
+      82%  [bewer]  Advantest Hardware: Hardware Test Engineer (m/f/d)
+      82%  [bewer]  Ivona Koban Personalagentur: Regelungs- und Steuerungstechnik * Hardwareentwick
+      82%  [bewer]  Star Cooperation: Ingenieur / Techniker für Prüftechnik und Sonderau
+
+Sat  2 May 07:15:55 CEST 2026: bewertung ok
+
+============================================================
+  REPORT  –  Schritt 4: HTML erstellen & Mail senden
+============================================================
+  🚫 43 Stelle(n) als nicht passend markiert (Ausschluss-Prüfung)
+  📄 Erstelle Report...
+  ✅ Report gespeichert: /home/sascha/Jobsuche/report.html
+  📧 Sende Änderungs-Mail (0 neu, 13 vergeben)...
+  📧 Mail gesendet an Sascha.Ruettiger@icloud.com
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+
+============================================================
+  FERTIG
+  Report: /home/sascha/Jobsuche/report.html
+============================================================
+
+Sat  2 May 07:16:00 CEST 2026: report ok
+Sat  2 May 07:16:00 CEST 2026: Fertig
+Sun  3 May 07:00:01 CEST 2026: Start
+Sun  3 May 07:00:01 CEST 2026: cd ok
+Sun  3 May 07:00:01 CEST 2026: venv ok
+
+============================================================
+  JOB-SCANNER  –  Schritt 1: Scannen & Rohtext laden
+============================================================
+📄 Config: 107 Suchbegriffe, 75 Ausschlussbegriffe, 30 Firmen
+  📂 Stellen geladen: 178
+
+============================================================
+  Scanne: Thales (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    IT System Administrator - Entwicklung (m/w/d)
+     Treffer: entwicklung
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  🚫 Nicht passend: Team Lead IVVQ (m/w/d)
+
+============================================================
+  Scanne: TE Connectivity (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  ✅    Field Application Engineer - Distribution (m/f/d) - REMOTE EMEA
+     Treffer: field
+  ✅    Senior Embedded Application Developer (m/w/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  ✅    Field Application Engineer (m/w/d) - Europe - remote
+     Treffer: field
+  📋 Seite 7: 10 Jobs gefunden
+  ✅    Systems Development Engineer (m/w/d) - Industrial Connectivity & Compliance
+     Treffer: development engineer
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 2 Jobs gefunden
+  ℹ️  Keine weiteren Jobs auf Seite 10
+  🚫 Nicht passend: PRODUCT/TEST TECHNICIAN V
+  🚫 Nicht passend: Strategischer Einkäufer Elektronik (m/w/d)
+  🚫 Nicht passend: Seriendisponent Elektronik (m/w/d)
+  🚫 Nicht passend: Key Account Manager - Sensors (DACH Region) (m/f/d)
+
+============================================================
+  Scanne: Trumpf (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  ✅    Entwicklungsingenieur (w/m/d) Fasertechnologie und optische Messtechnik EUV
+     Treffer: messtechnik, entwicklung, messtechnik, entwicklungsingenieur
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 2: 15 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im Außendienst
+  📋 Seite 3: 20 Jobs gefunden
+  📋 Seite 4: 20 Jobs gefunden
+  📋 Seite 5: 20 Jobs gefunden
+  📋 Seite 6: 20 Jobs gefunden
+  📋 Seite 7: 20 Jobs gefunden
+  📋 Seite 8: 20 Jobs gefunden
+  📋 Seite 9: 20 Jobs gefunden
+  📋 Seite 10: 20 Jobs gefunden
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+  🚫 Nicht passend: Service-Mitarbeiter (w/m/d) Wartungen / Inbetriebnahmen im A
+
+============================================================
+  Scanne: Hitachi Rail (API)
+============================================================
+  📋 Seite 1: 20 Jobs gefunden
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  📋 Seite 2: 18 Jobs gefunden
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  ✅    IT-/Elektrotechniker für Stellwerke (m/w/d)
+     Treffer: elektrotechniker
+  ✅    Entwicklungsingenieur Elektrotechnik (m/w/d)
+     Treffer: entwicklung, entwicklungsingenieur
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elektronik (m/
+  ℹ️  Keine weiteren Jobs auf Seite 3
+  🚫 Nicht passend: Werkstudent im Bereich Bedienoberflächenentwicklung (m/w/d)
+  🚫 Nicht passend: Teamleiter Systemtest und Validierung – L90 (m/w/d)
+  🚫 Nicht passend: Teamleiter Softwareentwicklung (m/w/d)
+  🚫 Nicht passend: Ausbildung Elektroniker Geräte und Systeme (m/w/d)
+  🚫 Nicht passend: Duales Studium Embedded Systems General Engineering (m/w/d)
+  🚫 Nicht passend: Duales Studium Elektrotechnik und Informationstechnik / Elek
+
+============================================================
+  Scanne: eta plus (API)
+============================================================
+  📋 Seite 1: 5 Jobs gefunden
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/d)
+  ✅    Hardwareentwickler (m/w/d)
+     Treffer: hardware, hardwareentwickl
+  🚫 Nicht passend: Auszubildenden zum Elektroniker für Geräte und Systeme (m/w/
+
+============================================================
+  Scanne: Knorr-Bremse (API)
+============================================================
+  📋 Seite 1: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung von Magnetv
+  📋 Seite 2: 3 Jobs gefunden
+  📋 Seite 3: 3 Jobs gefunden
+  📋 Seite 4: 3 Jobs gefunden
+  📋 Seite 5: 3 Jobs gefunden
+  🚫 Nicht passend: Bachelorand/Masterand im Bereich Entwicklung und Erprobung v
+
+============================================================
+  Scanne: Keysight (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  ✅    Development Engineer for Test Solutions in RF & Photonics Technology
+     Treffer: test, development engineer
+  ✅    Feinmechaniker / Mechatroniker (m/w/d) – Optoelektronik, Messtechnik & Testsysteme (Böblingen)
+     Treffer: test, messtechnik, elektronik, messtechnik, testsystem
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  📋 Seite 2: 10 Jobs gefunden
+  ✅    Advanced Electronics Hardware Engineer for Photonics R&D
+     Treffer: hardware, hardware engineer
+  ✅    Senior Photonic Instrument Development Engineer
+     Treffer: development engineer
+  ✅    Feinmechaniker / Mikromonteur (m/w/d) – Optoelektronik & Präzisionsmontage (Labor, Böblingen)
+     Treffer: elektronik
+  ✅    Hardware Engineering Intern – Test & Measurement
+     Treffer: hardware, test, hardware engineer, measurement
+  ✅    Optik & Photonik Test Techniker (m/w/d) – Electronics / Measurement
+     Treffer: test, measurement
+  📋 Seite 3: 10 Jobs gefunden
+  ✅    High-Speed Photonics Instrument Development Engineer
+     Treffer: development engineer
+  🚫 Nicht passend: Test Engineer/Technician
+  📋 Seite 4: 10 Jobs gefunden
+  ✅    Territory Account Manager - Test & Measurement Solutions
+     Treffer: test, measurement
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  📋 Seite 8: 10 Jobs gefunden
+  ✅    Senior Business Development Engineer
+     Treffer: development engineer
+  📋 Seite 9: 10 Jobs gefunden
+  🚫 Nicht passend: Finance BI Data Analyst
+  ✅    R&D Expert Analog Engineer
+     Treffer: analog
+  📋 Seite 10: 2 Jobs gefunden
+  🚫 Nicht passend: Process and Development Engineer for High Frequency Packages
+  🚫 Nicht passend: Test Engineer/Technician
+  🚫 Nicht passend: Finance BI Data Analyst
+
+============================================================
+  Scanne: Airbus (Workday API)
+============================================================
+  📋 Seite 1: 13 Jobs (1–13 von 13)
+  ✅    (Senior) Machine Learning & Data Engineer (m/w/d) – KI für Autonome Systeme
+     2 Locations | Treffer: data engineer
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines digitalen
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abgestrahlter N
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation (d/m/w)
+  🚫 Nicht passend: Praktikum/Abschlussarbeit "Entwicklung von Komponenten eines
+  🚫 Nicht passend: Praktikum "Entwicklung eines Simulators zur Bestimmung abges
+  🚫 Nicht passend: Praktikum: Software Entwicklung für Satellitenkommunikation 
+
+============================================================
+  Scanne: EnBW (API)
+============================================================
+  📋 Seite 1: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationstechnik & E
+  📋 Seite 2: 10 Jobs gefunden
+  📋 Seite 3: 10 Jobs gefunden
+  📋 Seite 4: 10 Jobs gefunden
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von AutoCAD-Rou
+  📋 Seite 5: 10 Jobs gefunden
+  📋 Seite 6: 10 Jobs gefunden
+  📋 Seite 7: 10 Jobs gefunden
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukturen (w/m/d)
+  📋 Seite 8: 10 Jobs gefunden
+  📋 Seite 9: 10 Jobs gefunden
+  📋 Seite 10: 10 Jobs gefunden
+  🚫 Nicht passend: Leiter Einkauf – Mittel- und Niederspannung, Kommunikationst
+  🚫 Nicht passend: Werkstudent Bauingenieurwesen/Informatik - Entwicklung von A
+  🚫 Nicht passend: Bachelorand Entwicklung IDE für hochkritische Infrastrukture
+
+============================================================
+  Scanne: Neura Robotics
+============================================================
+  📜 Scrolle...
+  🔗 12 Links gesamt
+  🤖 Unbekannte Domain – frage KI...
+  ⚠️  Kein Muster gefunden – überspringe Neura Robotics
+
+❌ Fehler bei Neura Robotics: not enough values to unpack (expected 2, got 0)
+
+============================================================
+  Scanne: Star Cooperation
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '-de-[jf]\d+\.html'
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - (Senior-) Consultant (m/w/d) Managementberatung – Schwerpunkt Artificial Intelli
+     - Controller (m/w/d)
+     - IT Support Mitarbeiter (m/w/d)
+     - Sachbearbeiter Facility Management (m/w/d)
+     - Senior Developer (m/w/d) .NET / C#
+     - Werkstudent (m/w/d) – Managementberatung – Schwerpunkt Artificial Intelligence
+
+============================================================
+  Scanne: GlobeFuelCell
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Bekanntes Muster: '/n-carreers/'
+  📋 2 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Versuchstechniker (m/w/d)
+     - Werkstudent Marketing, Communication & Sales in einem GreenTech Startup (m/w/d)
+
+============================================================
+  Scanne: Hensoldt
+============================================================
+  📜 Scrolle...
+  🔗 96 Links gesamt
+  ✅ Heuristik: 39 Job-Links erkannt
+  📋 39 Kandidaten
+  ✅ Testingenieur für Validation & Verification (m/w/d)
+     Treffer: test, testingenieur, testingenieur, validation, verification, testingenieur
+  ✅ Hardwareentwickler Elektronik (m/w/d)
+     Treffer: hardware, elektronik, hardwareentwickl
+  ✅ Embedded Softwareentwickler - Basissoftware (m/w/d)
+     Treffer: embedded, embedded
+  ⏭️  Rohtext bereits vorhanden: Testingenieur für Validation & Verification (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler Elektronik (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Softwareentwickler - Basissoftware (m/w/d)
+
+============================================================
+  Scanne: Siemens Energy
+============================================================
+  📜 Scrolle...
+  🔗 44 Links gesamt
+  ✅ Heuristik: 28 Job-Links erkannt
+  📋 28 Kandidaten
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/d) für Tro
+  🚫 Nicht passend: Servicetechniker (w/m/d) Elektrotechnik / Elektroniker (w/m/
+
+============================================================
+  Scanne: Helmut Fischer GmbH
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 18 Kandidaten
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik
+     Treffer: hardware, hardwareentwickl, analog
+  ✅ Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentwicklung
+     Treffer: hardware, entwicklung, hardwareentwickl, analog
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik
+  ⏭️  Rohtext bereits vorhanden: Hardwareentwickler (m/w/d) Analogtechnik für Komponentenentw
+
+============================================================
+  Scanne: Apple Nabern
+============================================================
+  📜 Scrolle...
+  🔗 301 Links gesamt
+  ✅ Heuristik: 19 Job-Links erkannt
+  📋 19 Kandidaten
+  ✅ ATE Engineer - PCB Hardware (m/f/d)
+     Treffer: hardware, pcb
+  ✅ PMU Design Verification Engineer (m/f/d)
+     Treffer: verification
+  ⏭️  Rohtext bereits vorhanden: ATE Engineer - PCB Hardware (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: PMU Design Verification Engineer (m/f/d)
+
+============================================================
+  Scanne: Philips
+============================================================
+  📜 Scrolle...
+  🔗 133 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Software Test Engineer (all genders)
+     Treffer: test, test engineer, test engineer
+  ✅ DevOps Engineer Test Automation (all genders)
+     Treffer: test, test automation
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all genders"
+  ✅ DevOps Engineer Testing (all genders)
+     Treffer: test
+  🚫 Nicht passend: Professional Service Development Engineer (Networking) "all 
+  ⏭️  Rohtext bereits vorhanden: Software Test Engineer (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Test Automation (all genders)
+  ⏭️  Rohtext bereits vorhanden: DevOps Engineer Testing (all genders)
+
+============================================================
+  Scanne: Rohde & Schwarz
+============================================================
+  📜 Scrolle...
+  🔗 424 Links gesamt
+  ✅ Heuristik: 265 Job-Links erkannt
+  📋 265 Kandidaten
+  ✅ Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung befristet 
+     Treffer: test, python, python
+  ✅ System Ingenieur- Integration & Tests / Funkkommunikationssysteme im R
+     Treffer: test
+  ✅ Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitnehmerüberlas
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  ✅ Senior Test Engineer Java (m/w/d)
+     Treffer: test, test engineer, test engineer
+  ✅ Senior Software Developer Test (m/w/d)
+     Treffer: test
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten Testsystem
+  ✅ Qualitätsingenieur Produktentwicklung (m/w/d)
+     Treffer: entwicklung
+  ✅ Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+     Treffer: systemingenieur
+  ✅ Systemingenieur für Funkkommunikationssysteme (m/d/w)
+     Treffer: systemingenieur
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich der sichere
+  🚫 Nicht passend: Teamleiter (m/w/d) Systemtest für Kryptogeräte und -module
+  🚫 Nicht passend: Werkstudent Entwicklung eines roboter- und kameragestützten 
+  🚫 Nicht passend: Duales Studium Embedded Systems oder Informatik im Bereich d
+  ⏭️  Rohtext bereits vorhanden: Python Tester (m/w/d) im Rahmen der Arbeitnehmerüberlassung 
+  ⏭️  Rohtext bereits vorhanden: System Ingenieur- Integration & Tests / Funkkommunikationssy
+  ⏭️  Rohtext bereits vorhanden: Embedded Software Entwickler (m/w/d) im Rahmen der Arbeitneh
+  ⏭️  Rohtext bereits vorhanden: Senior Test Engineer Java (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Senior Software Developer Test (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Qualitätsingenieur Produktentwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur (m/w/d) für sichere Kommunikationssysteme
+  ⏭️  Rohtext bereits vorhanden: Systemingenieur für Funkkommunikationssysteme (m/d/w)
+
+============================================================
+  Scanne: Advantest Hardware
+============================================================
+  📜 Scrolle...
+  🔗 49 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Analog & Power Electronics Design Engineer (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Design Engineer R&D for Analog & Power Electronics (m/f/d)
+     Treffer: power electronics, analog
+  ✅ Expert Digital ASIC Design Engineer (m/f/d)
+     Treffer: asic
+  ✅ Expert Hardware Test Engineer (m/f/d)
+     Treffer: hardware, test, test engineer, test engineer, hardware test engineer
+  ⏭️  Rohtext bereits vorhanden: Analog & Power Electronics Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Design Engineer R&D for Analog & Power Electronics (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Digital ASIC Design Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Expert Hardware Test Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Production
+============================================================
+  📜 Scrolle...
+  🔗 45 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ Electrical Product Engineer (m/f/d)
+     Treffer: product engineer
+  ✅ Product Engineer (m/f/d)
+     Treffer: product engineer
+  ⏭️  Rohtext bereits vorhanden: Electrical Product Engineer (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Product Engineer (m/f/d)
+
+============================================================
+  Scanne: Advantest Software
+============================================================
+  📜 Scrolle...
+  🔗 48 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ✅ R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/d)
+     Treffer: embedded, embedded
+  ✅ R&D Software Development Engineer (C++) (m/f/d)
+     Treffer: development engineer
+  ✅ System Architect (m/f/d) for the SmarTest 8 hardware layer ART
+     Treffer: hardware, test
+  ⏭️  Rohtext bereits vorhanden: R&D Engineer Software, HW layer Digital/Embedded (C++) (m/f/
+  ⏭️  Rohtext bereits vorhanden: R&D Software Development Engineer (C++) (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: System Architect (m/f/d) for the SmarTest 8 hardware layer A
+
+============================================================
+  Scanne: Festo
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Key Account Manager Process Industries (m/f/d)
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization electric automation 
+     - Global Market Segment Manager Semiconductor, Specialization process automation (
+     - Global Market Segment Manager Semiconductor, Specialization process automation  
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Global Market Segment Manager Semiconductor, Specialization pneumatic automation
+     - Expert Intellectual Property (m/f/d) - min. 35h
+     - Expert Intellectual Property (m/f/d) - min. 35h
+
+============================================================
+  Scanne: Daimler Truck
+============================================================
+  📜 Scrolle...
+  🔗 58 Links gesamt
+  ✅ Heuristik: 10 Job-Links erkannt
+  📋 10 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Praktikum im Bereich Payment und Financial Integration bei Daimler Truck Financi
+     - Praktikum im Bereich Treasury Controlling & M&A ab Mitte Oktober 2026
+     - Praktikum (w/m/d) im Bereich Order Management Daimler Buses Mannheim ab August 2
+     - Praktikum (w/m/d) im Bereich Data Analytics im Qualitätsmanagement bei Daimler B
+     - Praktikum im Bereich Lieferantenmanagement Disposition 15. August 2026 – 28. Feb
+     - Praktikum im Personalbereich am Standort Gaggenau ab September 2026
+     - Praktikum (w/m/d) im Projekt Agile@AAP
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+     - Rechtsreferendariat im Bereich Arbeits- und Sozialrecht
+     - Praktikant (m/w/d) im Bereich Marketing Kommunikation Deutschland und internatio
+
+============================================================
+  Scanne: ZSW
+============================================================
+  📜 Scrolle...
+  🔗 16 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d) im PV-Tes
+  🚫 Nicht passend: Praktikant (m/w/d) oder wissenschaftliche Hilfskraft (m/w/d)
+
+============================================================
+  Scanne: ads-tec Energy
+============================================================
+  📜 Scrolle...
+  🔗 20 Links gesamt
+  ✅ Heuristik: 20 Job-Links erkannt
+  📋 20 Kandidaten
+  ✅ Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von Ladeinfras
+     Treffer: entwicklung, ladeinfrastruktur, batteriespeicher, elektrotechniker, elektroingenieur, batterie
+  ✅ Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeicher
+     Treffer: ladeinfrastruktur
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  🚫 Nicht passend: Pflichtpraktikant (m/w/d) Softwareentwicklung Cloud und IoT
+  🚫 Nicht passend: Projektleiter Ladeinfrastruktur (m/w/d)
+  🚫 Nicht passend: Servicetechniker Batteriesysteme (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Elektrotechniker / Elektroingenieur (m/w/d) Entwicklung von 
+  ⏭️  Rohtext bereits vorhanden: Konstrukteur (m/w/d) für Ladeinfrastruktur und Energiespeich
+
+============================================================
+  Scanne: SMART TESTSOLUTIONS
+============================================================
+  📜 Scrolle...
+  🔗 73 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ✅ elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+     Treffer: test, testsystem
+  ⏭️  Rohtext bereits vorhanden: elektrokonstrukteur fuer testsysteme schaltschrankbau m w d
+
+============================================================
+  Scanne: Infineon
+============================================================
+  📜 Scrolle...
+  🔗 41 Links gesamt
+  ✅ Heuristik: 12 Job-Links erkannt
+  📋 12 Kandidaten
+  ✅ Staff Engineer Field Application Engineering (f/m/div)
+     Treffer: field
+  ✅ Staff Engineer Field Application Engineering_3148
+     Treffer: field
+  ✅ Principal Engineer Field Application Engineering
+     Treffer: field
+  ✅ Staff Engineer Field Application Engineering
+     Treffer: field
+  ✅ Senior Staff Field Application Engineer
+     Treffer: field
+  ✅ Senior Engineer Field Application Engineering
+     Treffer: field
+  ✅ Principal Field Application Engineer (f/m/div)
+     Treffer: field
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering (f/m/div)
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering_3148
+  ⏭️  Rohtext bereits vorhanden: Principal Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Staff Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Senior Staff Field Application Engineer
+  ⏭️  Rohtext bereits vorhanden: Senior Engineer Field Application Engineering
+  ⏭️  Rohtext bereits vorhanden: Principal Field Application Engineer (f/m/div)
+
+============================================================
+  Scanne: Sereact
+============================================================
+  📜 Scrolle...
+  🔗 31 Links gesamt
+  ✅ Heuristik: 26 Job-Links erkannt
+  📋 26 Kandidaten
+  🚫 Nicht passend: Internship Hardware
+  ✅ Embedded Engineer (m/f/d)
+     Treffer: embedded, embedded
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  🚫 Nicht passend: Internship Hardware
+  🚫 Nicht passend: Robotics Field Support Lead - EU (m/f/d)
+  ⏭️  Rohtext bereits vorhanden: Embedded Engineer (m/f/d)
+
+============================================================
+  Scanne: eta plus electronic
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Heuristik: 6 Job-Links erkannt
+  📋 6 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Einstellungen speichern
+     - Alle Cookies akzeptieren
+     - English
+     - Stellenangebote
+     - Stellenangebote
+     - Stellenangebote
+
+============================================================
+  Scanne: Eberspaecher
+============================================================
+  📜 Scrolle...
+  🔗 94 Links gesamt
+  ✅ Heuristik: 32 Job-Links erkannt
+  🔒 Domain-Filter: 1 Fremd-Links entfernt (nur 'eberspaecher-karriere.de' erlaubt)
+  📋 31 Kandidaten
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w/d) 2026
+  🚫 Nicht passend: Ausbildung als Elektroniker für Automatisierungstechnik (m/w
+
+============================================================
+  Scanne: Pilz GmbH
+============================================================
+  📜 Scrolle...
+  🔗 19 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/[0-9]+/Description/31'
+  📋 8 Kandidaten
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) ab 2026
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+  🚫 Nicht passend: Ausbildung zum Elektroniker für Geräte und Systeme (m/w/d) a
+  🚫 Nicht passend: Duales Studium Embedded Systems ab 2026 (m/w/d)
+
+============================================================
+  Scanne: Dekra
+============================================================
+  📜 Scrolle...
+  🔗 109 Links gesamt
+  ✅ Heuristik: 22 Job-Links erkannt
+  📋 22 Kandidaten
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+  🚫 Nicht passend: Software Quality Engineer - Test Automation & CI/CD (m/f/d)
+
+============================================================
+  Scanne: Festool
+============================================================
+  📜 Scrolle...
+  🔗 61 Links gesamt
+  ✅ Heuristik: 1 Job-Links erkannt
+  📋 1 Kandidaten
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+  🚫 Nicht passend: Projektleiter Neuheitenentwicklung (m/w/d)
+
+============================================================
+  Scanne: Balluff
+============================================================
+  📜 Scrolle...
+  🔗 30 Links gesamt
+  ✅ Bekanntes Muster: '/Vacancies/'
+  📋 22 Kandidaten
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+  🚫 Nicht passend: Werkstudent im Bereich Hardware Engineering m|w|d
+
+============================================================
+  Scanne: TK Elevator
+============================================================
+  📜 Scrolle...
+  🔗 110 Links gesamt
+  ✅ Heuristik: 4 Job-Links erkannt
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Technischer Betriebswirt / Ingenieur als Regionalleiter Operations Aufzugsanlage
+     - Sachbearbeiter Zeitwirtschaft (m/w/d)
+     - IT SAP FICO Business Analyst (m/w/d)
+     - Finanzbuchhalter / Sachbearbeiter Rechnungswesen (m/w/d)
+
+============================================================
+  Scanne: AP Sensing
+============================================================
+  📜 Scrolle...
+  🔗 105 Links gesamt
+  ✅ Bekanntes Muster: '/de/unternehmen/karriere/'
+  📋 4 Kandidaten
+  ℹ️  Keine passenden Stellen.
+     - Lead Software Engineer – Application Platform (m/w/d)
+     - Senior Software Developer - Fullstack .Net + Angular (m/w/d)
+     - Senior Machine Learning Engineer (m/w/d)
+     - Werkstudent (m/w/d) im Bereich Data Science
+
+============================================================
+  Scanne: Sensirion
+============================================================
+  📜 Scrolle...
+  🔗 183 Links gesamt
+  ✅ Heuristik: 7 Job-Links erkannt
+  📋 7 Kandidaten
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+  🚫 Nicht passend: Teamlead Softwareentwicklung (m/w/d) • 80% - 100%
+
+============================================================
+  Scanne: Vector
+============================================================
+  📜 Scrolle...
+  🔗 90 Links gesamt
+  🤖 Unbekannte Domain – frage KI...
+  ⚠️  KI-Mustererkennung fehlgeschlagen: Extra data: line 2 column 1 (char 17)
+  ⚠️  Kein Muster gefunden – überspringe Vector
+
+❌ Fehler bei Vector: not enough values to unpack (expected 2, got 0)
+
+============================================================
+  Scanne: Mkemc
+============================================================
+  📜 Scrolle...
+  🔗 25 Links gesamt
+  ✅ Bekanntes Muster: '/karriere/'
+  📋 6 Kandidaten
+  🚫 Nicht passend: Werkstudenten Hardware-Entwicklung (m/w/d)
+  ✅ Ingenieur Hardware-Entwicklung (m/w/d)
+     Treffer: hardware, entwicklung
+  🚫 Nicht passend: Werkstudenten Hardware-Entwicklung (m/w/d)
+  ⏭️  Rohtext bereits vorhanden: Ingenieur Hardware-Entwicklung (m/w/d)
+
+  🔍 Prüfe 2 vergaben-markierte Stelle(n) auf Erreichbarkeit...
+
+  🔍 Prüfe 30 nicht mehr gesehene Stelle(n) per Playwright...
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Staff-Product-Development-Engineer-%28mfd%2
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professional
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200635561-5556/analog-design-engi
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/hardware-test-engineer-m-f-d/09
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/supplier-data-manager-m-f-d/13e
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969924482?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969734917?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808970012857?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808969382284?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808955939416?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.advantest-career.de/offer/system-integration-engineer-m-f
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Hardwareentwickler-Elektronik-
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Embedded-Softwareentwickler-Ba
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.hensoldt.net/job/Pforzheim-Testingenieur-f%C3%BCr-Validat
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.infineon.com/careers/job/563808962112726?hl=de
+  🚫 Nicht mehr gelistet → nicht_passend: https://ag.wd3.myworkdayjobs.com/de-DE/Airbus/job/Marseille-Area/ALT-2
+  🚫 Nicht mehr gelistet → nicht_passend: https://jobs.apple.com/de-de/details/200658403-5556/pcb-hardware-engin
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.thalesgroup.com/global/en/job/R0321506/fpga-design-eng
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-Elektroniker-f%C3%BCr-Ger%C3%A4t
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Ausbildung-zum-Elektroniker-f%C3%BCr-Automa
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Product-Engineer-Fine-Pitch-Board-Co
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Mechanical-Design-Engineer-%28mfd%29-DATA-P
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Senior-Product-Development-Engineer-Industr
+  🚫 Nicht mehr gelistet → nicht_passend: https://adstec-karriere.dvinci-hr.com/de/jobs/50441/pflichtpraktikant-
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.dekra.com/job/Stuttgart-Software-Quality-Engineer-Test
+  🚫 Nicht mehr gelistet → nicht_passend: https://careers.te.com/job/Factory-Acceptance-Test-Coordinator-%28mfd%
+  💾 Stellen vor Speichern: 178
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+  🗄️  Datenbank aktualisiert
+
+============================================================
+  FERTIG
+  Stellen gefunden (aktiv):  105
+  Als vergeben markiert:     0
+  stellen.json:              /home/sascha/Jobsuche/stellen.json
+  bekannte_stellen.json:     /home/sascha/Jobsuche/bekannte_stellen.json
+============================================================
+
+Sun  3 May 07:17:06 CEST 2026: scanner ok
+
+============================================================
+  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren
+============================================================
+  0 Stellen zu bearbeiten (Status 2)
+  0 Stellen ohne Standort (Backfill)
+
+============================================================
+  FERTIG
+  Texte extrahiert:       0
+  Standorte nachgefüllt:  0
+  Weiter mit:             python bewertung.py
+============================================================
+
+Sun  3 May 07:17:08 CEST 2026: extraktor ok
+
+============================================================
+  BEWERTUNG  –  Schritt 3: KI-Bewertung
+============================================================
+  0 Stellen zu bewerten (Status 3)
+
+============================================================
+  FERTIG
+  Stellen bewertet: 0
+============================================================
+
+  🏆 TOP 5:
+      88%  [bewer]  Aviotech: Techniker / Ingenieur für Testaufbauten und Avioni
+      88%  [bewer]  Star Cooperation: Ingenieur / Techniker für Elektronikentwicklung un
+      82%  [bewer]  Advantest Hardware: Hardware Test Engineer (m/f/d)
+      82%  [bewer]  Ivona Koban Personalagentur: Regelungs- und Steuerungstechnik * Hardwareentwick
+      82%  [bewer]  Star Cooperation: Ingenieur / Techniker für Prüftechnik und Sonderau
+
+Sun  3 May 07:17:10 CEST 2026: bewertung ok
+
+============================================================
+  REPORT  –  Schritt 4: HTML erstellen & Mail senden
+============================================================
+  🚫 43 Stelle(n) als nicht passend markiert (Ausschluss-Prüfung)
+  📄 Erstelle Report...
+  ✅ Report gespeichert: /home/sascha/Jobsuche/report.html
+  📧 Sende Änderungs-Mail (0 neu, 13 vergeben)...
+  📧 Mail gesendet an Sascha.Ruettiger@icloud.com
+  🗄️  Datenbank bereit: /home/sascha/Jobsuche/jobscanner.db
+
+============================================================
+  FERTIG
+  Report: /home/sascha/Jobsuche/report.html
+============================================================
+
+Sun  3 May 07:17:13 CEST 2026: report ok
+Sun  3 May 07:17:13 CEST 2026: Fertig

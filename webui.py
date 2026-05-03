@@ -44,6 +44,7 @@ laufender_prozess = None    # Aktuell laufender Subprozess
 # Reihenfolge der Scripts – identisch zu start.bat
 PIPELINE = [
     "scanner.py",
+    "rohtext_holen.py",
     "extraktor.py",
     "bewertung.py",
     "report.py",
@@ -348,7 +349,7 @@ def bewerbung_erstellen():
 
     # Schritt 4: Pfade in stellen.json speichern damit report.py sie findet
     try:
-        stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+        stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
         for s in stellen:
             if s.get("url") == stellen_url:
                 s["lebenslauf_pfad"] = str(lv_pfad)
@@ -438,7 +439,7 @@ def steckbrief_erstellen():
         return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
 
     url = data["url"]
-    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
     stelle = next((s for s in stellen if s["url"] == url), None)
     if not stelle:
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
@@ -512,7 +513,7 @@ def bewertung_erstellen():
         return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
 
     url = data["url"]
-    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8")) if STELLEN_JSON.exists() else []
+    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
     stelle = next((s for s in stellen if s["url"] == url), None)
     if not stelle:
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
@@ -566,7 +567,7 @@ def bewertung_erstellen():
 
     bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
     if bekannte_pfad.exists():
-        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8"))
+        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig"))
         if url in bekannte:
             bekannte[url]["status"] = 4
             bekannte[url]["nicht_passend"] = False
@@ -606,8 +607,8 @@ def stelle_einfuegen():
         stellen_pfad  = BASIS_PFAD / "stellen.json"
         bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
 
-        stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8"))  if stellen_pfad.exists()  else []
-        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8")) if bekannte_pfad.exists() else {}
+        stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8-sig"))  if stellen_pfad.exists()  else []
+        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig")) if bekannte_pfad.exists() else {}
 
         if any(s.get("url") == stellen_url for s in stellen):
             return jsonify({"ok": False, "fehler": "Stelle bereits vorhanden"}), 409
@@ -709,8 +710,8 @@ def stelle_neu_laden():
     stellen_pfad  = BASIS_PFAD / "stellen.json"
     bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
 
-    stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8"))  if stellen_pfad.exists()  else []
-    bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8")) if bekannte_pfad.exists() else {}
+    stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8-sig"))  if stellen_pfad.exists()  else []
+    bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig")) if bekannte_pfad.exists() else {}
 
     stelle = next((s for s in stellen if s["url"] == url), None)
     if not stelle:
@@ -733,6 +734,8 @@ def stelle_neu_laden():
 @app.route("/manuell-stream")
 def manuell_stream():
     global scan_laeuft
+
+    url_filter = request.args.get("url", "").strip() or None
 
     # Safety-Reset: Falls scan_laeuft durch eine Exception stecken blieb
     if scan_laeuft:
@@ -762,6 +765,8 @@ def manuell_stream():
                     log.write(f"\n Starte {script} ...\n")
                     log.flush()
                     extra_args = ["--keine-mail"] if script == "report.py" else []
+                    if url_filter and script != "report.py":
+                        extra_args += ["--url", url_filter]
                     prozess = subprocess.Popen(
                         [sys.executable, str(script_pfad)] + extra_args,
                         stdout=subprocess.PIPE,

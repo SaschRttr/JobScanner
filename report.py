@@ -16,7 +16,7 @@ import json
 import re
 import smtplib
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -153,17 +153,23 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     bewertung_html = ""
     if s.get("bewertung"):
         b     = s["bewertung"]
-        score = b.get("score", 0)
+        score    = b.get("score", 0)
+        score_na = b.get("score_nach_anpassung")
         empf  = b.get("empfehlung", "?")
         farbe       = "#27ae60" if score >= 70 else "#f39c12" if score >= 40 else "#e74c3c"
+        farbe_na    = "#27ae60" if (score_na or 0) >= 70 else "#f39c12" if (score_na or 0) >= 40 else "#e74c3c"
         empf_farbe  = "#27ae60" if empf == "bewerben" else "#e74c3c"
         staerken    = "".join(f"<li>{p}</li>" for p in b.get("staerken", []))
         luecken     = "".join(f"<li>{p}</li>" for p in b.get("luecken", []))
         anpassungen = "".join(f"<li>{p}</li>" for p in b.get("lebenslauf_anpassungen", []))
         begruendung = b.get("score_begruendung", "")
+        score_na_html = (
+            f' → <strong style="color:{farbe_na};">{score_na}%</strong>'
+            f'<span style="color:#999;font-size:0.85em;"> nach Anpassung</span>'
+        ) if score_na and score_na > score else ""
         bewertung_html = f"""
         <div class="bewertung">
-            <strong style="color:{farbe};">Score: {score}%</strong>
+            <strong style="color:{farbe};">Score: {score}%</strong>{score_na_html}
             &nbsp;|&nbsp;
             <strong style="color:{empf_farbe};">{empf.upper()}</strong>
             <details><summary>Details anzeigen</summary>
@@ -216,7 +222,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     if score >= 70:
         if lv_docx and as_docx:
             # Beide DOCX vorhanden → Download-Links anzeigen
-            css = "stelle stelle-bewerbung"
+            css += " stelle-bewerbung"
             lv_dl  = f"/download?pfad={urllib.parse.quote(str(lv_docx))}"
             as_dl  = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
             lebenslauf_html = f"""
@@ -860,10 +866,12 @@ def _hat_geringen_score(s: dict) -> bool:
     b = s.get("bewertung")
     if not b:
         return False
+    if (b.get("score_nach_anpassung") or 0) > GERINGER_MATCH_SCHWELLE:
+        return False
     return (b.get("score") or 0) <= GERINGER_MATCH_SCHWELLE
 
 
-def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
+def erstelle_report(stellen: list) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     # Absagen aus status.json laden
@@ -959,19 +967,25 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
         </div>
     """
 
-    # ── Neue Stellen ────────────────────────────────────────────────
-    neue_haupt = [s for s in neue if s["url"] not in geringer_urls]
-    if neue_haupt:
+    # ── Neue Stellen (letzte 3 Tage, sortiert nach Score) ───────────
+    drei_tage_ago = datetime.now() - timedelta(days=3)
+    neueste = [
+        s for s in aktive_haupt
+        if s.get("gefunden_am") and
+        datetime.strptime(s["gefunden_am"][:10], "%Y-%m-%d") >= drei_tage_ago.replace(hour=0, minute=0, second=0)
+    ]
+    neueste_sorted = sorted(neueste, key=lambda s: (s.get("bewertung") or {}).get("score", 0), reverse=True)
+    if neueste_sorted:
         html += '<div class="firma-block">\n'
-        html += f'<h2>🆕 Neue Stellen ({len(neue_haupt)})</h2>\n'
-        for s in neue_haupt:
+        html += f'<h2>🆕 Neue Stellen – letzte 3 Tage ({len(neueste_sorted)})</h2>\n'
+        for s in neueste_sorted:
             html += stelle_zu_html(s, zeige_firma=True)
         html += '</div>\n'
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
     top10 = sorted(
         [s for s in aktive_haupt if (s.get("bewertung") or {}).get("score", 0) > 0],
-        key=lambda s: s["bewertung"]["score"],
+        key=lambda s: max(s["bewertung"].get("score", 0), s["bewertung"].get("score_nach_anpassung") or 0),
         reverse=True
     )[:10]
     if top10:
@@ -986,10 +1000,7 @@ def erstelle_report(stellen: list, firmen_reihenfolge: list) -> str:
     for s in aktive_haupt:
         firmen_dict.setdefault(s["firma"], []).append(s)
 
-    # Reihenfolge aus config, dann alphabetisch für unbekannte
-    alle_firmen = firmen_reihenfolge + sorted(
-        [f for f in firmen_dict if f not in firmen_reihenfolge]
-    )
+    alle_firmen = sorted(firmen_dict.keys())
 
     for firma_name in alle_firmen:
         firma_stellen = firmen_dict.get(firma_name, [])
@@ -1108,9 +1119,13 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         standort = s.get("standort") or ""
         standort_text = f" · {standort}" if standort and standort != "ok" else ""
         score    = (s.get("bewertung") or {}).get("score")
-        score_text = (
-            f'<span style="color:{score_farbe(score)};font-weight:bold;">{score}%</span>'
-        ) if score else ""
+        score_na = (s.get("bewertung") or {}).get("score_nach_anpassung")
+        if score:
+            score_text = f'<span style="color:{score_farbe(score)};font-weight:bold;">{score}%</span>'
+            if score_na and score_na > score:
+                score_text += f' → <span style="color:{score_farbe(score_na)};font-weight:bold;">{score_na}%</span>'
+        else:
+            score_text = ""
         meta = " · ".join(filter(None, [firma + standort_text, score_text]))
         return (
             f'<tr>'
@@ -1289,7 +1304,7 @@ def main():
 
     # Vollständigen Report erstellen
     print("  📄 Erstelle Report...")
-    report_html = erstelle_report(stellen, config["firmen_reihenfolge"])
+    report_html = erstelle_report(stellen)
     REPORT_PFAD.write_text(report_html, encoding="utf-8")
     print(f"  ✅ Report gespeichert: {REPORT_PFAD}")
 

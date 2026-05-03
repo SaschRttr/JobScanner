@@ -639,6 +639,100 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
     return gefunden, ausgeschlossen
 
+
+def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
+    """Scannt eine Firma über die HR4YOU API.
+    Die API gibt pro Seite ein html-Feld zurück, das Job-Links als <a>-Tags enthält.
+    Gibt (passende_stellen, ausgeschlossene_stellen) zurück."""
+    name      = api_config["name"]
+    basis_url = api_config["basis_url"].rstrip("/")
+    api_url   = api_config["url"]
+    params_basis = api_config.get("params", {})
+
+    print(f"\n{'='*60}")
+    print(f"  Scanne: {name} (HR4YOU)")
+    print(f"{'='*60}")
+
+    stellen      = []
+    ausgeschlossen = []
+    gesehen      = set()
+    seite        = 1
+    max_seite    = 1
+
+    while seite <= max_seite:
+        params = {**params_basis, "page": seite}
+        url_mit_seite = f"{api_url}?{urllib.parse.urlencode(params)}"
+
+        try:
+            req = urllib.request.Request(
+                url_mit_seite,
+                headers={
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                },
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            print(f"  ❌ Fehler Seite {seite}: {e}")
+            break
+
+        if seite == 1:
+            max_seite = int(data.get("maxPage", 1))
+            print(f"  📋 {data.get('amount', '?')} Jobs gesamt, {max_seite} Seite(n)")
+
+        zeilen = re.findall(r'<tr\b[^>]*>(.*?)</tr>', data.get("html", ""), re.DOTALL)
+        print(f"  📋 Seite {seite}/{max_seite}: {len(zeilen)} Zeilen")
+
+        for zeile in zeilen:
+            link_m = re.search(r'onclick="window\.open\(\'([^\']+)\'[^"]*"[^>]*>(.*?)</a>', zeile, re.DOTALL)
+            if not link_m:
+                continue
+            import html as _html
+            raw_url = link_m.group(1)
+            id_m = re.search(r'/job/view/(\d+)', raw_url)
+            url  = f"{basis_url}/job/view/{id_m.group(1)}" if id_m else raw_url.split('?')[0]
+            titel = _html.unescape(re.sub(r'<[^>]+>', '', link_m.group(2)).strip())
+
+            tds      = re.findall(r'<td\b[^>]*>(.*?)</td>', zeile, re.DOTALL)
+            standort = _html.unescape(re.sub(r'<[^>]+>', '', tds[2]).strip()) if len(tds) >= 3 else ""
+
+            if url in gesehen:
+                continue
+            gesehen.add(url)
+
+            treffer = text_matched(titel, config["suchbegriffe"])
+            if not treffer:
+                continue
+
+            volltext = f"{titel} {standort}"
+            if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
+                    or standort_verboten(volltext, config["verbotene_standorte"])):
+                ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                print(f"  🚫 Nicht passend: {titel[:70]}")
+            else:
+                ist_neu = url not in bekannte_urls
+                stellen.append({
+                    "firma": name, "titel": titel, "url": url,
+                    "standort": standort, "treffer": treffer,
+                    "neu": ist_neu, "rohtext": None,
+                })
+                neu_label = "🆕 " if ist_neu else "   "
+                print(f"  ✅ {neu_label}{titel}")
+                if standort:
+                    print(f"     📍 {standort}")
+                print(f"     Treffer: {', '.join(treffer)}")
+
+        seite += 1
+
+    if not stellen and not ausgeschlossen:
+        print(f"  ℹ️  Keine passenden Stellen bei {name}")
+
+    return stellen, ausgeschlossen
+
+
 def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
     """Scannt eine Firma über die Workday JSON-API.
     Gibt (passende_stellen, ausgeschlossene_stellen) zurück."""
@@ -758,8 +852,11 @@ def lade_rohtext(page, url: str) -> str | None:
         if "onlyfy.jobs" in url:
             job_id = url.rstrip("/").split("/")[-1]
             url = f"https://bertrandtgroup.onlyfy.jobs/job/show/{job_id}/full?lang=de&mode=candidate"
+
+        # Keysight SPA braucht länger bis JSON-Inhalt gerendert ist
+        warte_ms = 8000 if "jobs.keysight.com" in url else 4000
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(warte_ms)
         klick_cookie_banner(page)
         page.wait_for_timeout(2000)
 
@@ -833,7 +930,7 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list
 def lade_json(pfad: Path, standard):
     if pfad.exists():
         try:
-            return json.loads(pfad.read_text(encoding="utf-8"))
+            return json.loads(pfad.read_text(encoding="utf-8-sig"))
         except Exception:
             pass
     return standard
@@ -1034,6 +1131,8 @@ def main():
         try:
             if api_firma.get("typ") == "workday":
                 treffer_liste, ausgeschlossen_liste = scanne_workday_firma(api_firma, set(bekannte.keys()), config)
+            elif api_firma.get("typ") == "hr4you":
+                treffer_liste, ausgeschlossen_liste = scanne_hr4you_firma(api_firma, set(bekannte.keys()), config)
             else:
                 treffer_liste, ausgeschlossen_liste = scanne_api_firma(api_firma, set(bekannte.keys()), config)
             if treffer_liste or ausgeschlossen_liste:
@@ -1100,7 +1199,7 @@ def main():
             if not url or not url.startswith("http"):
                 continue
             if bekannte.get(url, {}).get("status") == 1 and not stelle.get("rohtext") and not stelle.get("nicht_passend"):
-                print(f"  📄 Lade Rohtext (API): {stelle['titel'][:60]}...")
+                print(f"  📄 Lade Rohtext: {stelle['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
                 if rohtext:
                     stelle["rohtext"] = rohtext

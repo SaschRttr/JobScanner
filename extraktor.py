@@ -65,7 +65,7 @@ def lade_config() -> dict:
 def lade_json(pfad: Path, standard):
     if pfad.exists():
         try:
-            return json.loads(pfad.read_text(encoding="utf-8"))
+            return json.loads(pfad.read_text(encoding="utf-8-sig"))
         except Exception:
             pass
     return standard
