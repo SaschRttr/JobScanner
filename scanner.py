@@ -510,6 +510,14 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     page.wait_for_timeout(3000)
     klick_cookie_banner(page)
 
+    # Oracle Recruiting Cloud (z.B. Nokia) lädt Jobs per AJAX nach DOM-Load
+    if any(d in url_boerse for d in ("nokia.com", "oraclecloud.com")):
+        print("  ⏳ Oracle CX – warte auf Netzwerk-Idle...")
+        try:
+            page.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            pass
+
     print("  📜 Scrolle...")
     for _ in range(8):
         page.evaluate("window.scrollBy(0, 1200)")
@@ -518,10 +526,21 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     page.wait_for_timeout(2000)
 
     alle_links = page.evaluate("""() =>
-        [...document.querySelectorAll('a[href]')].map(a => ({
-            href: a.href,
-            text: (a.innerText || '').trim()
-        }))
+        [...document.querySelectorAll('a[href]')].map(a => {
+            let text = (a.innerText || a.getAttribute('aria-label') || '').trim();
+            if (text.length < 10) {
+                const parent = a.closest('li, article, [role="listitem"]');
+                if (parent) {
+                    const h = parent.querySelector('h1,h2,h3,h4,[class*="title"],[class*="name"]');
+                    if (h) text = (h.innerText || '').trim();
+                    if (text.length < 10)
+                        text = [...parent.childNodes]
+                            .map(n => (n.textContent || '').trim())
+                            .find(t => t.length >= 10) || text;
+                }
+            }
+            return { href: a.href, text };
+        })
     """)
     print(f"  🔗 {len(alle_links)} Links gesamt")
 
