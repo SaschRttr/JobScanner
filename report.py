@@ -188,7 +188,7 @@ def sicherer_pfadname(text: str, max_len: int = 50) -> str:
 # HTML-BAUSTEINE
 # =============================================================================
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None) -> str:
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False) -> str:
     ist_neu      = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
 
@@ -375,8 +375,16 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_escaped}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
+    _auto_min_attr = ""
+    _transit_min_attr = ""
+    if fahrzeit and not fahrzeit.get("kein_ziel"):
+        if fahrzeit.get("auto_min") is not None:
+            _auto_min_attr = str(fahrzeit["auto_min"])
+        if fahrzeit.get("transit_min") is not None:
+            _transit_min_attr = str(fahrzeit["transit_min"])
 
-    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}">
+    _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
+    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}>
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{standort_label}{datum_label}
     {fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
@@ -511,6 +519,28 @@ CSS = """
         display: none; white-space: pre-wrap;
     }
     #scan-status { margin-top: 10px; font-size: 0.95em; color: #555; }
+    .filter-bar {
+        background: white; border-radius: 8px; padding: 12px 20px;
+        margin: 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+    }
+    .filter-gruppe { display: flex; gap: 6px; align-items: center; }
+    .filter-label { font-size: 0.85em; color: #666; font-weight: 600; margin-right: 2px; }
+    .filter-btn {
+        background: #f0f0f0; color: #555; border: 1px solid #ddd;
+        padding: 5px 14px; border-radius: 16px; font-size: 0.85em;
+        cursor: pointer; white-space: nowrap;
+    }
+    .filter-btn:hover { background: #e0e0e0; }
+    .filter-btn.aktiv { background: #3498db; color: white; border-color: #2980b9; }
+    #flat-ansicht {
+        background: white; border-radius: 8px; padding: 20px;
+        margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #flat-ansicht-info {
+        font-size: 0.85em; color: #666; margin-bottom: 12px;
+        padding-bottom: 8px; border-bottom: 1px solid #eee; font-weight: 600;
+    }
 """
 
 JS = """
@@ -897,6 +927,133 @@ JS = """
         };
     }
 
+    // ── Filter & Sortierung ──────────────────────────────────────────
+    let _aktiverFilter = null;
+    let _aktiveSortierung = null;
+    let _flatAktiv = false;
+    const _stellenUrsprung = [];
+
+    function toggleGeringerMatch(checked) {
+        const section = document.getElementById('geringer-match-section');
+        if (section) section.style.display = checked ? '' : 'none';
+        if (_flatAktiv) _aktualisiereFlach();
+    }
+    function setzeFilter(filter) {
+        _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
+        _aktualisiere();
+    }
+    function setzeSortierung(sort) {
+        _aktiveSortierung = (_aktiveSortierung === sort && sort !== null) ? null : sort;
+        _aktualisiere();
+    }
+    function _aktualisiere() {
+        _aktualisiereFilterBtns();
+        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null;
+        if (brauchtFlach && !_flatAktiv) _aktiviereFlach();
+        else if (!brauchtFlach && _flatAktiv) _deaktiviereFlach();
+        else if (brauchtFlach && _flatAktiv) _aktualisiereFlach();
+    }
+    function _aktualisiereFilterBtns() {
+        const map = {
+            'btn-alle':          _aktiverFilter === null,
+            'btn-beworben':      _aktiverFilter === 'beworben',
+            'btn-kennenlernen':  _aktiverFilter === 'kennenlernen',
+            'btn-einladung':     _aktiverFilter === 'einladung',
+            'btn-zusage':        _aktiverFilter === 'zusage',
+            'btn-absage':        _aktiverFilter === 'absage',
+            'btn-sort-std':      _aktiveSortierung === null,
+            'btn-sort-score':    _aktiveSortierung === 'score',
+            'btn-sort-auto':     _aktiveSortierung === 'auto',
+            'btn-sort-transit':  _aktiveSortierung === 'transit',
+        };
+        Object.entries(map).forEach(([id, aktiv]) => {
+            const btn = document.getElementById(id);
+            if (btn) btn.classList.toggle('aktiv', aktiv);
+        });
+    }
+    function _aktiviereFlach() {
+        const ha = document.getElementById('hauptansicht');
+        const fa = document.getElementById('flat-ansicht');
+        _stellenUrsprung.length = 0;
+        ha.querySelectorAll('.stelle[data-url]').forEach(el => {
+            _stellenUrsprung.push({ el, parent: el.parentNode, nextSibling: el.nextSibling });
+        });
+        _flatAktiv = true;
+        _aktualisiereFlach();
+        ha.style.display = 'none';
+        fa.style.display = 'block';
+    }
+    function _deaktiviereFlach() {
+        const ha = document.getElementById('hauptansicht');
+        const fa = document.getElementById('flat-ansicht');
+        for (let i = _stellenUrsprung.length - 1; i >= 0; i--) {
+            const {el, parent, nextSibling} = _stellenUrsprung[i];
+            if (nextSibling) parent.insertBefore(el, nextSibling);
+            else parent.appendChild(el);
+        }
+        _stellenUrsprung.length = 0;
+        _flatAktiv = false;
+        fa.style.display = 'none';
+        fa.innerHTML = '<div id="flat-ansicht-info"></div>';
+        ha.style.display = '';
+    }
+    function _aktualisiereFlach() {
+        const fa = document.getElementById('flat-ansicht');
+        _stellenUrsprung.forEach(({el}) => {
+            if (el.parentNode === fa) fa.removeChild(el);
+        });
+        let gefiltert = _stellenUrsprung.map(o => o.el);
+        if (_aktiverFilter !== null) {
+            gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
+        }
+        const zeigeGM = document.getElementById('cb-geringer-match')?.checked;
+        if (!zeigeGM) {
+            gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
+        }
+        if (_aktiveSortierung === 'score') {
+            gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
+                .slice().sort((a, b) =>
+                    parseInt(b.dataset.score || '0') - parseInt(a.dataset.score || '0'));
+        } else if (_aktiveSortierung === 'auto') {
+            gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
+                .slice().sort((a, b) =>
+                    (parseInt(a.dataset.autoMin) || 9999) - (parseInt(b.dataset.autoMin) || 9999));
+        } else if (_aktiveSortierung === 'transit') {
+            gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
+                .slice().sort((a, b) =>
+                    (parseInt(a.dataset.transitMin) || 9999) - (parseInt(b.dataset.transitMin) || 9999));
+        }
+        const info = document.createElement('div');
+        info.id = 'flat-ansicht-info';
+        const filterText = {
+            beworben:     '✅ Beworben',
+            kennenlernen: '📞 Kennenlernen',
+            einladung:    '📅 Einladung',
+            zusage:       '🎉 Zusage',
+            absage:       '❌ Absage',
+        }[_aktiverFilter] || '';
+        const sortText = {
+            score:   '⭐ Nach Passung',
+            auto:    '🚗 Nach Entfernung (Auto)',
+            transit: '🚌 Nach Entfernung (ÖPNV)',
+        }[_aktiveSortierung] || '';
+        info.textContent = [filterText, sortText].filter(Boolean).join(' · ')
+            + ` — ${gefiltert.length} Stelle${gefiltert.length !== 1 ? 'n' : ''}`;
+        fa.innerHTML = '';
+        fa.appendChild(info);
+        if (gefiltert.length === 0) {
+            const p = document.createElement('p');
+            p.className = 'leer';
+            p.textContent = 'Keine Stellen gefunden.';
+            fa.appendChild(p);
+        } else {
+            gefiltert.forEach(el => fa.appendChild(el));
+        }
+    }
+
     async function neueFirmaTesten() {
         const url      = document.getElementById('firma-test-url').value.trim();
         const name     = document.getElementById('firma-test-name').value.trim();
@@ -1115,6 +1272,35 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         </div>
     """
 
+    html += """
+    <div class="filter-bar" id="filter-bar">
+        <div class="filter-gruppe">
+            <span class="filter-label">Filter:</span>
+            <button id="btn-alle" class="filter-btn aktiv" onclick="setzeFilter(null)">Alle</button>
+            <button id="btn-beworben" class="filter-btn" onclick="setzeFilter('beworben')">✅ Beworben</button>
+            <button id="btn-kennenlernen" class="filter-btn" onclick="setzeFilter('kennenlernen')">📞 Kennenlernen</button>
+            <button id="btn-einladung" class="filter-btn" onclick="setzeFilter('einladung')">📅 Einladung</button>
+            <button id="btn-zusage" class="filter-btn" onclick="setzeFilter('zusage')">🎉 Zusage</button>
+            <button id="btn-absage" class="filter-btn" onclick="setzeFilter('absage')">❌ Absage</button>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-geringer-match" onchange="toggleGeringerMatch(this.checked)">
+                📉 Geringen Match einblenden
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <span class="filter-label">Sortierung:</span>
+            <button id="btn-sort-std" class="filter-btn aktiv" onclick="setzeSortierung(null)">Standard</button>
+            <button id="btn-sort-score" class="filter-btn" onclick="setzeSortierung('score')">⭐ Passung</button>
+            <button id="btn-sort-auto" class="filter-btn" onclick="setzeSortierung('auto')">🚗 Entfernung (Auto)</button>
+            <button id="btn-sort-transit" class="filter-btn" onclick="setzeSortierung('transit')">🚌 Entfernung (ÖPNV)</button>
+        </div>
+    </div>
+    <div id="flat-ansicht" style="display:none;"><div id="flat-ansicht-info"></div></div>
+    <div id="hauptansicht">
+    """
+
     # ── Neue Stellen (letzte 3 Tage, sortiert nach Score) ───────────
     drei_tage_ago = datetime.now() - timedelta(days=3)
     neueste = [
@@ -1182,15 +1368,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             key=lambda s: (s.get("bewertung") or {}).get("score", 0),
             reverse=True
         )
-        html += f'''<details style="margin: 15px 0;">
-    <summary style="cursor:pointer; background:#fef9e7; padding:12px 20px;
-        border-radius:8px; font-weight:bold; font-size:1.05em;">
-        📉 Geringer Match – Score ≤ {GERINGER_MATCH_SCHWELLE}% ({len(geringer_match)})
-    </summary>
-    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        html += f'<div id="geringer-match-section" style="display:none; margin:15px 0;">\n'
+        html += f'<div class="firma-block">\n'
+        html += f'<h2>📉 Geringer Match – Score ≤ {GERINGER_MATCH_SCHWELLE}% ({len(geringer_match)})</h2>\n'
         for s in geringer_match_sorted:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
-        html += '</div>\n</details>\n'
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), geringer_match=True)
+        html += '</div>\n</div>\n'
 
     # ── Vergangene Stellen (am Ende, eingeklappt) ───────────────────
     if geloescht:
@@ -1225,6 +1408,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         for s in nicht_passend:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n</details>\n'
+
+    html += '</div>\n'  # /hauptansicht
 
     html += f"""
     <hr>
