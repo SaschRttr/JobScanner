@@ -21,6 +21,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 import urllib.parse
+import urllib.request
+
+sys.path.insert(0, str(Path(__file__).parent))
 
 
 # =============================================================================
@@ -55,6 +58,9 @@ def lade_config() -> dict:
         "raspi_ip": "",
         "ausschlussbegriffe": [],
         "verbotene_standorte": [],
+        "google_maps_key": "",
+        "fahrzeit_startpunkt": "",
+        "firma_adressen": {},   # firma_name → "Straße, PLZ Ort"
     }
 
     aktiver_abschnitt = None
@@ -84,6 +90,18 @@ def lade_config() -> dict:
                 result["email_empfaenger"] = z.split("=", 1)[1].strip()
             elif z.upper().startswith("RASPI_IP"):
                 result["raspi_ip"] = z.split("=", 1)[1].strip()
+            elif z.upper().startswith("GOOGLE_MAPS_KEY"):
+                result["google_maps_key"] = z.split("=", 1)[1].strip()
+            elif z.upper().startswith("FAHRZEIT_STARTPUNKT"):
+                result["fahrzeit_startpunkt"] = z.split("=", 1)[1].strip()
+
+        elif aktiver_abschnitt == "firma_anschreiben":
+            if "|" in z:
+                teile = [t.strip() for t in z.split("|")]
+                if len(teile) >= 6:
+                    firma_name = teile[0]
+                    adresse = f"{teile[3]}, {teile[4]} {teile[5]}"
+                    result["firma_adressen"][firma_name] = adresse
 
         elif aktiver_abschnitt == "firmen":
             if "|" in z:
@@ -114,6 +132,52 @@ def lade_json(pfad: Path, standard):
 
 
 
+# =============================================================================
+# FAHRZEIT (Google Distance Matrix API)
+# =============================================================================
+
+def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None:
+    """Fragt Google Distance Matrix API ab (driving + transit). Kein Caching — nur reiner API-Call."""
+    if not api_key or not ziel or not startpunkt or api_key == "DEIN_GOOGLE_MAPS_API_KEY":
+        return None
+
+    def _anfrage(mode: str) -> dict | None:
+        params = urllib.parse.urlencode({
+            "origins":      startpunkt,
+            "destinations": ziel,
+            "mode":         mode,
+            "language":     "de",
+            "key":          api_key,
+        })
+        api_url = f"https://maps.googleapis.com/maps/api/distancematrix/json?{params}"
+        try:
+            req = urllib.request.Request(api_url, headers={"User-Agent": "JobScanner/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            rows = data.get("rows", [])
+            if not rows:
+                return None
+            el = rows[0]["elements"][0]
+            if el.get("status") == "OK":
+                return {
+                    "min": el["duration"]["value"] // 60,
+                    "km":  round(el["distance"]["value"] / 1000, 1),
+                }
+        except Exception:
+            pass
+        return None
+
+    auto    = _anfrage("driving")
+    transit = _anfrage("transit")
+    if auto is None and transit is None:
+        return None
+    return {
+        "auto_min":    auto["min"]    if auto    else None,
+        "auto_km":     auto["km"]     if auto    else None,
+        "transit_min": transit["min"] if transit else None,
+    }
+
+
 def sicherer_pfadname(text: str, max_len: int = 50) -> str:
     bereinigt = re.sub(r'[^\w\s\-]', '', text).strip()
     bereinigt = re.sub(r'\s+', '_', bereinigt)
@@ -124,7 +188,7 @@ def sicherer_pfadname(text: str, max_len: int = 50) -> str:
 # HTML-BAUSTEINE
 # =============================================================================
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None) -> str:
     ist_neu      = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
 
@@ -148,6 +212,32 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
     if geloescht_am:
         datum_label += f' &nbsp;|&nbsp; 🗑️ vergeben: {geloescht_am[:10]}'
     datum_label += '</span>'
+
+    # Fahrzeit-Info
+    if fahrzeit is None:
+        fahrzeit_html = ""
+    elif fahrzeit.get("kein_ziel"):
+        fahrzeit_html = '<div class="fahrzeit-info fahrzeit-unbekannt">📍 Adresse/Standort unbekannt</div>'
+    else:
+        auto_min    = fahrzeit.get("auto_min")
+        auto_km     = fahrzeit.get("auto_km")
+        transit_min = fahrzeit.get("transit_min")
+        genau       = fahrzeit.get("genau", True)
+        teile = []
+        if auto_min is not None:
+            km_text = f" ({auto_km} km)" if auto_km is not None else ""
+            teile.append(f'🚗 {auto_min} min{km_text}')
+        if transit_min is not None:
+            teile.append(f'🚌 {transit_min} min')
+        if teile:
+            ca_prefix = "ca. " if not genau else ""
+            ziel_text = fahrzeit.get("ziel", "")
+            maps_url  = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ziel_text)}"
+            maps_link = f' <a href="{maps_url}" target="_blank" class="fahrzeit-maps">📌</a>'
+            ziel_hinweis = f' <span class="fahrzeit-hinweis">({ziel_text})</span>' if not genau else ""
+            fahrzeit_html = f'<div class="fahrzeit-info">{ca_prefix}{" &nbsp;&nbsp; ".join(teile)}{ziel_hinweis}{maps_link}</div>'
+        else:
+            fahrzeit_html = ""
 
     # KI-Bewertung
     bewertung_html = ""
@@ -288,7 +378,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False) -> str:
 
     return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{standort_label}{datum_label}
-    <div class="tags">{tags}</div>
+    {fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
     {stellentext_html}
     {steckbrief_html}
@@ -343,6 +433,10 @@ CSS = """
     .badge-weg { background: #aaa; }
     .firma-label { color: #999; font-size: 0.85em; }
     .standort-label { color: #888; font-size: 0.82em; margin-left: 6px; }
+    .fahrzeit-info { font-size: 0.82em; color: #555; margin: 3px 0 2px 0; }
+    .fahrzeit-unbekannt { color: #aaa; font-style: italic; }
+    .fahrzeit-hinweis { color: #aaa; font-size: 0.9em; }
+    .fahrzeit-maps { text-decoration: none; margin-left: 4px; }
     .bewertung {
         margin-top: 10px; padding: 10px; background: #fff;
         border-radius: 6px; font-size: 0.9em;
@@ -871,8 +965,62 @@ def _hat_geringen_score(s: dict) -> bool:
     return (b.get("score") or 0) <= GERINGER_MATCH_SCHWELLE
 
 
-def erstelle_report(stellen: list) -> str:
+def erstelle_report(stellen: list, config: dict | None = None) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Fahrzeit-Daten vorberechnen (cached in DB, max 1 API-Call pro Zieladresse)
+    api_key    = (config or {}).get("google_maps_key", "")
+    startpunkt = (config or {}).get("fahrzeit_startpunkt", "")
+    firma_adressen = (config or {}).get("firma_adressen", {})
+    fahrzeit_daten: dict = {}  # url → fahrzeit-dict
+
+    if api_key and startpunkt and api_key != "DEIN_GOOGLE_MAPS_API_KEY":
+        try:
+            from db import hole_fahrzeit_cache, speichere_fahrzeit_cache
+            db_ok = True
+        except Exception:
+            db_ok = False
+
+        relevante = [s for s in stellen if not s.get("nicht_passend")]
+        _api_cache: dict = {}  # ziel → API-Ergebnis (verhindert doppelte API-Calls)
+
+        for s in relevante:
+            url      = s["url"]
+            firma    = s.get("firma", "")
+            standort = s.get("standort") or ""
+            if standort == "ok":
+                standort = ""
+            adresse = firma_adressen.get(firma)
+            ziel    = adresse or standort or None
+            genau   = adresse is not None
+
+            if not ziel:
+                fahrzeit_daten[url] = {"kein_ziel": True}
+                continue
+
+            # DB-Cache per URL prüfen
+            if db_ok:
+                cached = hole_fahrzeit_cache(url)
+                if cached is not None:
+                    fahrzeit_daten[url] = cached
+                    continue
+
+            # API-Call (Session-Cache vermeidet Doppel-Requests für gleiche Zieladresse)
+            if ziel not in _api_cache:
+                _api_cache[ziel] = hole_fahrzeit_daten(ziel, api_key, startpunkt)
+            daten = _api_cache[ziel]
+
+            eintrag = {
+                "ziel":        ziel,
+                "genau":       genau,
+                "auto_min":    daten["auto_min"]    if daten else None,
+                "auto_km":     daten["auto_km"]     if daten else None,
+                "transit_min": daten["transit_min"] if daten else None,
+            }
+            if db_ok:
+                speichere_fahrzeit_cache(url, eintrag)
+            if daten:
+                fahrzeit_daten[url] = eintrag
 
     # Absagen aus status.json laden
     job_status = {}
@@ -975,11 +1123,14 @@ def erstelle_report(stellen: list) -> str:
         datetime.strptime(s["gefunden_am"][:10], "%Y-%m-%d") >= drei_tage_ago.replace(hour=0, minute=0, second=0)
     ]
     neueste_sorted = sorted(neueste, key=lambda s: (s.get("bewertung") or {}).get("score", 0), reverse=True)
+    def _fz(s):
+        return fahrzeit_daten.get(s["url"])
+
     if neueste_sorted:
         html += '<div class="firma-block">\n'
         html += f'<h2>🆕 Neue Stellen – letzte 3 Tage ({len(neueste_sorted)})</h2>\n'
         for s in neueste_sorted:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n'
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
@@ -992,7 +1143,7 @@ def erstelle_report(stellen: list) -> str:
         html += '<div class="firma-block">\n'
         html += '<h2>⭐ Top 10 nach KI-Score</h2>\n'
         for s in top10:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n'
 
     # ── Pro Firma ───────────────────────────────────────────────────
@@ -1014,11 +1165,11 @@ def erstelle_report(stellen: list) -> str:
             if hoch:
                 html += '<p><strong>⭐ Score ≥ 70%</strong></p>\n'
                 for s in hoch:
-                    html += stelle_zu_html(s)
+                    html += stelle_zu_html(s, fahrzeit=_fz(s))
             if rest:
                 html += '<p><strong>Weitere Treffer</strong></p>\n'
                 for s in rest:
-                    html += stelle_zu_html(s)
+                    html += stelle_zu_html(s, fahrzeit=_fz(s))
         else:
             html += '<p class="leer">Keine passenden Stellen gefunden.</p>\n'
 
@@ -1038,7 +1189,7 @@ def erstelle_report(stellen: list) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in geringer_match_sorted:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n</details>\n'
 
     # ── Vergangene Stellen (am Ende, eingeklappt) ───────────────────
@@ -1050,7 +1201,7 @@ def erstelle_report(stellen: list) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in geloescht:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n</details>\n'
 
     if absagen:
@@ -1061,7 +1212,7 @@ def erstelle_report(stellen: list) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in absagen:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n</details>\n'
 
     if nicht_passend:
@@ -1072,7 +1223,7 @@ def erstelle_report(stellen: list) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in nicht_passend:
-            html += stelle_zu_html(s, zeige_firma=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
         html += '</div>\n</details>\n'
 
     html += f"""
@@ -1304,7 +1455,7 @@ def main():
 
     # Vollständigen Report erstellen
     print("  📄 Erstelle Report...")
-    report_html = erstelle_report(stellen)
+    report_html = erstelle_report(stellen, config)
     REPORT_PFAD.write_text(report_html, encoding="utf-8")
     print(f"  ✅ Report gespeichert: {REPORT_PFAD}")
 

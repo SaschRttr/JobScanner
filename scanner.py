@@ -1047,7 +1047,6 @@ def main():
         elif idx is None:
             # In bekannte vorhanden aber fehlt in stellen.json → wiederherstellen
             rohtext = t.get("rohtext")
-            status = bekannte[url]["status"]
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
                 "standort": t.get("standort", ""),
@@ -1055,8 +1054,13 @@ def main():
                 "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
             stellen_index[url] = len(stellen) - 1
-            if rohtext and status < 2:
-                bekannte[url]["status"] = 2
+            # Status an tatsächlichen Inhalt anpassen – historischem Status nicht vertrauen,
+            # da stellen.json unabhängig von bekannte_stellen verloren gehen kann
+            if rohtext:
+                if bekannte[url]["status"] < 2:
+                    bekannte[url]["status"] = 2
+            else:
+                bekannte[url]["status"] = 1
             print(f"  🔧 Wiederhergestellt (fehlte in stellen.json): {t['titel'][:60]}")
 
     def reaktiviere_oder_neu_playwright(t, rohtext, ts):
@@ -1204,7 +1208,8 @@ def main():
                 url = t["url"]
                 if url in gesehen_urls:
                     continue
-                if url in bekannte and bekannte[url]["status"] >= 2:
+                idx = stellen_index.get(url)
+                if url in bekannte and bekannte[url]["status"] >= 2 and idx is not None and stellen[idx].get("rohtext"):
                     gesehen_urls.add(url)
                     print(f"  ⏭️  Rohtext bereits vorhanden: {t['titel'][:60]}")
                     continue
