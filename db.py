@@ -74,6 +74,17 @@ def erstelle_schema():
                 ergebnis_am      TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
+
+            CREATE TABLE IF NOT EXISTS fahrzeit_cache (
+                url          TEXT PRIMARY KEY,
+                ziel         TEXT,
+                genau        INTEGER DEFAULT 1,
+                auto_min     INTEGER,
+                auto_km      REAL,
+                transit_min  INTEGER,
+                abgerufen_am TEXT,
+                FOREIGN KEY (url) REFERENCES stellen(url)
+            );
         """)
     print(f"  🗄️  Datenbank bereit: {DB_PFAD}")
 
@@ -252,6 +263,50 @@ def upsert_bewerbungsstatus(url: str, stufe: str):
 
 
 # =============================================================================
+# FAHRZEIT-CACHE
+# =============================================================================
+
+def hole_fahrzeit_cache(url: str) -> dict | None:
+    """Gibt gecachte Fahrzeit-Daten für eine Stelle zurück, oder None wenn noch nicht gecacht."""
+    with verbindung() as con:
+        r = con.execute(
+            "SELECT ziel, genau, auto_min, auto_km, transit_min FROM fahrzeit_cache WHERE url = ?", (url,)
+        ).fetchone()
+    if r is None:
+        return None
+    return {
+        "ziel":        r["ziel"],
+        "genau":       bool(r["genau"]),
+        "auto_min":    r["auto_min"],
+        "auto_km":     r["auto_km"],
+        "transit_min": r["transit_min"],
+    }
+
+
+def speichere_fahrzeit_cache(url: str, daten: dict):
+    with verbindung() as con:
+        con.execute("""
+            INSERT INTO fahrzeit_cache (url, ziel, genau, auto_min, auto_km, transit_min, abgerufen_am)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                ziel         = excluded.ziel,
+                genau        = excluded.genau,
+                auto_min     = excluded.auto_min,
+                auto_km      = excluded.auto_km,
+                transit_min  = excluded.transit_min,
+                abgerufen_am = excluded.abgerufen_am
+        """, (
+            url,
+            daten.get("ziel"),
+            1 if daten.get("genau") else 0,
+            daten.get("auto_min"),
+            daten.get("auto_km"),
+            daten.get("transit_min"),
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+        ))
+
+
+# =============================================================================
 # STELLEN LESEN
 # =============================================================================
 
@@ -313,13 +368,6 @@ def status_von(url: str) -> int | None:
             "SELECT status FROM stellen WHERE url = ?", (url,)
         ).fetchone()
     return r["status"] if r else None
-
-
-def lade_bewerbungsstatus_urls() -> set:
-    """Gibt alle URLs zurück, für die ein Bewerbungsstatus-Eintrag existiert."""
-    with verbindung() as con:
-        rows = con.execute("SELECT url FROM bewerbungsstatus").fetchall()
-    return {r["url"] for r in rows}
 
 
 def alle_aktiven_urls() -> set:
