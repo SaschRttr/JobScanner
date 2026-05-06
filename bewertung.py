@@ -5,7 +5,8 @@ Bewertet alle Stellen mit sauberem Stellentext per KI.
 Prompt kommt aus config.txt.
 
 Status-Übergänge:
-  3 (Stellentext extrahiert) → 4 (KI-Bewertung vorhanden)
+  3 (Stellentext extrahiert) → 4 (KI-Bewertung ≥ 70 %, bewerben)
+                             → 5 (KI-Bewertung < 70 %, nicht bewerben)
 
 Nutzung:
   python bewertung.py
@@ -229,10 +230,11 @@ def main():
 
         if bewertung:
             stellen[idx]["bewertung"] = bewertung
-            bekannte[url]["status"]   = 4
             score = bewertung.get("score", 0)
             empf  = bewertung.get("empfehlung", "?")
-            print(f"  ⭐ Score: {score}%  |  {empf.upper()}")
+            neuer_status = 4 if score >= 70 else 5
+            bekannte[url]["status"] = neuer_status
+            print(f"  ⭐ Score: {score}%  |  {empf.upper()}  →  Status {neuer_status}")
             bewertet += 1
         else:
             print(f"  ⚠️  Bewertung fehlgeschlagen")
@@ -244,8 +246,8 @@ def main():
         # Datenbank aktualisieren
         try:
             from db import upsert_stelle, upsert_bewertung
-            upsert_stelle({"url": url, "status": 4})
             if bewertung:
+                upsert_stelle({"url": url, "status": neuer_status})
                 upsert_bewertung(url, bewertung)
         except Exception as e:
             print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")

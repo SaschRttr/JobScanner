@@ -569,7 +569,8 @@ def bewertung_erstellen():
     if bekannte_pfad.exists():
         bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig"))
         if url in bekannte:
-            bekannte[url]["status"] = 4
+            score = (bewertung or {}).get("score", 0)
+            bekannte[url]["status"] = 4 if score >= 70 else 5
             bekannte[url]["nicht_passend"] = False
             bekannte_pfad.write_text(json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8")
 

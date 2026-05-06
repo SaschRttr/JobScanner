@@ -370,10 +370,13 @@ def status_von(url: str) -> int | None:
     return r["status"] if r else None
 
 
+INAKTIVE_STATUSWERTE = (0, 7, 8, 9)
+
 def alle_aktiven_urls() -> set:
     with verbindung() as con:
         rows = con.execute(
-            "SELECT url FROM stellen WHERE status != 0"
+            f"SELECT url FROM stellen WHERE status NOT IN ({','.join('?'*len(INAKTIVE_STATUSWERTE))})",
+            INAKTIVE_STATUSWERTE
         ).fetchall()
     return {r["url"] for r in rows}
 
@@ -421,7 +424,8 @@ def _status_aus_dict(s: dict) -> int:
     if s.get("geloescht_am"):
         return 0
     if s.get("bewertung"):
-        return 4
+        score = (s["bewertung"] or {}).get("score", 0)
+        return 4 if score >= 70 else 5
     if s.get("stellentext"):
         return 3
     if s.get("rohtext"):
@@ -435,15 +439,19 @@ def _status_aus_dict(s: dict) -> int:
 
 def statistik() -> dict:
     with verbindung() as con:
-        gesamt   = con.execute("SELECT COUNT(*) FROM stellen").fetchone()[0]
-        aktiv    = con.execute("SELECT COUNT(*) FROM stellen WHERE status != 0").fetchone()[0]
-        vergeben = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 0").fetchone()[0]
-        bewertet = con.execute("SELECT COUNT(*) FROM bewertungen").fetchone()[0]
-        top      = con.execute("""
+        gesamt    = con.execute("SELECT COUNT(*) FROM stellen").fetchone()[0]
+        aktiv     = con.execute("SELECT COUNT(*) FROM stellen WHERE status NOT IN (0,7,8,9)").fetchone()[0]
+        vergeben  = con.execute("SELECT COUNT(*) FROM stellen WHERE status IN (0,7,8,9)").fetchone()[0]
+        bewertet  = con.execute("SELECT COUNT(*) FROM bewertungen").fetchone()[0]
+        beworben  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 6").fetchone()[0]
+        verg_bew  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 7").fetchone()[0]
+        absagen   = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 8").fetchone()[0]
+        verg_nie  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 9").fetchone()[0]
+        top       = con.execute("""
             SELECT s.firma, s.titel, s.url, b.score, b.empfehlung
             FROM stellen s
             JOIN bewertungen b ON s.url = b.url
-            WHERE s.status != 0
+            WHERE s.status NOT IN (0,7,8,9)
             ORDER BY b.score DESC
             LIMIT 10
         """).fetchall()
@@ -451,7 +459,7 @@ def statistik() -> dict:
         pro_firma = con.execute("""
             SELECT firma, COUNT(*) as anzahl
             FROM stellen
-            WHERE status != 0
+            WHERE status NOT IN (0,7,8,9)
             GROUP BY firma
             ORDER BY anzahl DESC
         """).fetchall()
@@ -461,6 +469,10 @@ def statistik() -> dict:
         "aktiv":     aktiv,
         "vergeben":  vergeben,
         "bewertet":  bewertet,
+        "beworben":  beworben,
+        "verg_bew":  verg_bew,
+        "absagen":   absagen,
+        "verg_nie":  verg_nie,
         "top10":     [dict(r) for r in top],
         "pro_firma": [dict(r) for r in pro_firma],
     }

@@ -188,9 +188,24 @@ def sicherer_pfadname(text: str, max_len: int = 50) -> str:
 # HTML-BAUSTEINE
 # =============================================================================
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False) -> str:
-    ist_neu      = s.get("neu", False)
+_STATUS_LABELS = {
+    0: "vergaben",
+    1: "Link",
+    2: "Rohtext",
+    3: "Stellentext",
+    4: "bewerben ≥70%",
+    5: "nicht bewerben",
+    6: "beworben·offen",
+    7: "beworben·weg",
+    8: "Absage",
+    9: "vergaben·geprüft",
+}
+
+
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None) -> str:
+    ist_neu       = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
+    vergabe_st    = s.get("vergabe_status", 0)
 
     if ist_geloescht:
         css = "stelle stelle-geloescht"
@@ -198,19 +213,36 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         css = "stelle stelle-neu"
     else:
         css = "stelle"
-    
+
     tags = "".join(f'<span class="tag">{t}</span>' for t in s.get("treffer", []))
-    neu_badge      = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
-    geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>' if ist_geloescht else ""
+    neu_badge = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
+    if vergabe_st == 6:
+        geloescht_badge = '<span class="badge badge-weg">BEWERBUNG VERGABEN</span>'
+    elif vergabe_st == 7:
+        geloescht_badge = '<span class="badge badge-weg" style="background:#c0392b;">ABSAGE</span>'
+    elif ist_geloescht:
+        geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>'
+    else:
+        geloescht_badge = ""
+    if scanner_status is not None:
+        label = _STATUS_LABELS.get(scanner_status, str(scanner_status))
+        status_badge = f'<span class="scanner-status scanner-status-{scanner_status}" title="Status {scanner_status}: {label}">S{scanner_status}</span>'
+    else:
+        status_badge = ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
     standort = s.get("standort") or ""
     standort_label = f' <span class="standort-label">📍 {standort}</span>' if standort and standort != "ok" else ""
-    firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else ""
+    firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {s["firma"]}</span>'
     gefunden_am    = s.get("gefunden_am", "")[:10]
     geloescht_am   = s.get("geloescht_am", "")
     datum_label    = f'<span style="color:#aaa; font-size:0.8em; margin-left:8px;">📅 gefunden: {gefunden_am}'
     if geloescht_am:
-        datum_label += f' &nbsp;|&nbsp; 🗑️ vergeben: {geloescht_am[:10]}'
+        if vergabe_st == 6:
+            datum_label += f' &nbsp;|&nbsp; 📭 Bewerbung vergaben: {geloescht_am[:10]}'
+        elif vergabe_st == 7:
+            datum_label += f' &nbsp;|&nbsp; ❌ Absage: {geloescht_am[:10]}'
+        else:
+            datum_label += f' &nbsp;|&nbsp; 🗑️ vergeben: {geloescht_am[:10]}'
     datum_label += '</span>'
 
     # Fahrzeit-Info
@@ -385,7 +417,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
 
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
     return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}>
-    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{firma_label}{standort_label}{datum_label}
+    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{firma_label}{standort_label}{datum_label}
     {fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
     {stellentext_html}
@@ -440,6 +472,8 @@ CSS = """
     .badge-neu { background: #e74c3c; }
     .badge-weg { background: #aaa; }
     .firma-label { color: #999; font-size: 0.85em; }
+    .firma-label-auto { display: none; color: #999; font-size: 0.85em; }
+    #flat-ansicht .firma-label-auto { display: inline; }
     .standort-label { color: #888; font-size: 0.82em; margin-left: 6px; }
     .fahrzeit-info { font-size: 0.82em; color: #555; margin: 3px 0 2px 0; }
     .fahrzeit-unbekannt { color: #aaa; font-style: italic; }
@@ -500,6 +534,21 @@ CSS = """
         cursor: pointer; text-decoration: none;
     }
     .steckbrief-btn:disabled { color: #aaa; cursor: not-allowed; }
+    .scanner-status {
+        display: inline-block; font-size: 0.72em; font-weight: 600;
+        padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+        vertical-align: middle; color: white; cursor: default;
+    }
+    .scanner-status-0 { background: #95a5a6; }
+    .scanner-status-1 { background: #bdc3c7; color: #555; }
+    .scanner-status-2 { background: #85c1e9; }
+    .scanner-status-3 { background: #5dade2; }
+    .scanner-status-4 { background: #27ae60; }
+    .scanner-status-5 { background: #e67e22; }
+    .scanner-status-6 { background: #f1c40f; color: #555; }
+    .scanner-status-7 { background: #e67e22; }
+    .scanner-status-8 { background: #e74c3c; }
+    .scanner-status-9 { background: #7f8c8d; }
     .scan-box {
         background: white; border-radius: 8px; padding: 20px;
         margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -596,16 +645,43 @@ JS = """
     }
 
     async function ladeStatus() {
-        let status = {};
-        if (!SERVER) {
-            status = JSON.parse(localStorage.getItem('job_status') || '{}');
-        } else {
+        const localStatus = JSON.parse(localStorage.getItem('job_status') || '{}');
+        let status = localStatus;
+
+        if (SERVER) {
             try {
                 const res = await fetch(SERVER + '/status');
-                status = await res.json();
+                const dbStatus = await res.json();
+
+                // Zusammenführen: DB gewinnt bei Konflikten, localStorage füllt Lücken
+                status = { ...localStatus };
+                for (const [url, dbInfo] of Object.entries(dbStatus)) {
+                    status[url] = { ...(localStatus[url] || {}), ...dbInfo };
+                }
+
+                // Fehlende localStorage-Einträge in DB nachsynchronisieren
+                const syncs = [];
+                for (const [url, info] of Object.entries(localStatus)) {
+                    const db = dbStatus[url] || {};
+                    if (info.stufe && !db.stufe) {
+                        syncs.push(fetch(SERVER + '/status', {
+                            method: 'POST', headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({url, feld:'stufe', wert:info.stufe})
+                        }));
+                    }
+                    if (info.kommentar && !db.kommentar) {
+                        syncs.push(fetch(SERVER + '/status', {
+                            method: 'POST', headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({url, feld:'kommentar', wert:info.kommentar})
+                        }));
+                    }
+                }
+                if (syncs.length > 0) {
+                    await Promise.all(syncs.map(p => p.catch(() => {})));
+                    console.log(syncs.length + ' Status-Einträge mit Datenbank synchronisiert');
+                }
             } catch (e) {
-                console.warn('Statusserver nicht erreichbar', e);
-                status = JSON.parse(localStorage.getItem('job_status') || '{}');
+                console.warn('Statusserver nicht erreichbar, nutze localStorage', e);
             }
         }
         document.querySelectorAll('.stelle[data-url]').forEach(el => {
@@ -641,6 +717,10 @@ JS = """
                 el.classList.remove('mit-aktivitaet');
             }
         });
+        const statAbsagen = document.getElementById('stat-absagen');
+        if (statAbsagen) {
+            statAbsagen.textContent = document.querySelectorAll('.stelle.absage').length;
+        }
     }
 
     window.onload = function() { ladeStatus(); ladeFirmen(); };
@@ -975,7 +1055,11 @@ JS = """
         const ha = document.getElementById('hauptansicht');
         const fa = document.getElementById('flat-ansicht');
         _stellenUrsprung.length = 0;
+        const _seenUrls = new Set();
         ha.querySelectorAll('.stelle[data-url]').forEach(el => {
+            const u = el.dataset.url;
+            if (u && _seenUrls.has(u)) return;
+            if (u) _seenUrls.add(u);
             _stellenUrsprung.push({ el, parent: el.parentNode, nextSibling: el.nextSibling });
         });
         _flatAktiv = true;
@@ -1130,6 +1214,10 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     startpunkt = (config or {}).get("fahrzeit_startpunkt", "")
     firma_adressen = (config or {}).get("firma_adressen", {})
     fahrzeit_daten: dict = {}  # url → fahrzeit-dict
+    bekannte_status: dict = {url: e.get("status") for url, e in lade_json(BEKANNTE_JSON, {}).items()}
+
+    def _st(s: dict) -> int | None:
+        return bekannte_status.get(s["url"])
 
     if api_key and startpunkt and api_key != "DEIN_GOOGLE_MAPS_API_KEY":
         try:
@@ -1179,13 +1267,15 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             if daten:
                 fahrzeit_daten[url] = eintrag
 
-    # Absagen aus status.json laden
+    # Bewerbungsstatus aus Datenbank laden
     job_status = {}
-    if STATUS_JSON.exists():
-        try:
-            job_status = json.loads(STATUS_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+    try:
+        from db import verbindung as _db_verbindung
+        with _db_verbindung() as _con:
+            for _r in _con.execute("SELECT url, stufe FROM bewerbungsstatus WHERE stufe != ''").fetchall():
+                job_status[_r["url"]] = {"stufe": _r["stufe"]}
+    except Exception:
+        pass
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
     aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
@@ -1211,7 +1301,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         <strong>{len(aktive_haupt)}</strong> aktive Stellen &nbsp;|&nbsp;
         <strong>{len(neue)}</strong> neu &nbsp;|&nbsp;
         <strong>{len(geringer_match)}</strong> geringer Match &nbsp;|&nbsp;
-        <strong>{len(absagen)}</strong> Absagen &nbsp;|&nbsp;
+        <strong id="stat-absagen">{len(absagen)}</strong> Absagen &nbsp;|&nbsp;
         <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
         <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
         Stand: {datum}
@@ -1316,7 +1406,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += '<div class="firma-block">\n'
         html += f'<h2>🆕 Neue Stellen – letzte 3 Tage ({len(neueste_sorted)})</h2>\n'
         for s in neueste_sorted:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n'
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
@@ -1329,7 +1419,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += '<div class="firma-block">\n'
         html += '<h2>⭐ Top 10 nach KI-Score</h2>\n'
         for s in top10:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n'
 
     # ── Pro Firma ───────────────────────────────────────────────────
@@ -1351,11 +1441,11 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             if hoch:
                 html += '<p><strong>⭐ Score ≥ 70%</strong></p>\n'
                 for s in hoch:
-                    html += stelle_zu_html(s, fahrzeit=_fz(s))
+                    html += stelle_zu_html(s, fahrzeit=_fz(s), scanner_status=_st(s))
             if rest:
                 html += '<p><strong>Weitere Treffer</strong></p>\n'
                 for s in rest:
-                    html += stelle_zu_html(s, fahrzeit=_fz(s))
+                    html += stelle_zu_html(s, fahrzeit=_fz(s), scanner_status=_st(s))
         else:
             html += '<p class="leer">Keine passenden Stellen gefunden.</p>\n'
 
@@ -1372,7 +1462,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += f'<div class="firma-block">\n'
         html += f'<h2>📉 Geringer Match – Score ≤ {GERINGER_MATCH_SCHWELLE}% ({len(geringer_match)})</h2>\n'
         for s in geringer_match_sorted:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), geringer_match=True)
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), geringer_match=True, scanner_status=_st(s))
         html += '</div>\n</div>\n'
 
     # ── Vergangene Stellen (am Ende, eingeklappt) ───────────────────
@@ -1384,7 +1474,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in geloescht:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 
     if absagen:
@@ -1395,7 +1485,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in absagen:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 
     if nicht_passend:
@@ -1406,7 +1496,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in nicht_passend:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 
     html += '</div>\n'  # /hauptansicht
@@ -1428,11 +1518,13 @@ def erstelle_aenderungs_html(stellen: list) -> str:
     datum    = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     job_status: dict = {}
-    if STATUS_JSON.exists():
-        try:
-            job_status = json.loads(STATUS_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+    try:
+        from db import verbindung as _db_verbindung
+        with _db_verbindung() as _con:
+            for _r in _con.execute("SELECT url, stufe FROM bewerbungsstatus WHERE stufe != ''").fetchall():
+                job_status[_r["url"]] = {"stufe": _r["stufe"]}
+    except Exception:
+        pass
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
     aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
@@ -1581,13 +1673,17 @@ def main():
         print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
         return
 
+    # Duplikate entfernen (gleiche URL mehrfach in stellen.json)
+    _seen_urls: set = set()
+    stellen = [s for s in stellen if s["url"] not in _seen_urls and not _seen_urls.add(s["url"])]
+
     # Datenreparatur: geloescht_am in stellen.json löschen wenn bekannte_stellen aktiv zeigt
     bekannte = lade_json(BEKANNTE_JSON, {})
     repariert = 0
     for s in stellen:
         if s.get("geloescht_am") and not s.get("nicht_passend"):
             eintrag = bekannte.get(s["url"], {})
-            if eintrag.get("status", 0) != 0:
+            if eintrag.get("status", 0) not in (0, 6, 7, 8):
                 s["geloescht_am"] = None
                 repariert += 1
 

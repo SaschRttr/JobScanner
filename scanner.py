@@ -10,9 +10,16 @@ Ausgabe-Dateien (im selben Ordner wie dieses Skript):
   strukturen.json       – gelernte Job-Link-Muster pro Domain
 
 Status-Codes:
-  0 = nicht mehr gefunden (Stelle vergeben/offline)
+  0 = nicht mehr gefunden (Stelle vergeben/offline, kein expliziter Check)
   1 = gefunden (nur Link)
   2 = Rohtext gespeichert
+  3 = Stellentext extrahiert
+  4 = KI-Bewertung ≥ 70 % (bewerben empfohlen) – wird jeden Scan auf Verfügbarkeit geprüft
+  5 = KI-Bewertung < 70 % (nicht bewerben / geringer Match)
+  6 = beworben, Stelle noch offen/erreichbar
+  7 = beworben + nicht mehr erreichbar (vergaben)
+  8 = beworben + Absage erhalten + vergaben
+  9 = vergaben, nie beworben (explizit geprüft)
 
 Nutzung:
   python scanner.py
@@ -28,6 +35,7 @@ import re
 import sys
 import io
 import urllib.request
+import urllib.error
 import platform
 from datetime import datetime
 from pathlib import Path
@@ -1002,7 +1010,8 @@ def main():
             stellen[idx]["standort"] = t["standort"]
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
-                bekannte[url]["status"] = 4
+                score = (stellen[idx]["bewertung"] or {}).get("score", 0)
+                bekannte[url]["status"] = 4 if score >= 70 else 5
                 bekannte[url]["geloescht_am"] = None
                 bekannte[url]["nicht_passend"] = False
                 stellen[idx]["geloescht_am"] = None
@@ -1072,7 +1081,8 @@ def main():
             stellen[idx]["standort"] = t["standort"]
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
-                bekannte[url]["status"] = 4
+                score = (stellen[idx]["bewertung"] or {}).get("score", 0)
+                bekannte[url]["status"] = 4 if score >= 70 else 5
                 bekannte[url]["geloescht_am"] = None
                 bekannte[url]["nicht_passend"] = False
                 stellen[idx]["geloescht_am"] = None
@@ -1230,8 +1240,7 @@ def main():
                     bekannte[url]["status"] = 2
                     print(f"  ✅ Rohtext geladen")
 
-        # Vergaben-Repair: bereits vergaben-markierte Stellen per Playwright prüfen
-        # (Playwright statt urllib damit JS-Redirects korrekt gefolgt wird)
+        # Vergaben-Repair: bereits vergaben-markierte Stellen per HTTP prüfen
         if not nur_firma:
             vergaben_repair = [
                 url for url, eintrag in bekannte.items()
@@ -1242,26 +1251,17 @@ def main():
                 and not stellen[stellen_index[url]].get("nicht_passend")
             ]
             if vergaben_repair:
-                print(f"\n  🔍 Prüfe {len(vergaben_repair)} vergaben-markierte Stelle(n) auf Erreichbarkeit...")
+                print(f"\n  🔍 Prüfe {len(vergaben_repair)} vergaben-markierte Stelle(n) auf Erreichbarkeit (HTTP)...")
                 reaktiviert = 0
                 for url in vergaben_repair:
-                    erreichbar = None
-                    try:
-                        resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                        if resp:
-                            if resp.ok:
-                                erreichbar = True
-                            elif resp.status in (404, 410):
-                                erreichbar = False
-                    except Exception:
-                        pass  # Timeout → unbekannt, beim nächsten Mal nochmal
-                    if erreichbar is True:
+                    vergeben = _ist_vergeben(url)
+                    if vergeben is False:  # noch erreichbar
                         idx = stellen_index[url]
                         stellen[idx]["nicht_passend"] = True
                         stellen[idx]["geloescht_am"] = None
                         reaktiviert += 1
                         print(f"  🚫 Vergaben→nicht_passend (noch erreichbar): {url[:70]}")
-                    elif erreichbar is False:
+                    elif vergeben is True:
                         bekannte[url]["vergaben_bestaetigt"] = True
                 if reaktiviert:
                     print(f"  ✅ {reaktiviert} Stelle(n) von vergaben zu nicht_passend verschoben")
@@ -1271,44 +1271,131 @@ def main():
         ts = jetzt()
         deaktiviert = 0
 
+        # Bewerbungsstatus und Score-URLs für Erreichbarkeits-Check laden
+        try:
+            from db import verbindung as _db_verb_schutz
+            with _db_verb_schutz() as _con_schutz:
+                _bewerb_stufen_map = {
+                    r[0]: r[1] for r in _con_schutz.execute(
+                        "SELECT url, stufe FROM bewerbungsstatus"
+                    ).fetchall()
+                }
+                _score_urls = {r[0] for r in _con_schutz.execute(
+                    "SELECT url FROM bewertungen WHERE score >= 70"
+                ).fetchall()}
+        except Exception:
+            _bewerb_stufen_map = {}
+            _score_urls = set()
+
+        _aktive_stufen_set = {"beworben", "kennenlernen", "einladung"}
+        _schutz_urls = {url for url, stufe in _bewerb_stufen_map.items() if stufe in _aktive_stufen_set}
+        _pruefen_set = _schutz_urls | _score_urls
+
+        def _status_bei_vergabe(url: str) -> int:
+            stufe = _bewerb_stufen_map.get(url, "")
+            if stufe in _aktive_stufen_set:
+                return 7
+            if stufe in ("absage", "zusage"):
+                return 8
+            return 9
+
+        # Status 6: aktive Bewerbungs-URLs die im aktuellen Scan noch gefunden wurden
+        for url in _schutz_urls:
+            if url in gesehen_urls and bekannte.get(url, {}).get("status") not in (6, 7, 8):
+                bekannte[url]["status"] = 6
+                idx = stellen_index.get(url)
+                titel = stellen[idx].get("titel", url)[:60] if idx is not None else url[:60]
+                print(f"  🟢 Beworben + noch offen (Status 5): {titel}")
+
+        # Verfügbarkeits-Check: alle Status-4 Stellen (Score≥70%, bewerben empfohlen)
+        # sowie aktive Bewerbungen die nicht mehr in den Listings gefunden wurden.
         kandidaten_vergaben = []
         for url, eintrag in bekannte.items():
-            if url not in gesehen_urls and eintrag["status"] != 0:
+            if url not in gesehen_urls and eintrag["status"] not in (0, 5, 6, 7, 8, 9):
                 if any(d in url for d in erfolgreich_gescannte_domains):
-                    kandidaten_vergaben.append(url)
+                    if eintrag["status"] == 4 or url in _pruefen_set:
+                        kandidaten_vergaben.append(url)
+
+        def _ist_vergeben(url: str) -> bool | None:
+            """HTTP-Check: True=vergaben (404/410/Domain-Wechsel), False=erreichbar, None=unbekannt."""
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                    method="GET"
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    if resp.status in (404, 410):
+                        return True
+                    final_url = resp.url
+                    if urlparse(final_url).netloc != urlparse(url).netloc:
+                        return True
+                    return False
+            except urllib.error.HTTPError as e:
+                if e.code in (404, 410):
+                    return True
+                return None
+            except Exception:
+                return None
 
         if kandidaten_vergaben:
-            print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per Playwright...")
+            print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per HTTP...")
             for url in kandidaten_vergaben:
                 eintrag = bekannte[url]
-                erreichbar = None
-                try:
-                    resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    if resp:
-                        if resp.ok:
-                            erreichbar = True
-                        elif resp.status in (404, 410):
-                            erreichbar = False
-                except Exception:
-                    pass  # Timeout → unbekannt, nicht markieren
-                if erreichbar is False:
-                    eintrag["status"] = 0
+                vergeben = _ist_vergeben(url)
+                if vergeben is True:
+                    neuer_status = _status_bei_vergabe(url)
+                    eintrag["status"] = neuer_status
                     eintrag["geloescht_am"] = ts
                     eintrag["vergaben_bestaetigt"] = True
                     idx = stellen_index.get(url)
                     if idx is not None:
                         stellen[idx]["geloescht_am"] = ts
+                        stellen[idx]["vergabe_status"] = neuer_status
                     deaktiviert += 1
-                    print(f"  🗑️  Vergeben (404/410): {url[:80]}")
-                elif erreichbar is True:
-                    # Stelle ist noch erreichbar aber nicht mehr in den Listings → nicht_passend
+                    _verg_label = {7: "📭 Vergeben (Bewerbung lief)", 8: "❌ Vergeben (Absage)", 9: "🗑️  Vergeben"}
+                    print(f"  {_verg_label.get(neuer_status, '🗑️  Vergeben')}: {url[:80]}")
+                elif vergeben is False:
+                    if url in _schutz_urls:
+                        # Aktive Bewerbung läuft — Stelle ist noch erreichbar,
+                        # nur nicht mehr in den Listings. Nicht anfassen.
+                        print(f"  🔒 Geschützt (aktive Bewerbung, noch erreichbar): {url[:70]}")
+                    else:
+                        idx = stellen_index.get(url)
+                        if idx is not None:
+                            stellen[idx]["nicht_passend"] = True
+                            stellen[idx]["geloescht_am"] = None
+                        bekannte[url]["nicht_passend"] = True
+                        print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
+                # None → kein Urteil, Status bleibt
+
+        # Aktive Bewerbungen und Score≥70%-Stellen prüfen die nicht durch den
+        # domain-basierten Check erfasst wurden (z.B. nicht mehr gescannte Domains)
+        kandidaten_vergaben_set = set(kandidaten_vergaben)
+        bewerb_zu_pruefen = [
+            url for url in _pruefen_set
+            if url not in gesehen_urls
+            and url not in kandidaten_vergaben_set
+            and bekannte.get(url, {}).get("status") not in (0, 6, 7, 8, 9)
+        ]
+
+        if bewerb_zu_pruefen:
+            print(f"\n  🔍 Prüfe {len(bewerb_zu_pruefen)} URL(s) auf Erreichbarkeit (Bewerbungen, HTTP)...")
+            for url in bewerb_zu_pruefen:
+                vergeben = _ist_vergeben(url)
+                if vergeben is True:
+                    neuer_status = _status_bei_vergabe(url)
+                    if url in bekannte:
+                        bekannte[url]["status"] = neuer_status
+                        bekannte[url]["geloescht_am"] = ts
+                        bekannte[url]["vergaben_bestaetigt"] = True
                     idx = stellen_index.get(url)
                     if idx is not None:
-                        stellen[idx]["nicht_passend"] = True
-                        stellen[idx]["geloescht_am"] = None
-                    bekannte[url]["nicht_passend"] = True
-                    print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
-                # erreichbar is None → kein Urteil, Status bleibt
+                        stellen[idx]["geloescht_am"] = ts
+                        stellen[idx]["vergabe_status"] = neuer_status
+                    deaktiviert += 1
+                    _verg_label = {7: "📭 Bewerbung vergeben", 8: "❌ Absage + vergaben", 9: "🗑️  Vergaben"}
+                    print(f"  {_verg_label.get(neuer_status, '🗑️')}: {url[:80]}")
 
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
@@ -1317,6 +1404,11 @@ def main():
 
     speichere_json(STRUKTUREN_JSON, strukturen)
     speichere_json(BEKANNTE_JSON, bekannte)
+
+    # Duplikate entfernen bevor gespeichert wird (gleiche URL mehrfach)
+    _seen: set = set()
+    stellen = [s for s in stellen if s["url"] not in _seen and not _seen.add(s["url"])]
+
     print(f"  💾 Stellen vor Speichern: {len(stellen)}")
     speichere_json(STELLEN_JSON, stellen)
 

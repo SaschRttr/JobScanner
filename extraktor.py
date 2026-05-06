@@ -216,7 +216,7 @@ def main():
     for s in stellen:
         url = s.get("url", "")
         eintrag = bekannte.get(url, {})
-        if eintrag.get("status") == 4 and not s.get("bewertung") and s.get("rohtext") and not s.get("stellentext"):
+        if eintrag.get("status") in (4, 5) and not s.get("bewertung") and s.get("rohtext") and not s.get("stellentext"):
             eintrag["status"] = 2
             repariert += 1
             print(f"  🔧 Repariert (Status 4 ohne Bewertung/Stellentext): {s.get('titel','?')[:50]}")
@@ -233,7 +233,7 @@ def main():
     # Backfill: Stellen mit Stellentext aber ohne Standort nachträglich verarbeiten
     standort_backfill = [
         (i, s) for i, s in enumerate(stellen)
-        if bekannte.get(s["url"], {}).get("status") in (3, 4)
+        if bekannte.get(s["url"], {}).get("status") in (3, 4, 5)
         and not s.get("standort")
         and (s.get("stellentext") or s.get("rohtext"))
         and (args.url is None or s["url"] == args.url)
