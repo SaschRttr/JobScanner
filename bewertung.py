@@ -171,11 +171,13 @@ def main():
 
     lebenslauf  = LEBENSLAUF_PFAD.read_text(encoding="utf-8")
     client      = anthropic_lib.Anthropic(api_key=config["api_key"])
-    stellen:  list = lade_json(STELLEN_JSON, [])
-    bekannte: dict = lade_json(BEKANNTE_JSON, {})
+    sys.path.insert(0, str(BASIS_PFAD))
+    from db import lade_alle_stellen, upsert_stelle, upsert_bewertung, exportiere_stellen_json, exportiere_bekannte_json, erstelle_schema
+    erstelle_schema()
+    stellen: list = lade_alle_stellen()
 
     if not stellen:
-        print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
+        print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
     verbotene = config["verbotene_standorte"]
@@ -189,7 +191,7 @@ def main():
     # Stellen mit verbotenem Standort explizit als nicht_passend markieren
     zu_markieren = [
         (i, s) for i, s in enumerate(stellen)
-        if bekannte.get(s["url"], {}).get("status") == 3
+        if s.get("status") == 3
         and s.get("stellentext")
         and not standort_ok(s)
         and not s.get("nicht_passend")
@@ -198,14 +200,14 @@ def main():
         print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
         for idx, stelle in zu_markieren:
             stellen[idx]["nicht_passend"] = True
-            bekannte[stelle["url"]]["nicht_passend"] = True
+            upsert_stelle({"url": stelle["url"], "nicht_passend": True})
             print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('standort','')})")
-        speichere_json(STELLEN_JSON, stellen)
-        speichere_json(BEKANNTE_JSON, bekannte)
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
 
     zu_bearbeiten = [
         (i, s) for i, s in enumerate(stellen)
-        if bekannte.get(s["url"], {}).get("status") == 3
+        if s.get("status") == 3
         and s.get("stellentext")
         and standort_ok(s)
         and not s.get("nicht_passend")
@@ -233,24 +235,17 @@ def main():
             score = bewertung.get("score", 0)
             empf  = bewertung.get("empfehlung", "?")
             neuer_status = 4 if score >= 70 else 5
-            bekannte[url]["status"] = neuer_status
+            stellen[idx]["status"] = neuer_status
             print(f"  ⭐ Score: {score}%  |  {empf.upper()}  →  Status {neuer_status}")
             bewertet += 1
+            upsert_stelle({"url": url, "status": neuer_status})
+            upsert_bewertung(url, bewertung)
         else:
             print(f"  ⚠️  Bewertung fehlgeschlagen")
 
         # Zwischenspeichern nach jeder Stelle
-        speichere_json(STELLEN_JSON, stellen)
-        speichere_json(BEKANNTE_JSON, bekannte)
-
-        # Datenbank aktualisieren
-        try:
-            from db import upsert_stelle, upsert_bewertung
-            if bewertung:
-                upsert_stelle({"url": url, "status": neuer_status})
-                upsert_bewertung(url, bewertung)
-        except Exception as e:
-            print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

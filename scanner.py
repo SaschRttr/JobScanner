@@ -991,8 +991,10 @@ def main():
         config["firmen"] = [f for f in config["firmen"] if f["name"].strip().lower() == nur_firma.lower()]
     BASIS_PFAD.mkdir(parents=True, exist_ok=True)
 
-    bekannte:   dict = lade_json(BEKANNTE_JSON, {})
-    stellen:    list = lade_json(STELLEN_JSON, [])
+    from db import erstelle_schema, lade_alle_stellen, lade_bekannte_dict
+    erstelle_schema()
+    bekannte:   dict = lade_bekannte_dict()
+    stellen:    list = lade_alle_stellen()
     strukturen: dict = lade_json(STRUKTUREN_JSON, {})
     print(f"  📂 Stellen geladen: {len(stellen)}")
 
@@ -1240,6 +1242,28 @@ def main():
                     bekannte[url]["status"] = 2
                     print(f"  ✅ Rohtext geladen")
 
+        def _ist_vergeben(url: str) -> bool | None:
+            """HTTP-Check: True=vergaben (404/410/Domain-Wechsel), False=erreichbar, None=unbekannt."""
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                    method="GET"
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    if resp.status in (404, 410):
+                        return True
+                    final_url = resp.url
+                    if urlparse(final_url).netloc != urlparse(url).netloc:
+                        return True
+                    return False
+            except urllib.error.HTTPError as e:
+                if e.code in (404, 410):
+                    return True
+                return None
+            except Exception:
+                return None
+
         # Vergaben-Repair: bereits vergaben-markierte Stellen per HTTP prüfen
         if not nur_firma:
             vergaben_repair = [
@@ -1316,28 +1340,6 @@ def main():
                     if eintrag["status"] == 4 or url in _pruefen_set:
                         kandidaten_vergaben.append(url)
 
-        def _ist_vergeben(url: str) -> bool | None:
-            """HTTP-Check: True=vergaben (404/410/Domain-Wechsel), False=erreichbar, None=unbekannt."""
-            try:
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                    method="GET"
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    if resp.status in (404, 410):
-                        return True
-                    final_url = resp.url
-                    if urlparse(final_url).netloc != urlparse(url).netloc:
-                        return True
-                    return False
-            except urllib.error.HTTPError as e:
-                if e.code in (404, 410):
-                    return True
-                return None
-            except Exception:
-                return None
-
         if kandidaten_vergaben:
             print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per HTTP...")
             for url in kandidaten_vergaben:
@@ -1403,24 +1405,41 @@ def main():
     bereinige_verbotene_standorte(stellen, bekannte, config["verbotene_standorte"])
 
     speichere_json(STRUKTUREN_JSON, strukturen)
-    speichere_json(BEKANNTE_JSON, bekannte)
 
-    # Duplikate entfernen bevor gespeichert wird (gleiche URL mehrfach)
+    # Duplikate entfernen (gleiche URL mehrfach)
     _seen: set = set()
     stellen = [s for s in stellen if s["url"] not in _seen and not _seen.add(s["url"])]
 
     print(f"  💾 Stellen vor Speichern: {len(stellen)}")
-    speichere_json(STELLEN_JSON, stellen)
 
-    # Datenbank aktualisieren
-    try:
-        from db import erstelle_schema, upsert_stelle
-        erstelle_schema()
-        for s in stellen:
-            upsert_stelle({**s, "status": bekannte.get(s["url"], {}).get("status", 1)})
-        print(f"  🗄️  Datenbank aktualisiert")
-    except Exception as e:
-        print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")
+    # Alles in DB schreiben
+    from db import upsert_stelle, upsert_bewertung, exportiere_stellen_json, exportiere_bekannte_json
+    for s in stellen:
+        b = bekannte.get(s["url"], {})
+        upsert_stelle({
+            **s,
+            "status":              b.get("status", s.get("status", 1)),
+            "nicht_passend":       b.get("nicht_passend", s.get("nicht_passend", False)),
+            "geloescht_am":        b.get("geloescht_am") if b.get("geloescht_am") is not None else s.get("geloescht_am"),
+            "vergaben_bestaetigt": b.get("vergaben_bestaetigt", False),
+        })
+        if s.get("bewertung"):
+            upsert_bewertung(s["url"], s["bewertung"])
+
+    # URLs die in bekannte, aber nicht in stellen → Status-Update
+    stellen_urls = {s["url"] for s in stellen}
+    for url, b in bekannte.items():
+        if url not in stellen_urls:
+            upsert_stelle({"url": url, "firma": "", "titel": "",
+                           "status": b.get("status", 1),
+                           "nicht_passend": b.get("nicht_passend", False),
+                           "geloescht_am": b.get("geloescht_am"),
+                           "vergaben_bestaetigt": b.get("vergaben_bestaetigt", False)})
+
+    # JSON-Spiegel exportieren
+    exportiere_stellen_json(STELLEN_JSON)
+    exportiere_bekannte_json(BEKANNTE_JSON)
+    print(f"  🗄️  Datenbank aktualisiert, JSON-Spiegel exportiert")
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

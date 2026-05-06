@@ -11,6 +11,15 @@ DB = Path(__file__).parent / "jobscanner.db"
 
 st.set_page_config(page_title="Job-Scanner Dashboard", page_icon="🔍", layout="wide")
 
+SCANNER_STATUS = {
+    4: ("📋 bewerben",           "#3498db"),
+    5: ("👎 nicht bewerben",     "#e67e22"),
+    6: ("✅ Beworben, aktiv",    "#27ae60"),
+    7: ("👻 Beworben, Ghosting", "#f39c12"),
+    8: ("❌ Absage erhalten",    "#e74c3c"),
+    9: ("🗑️ Vergeben, nie bew.", "#95a5a6"),
+}
+
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -24,11 +33,22 @@ def lade_stellen():
                s.status, b.score, b.empfehlung
         FROM stellen s
         LEFT JOIN bewertungen b ON b.url = s.url
-        WHERE s.status NOT IN (0,7,8,9)
+        WHERE s.status NOT IN (0, 9)
         ORDER BY b.score DESC NULLS LAST
     """).fetchall()
     con.close()
     return pd.DataFrame([dict(r) for r in rows])
+
+
+@st.cache_data(ttl=60)
+def lade_status_counts():
+    """Anzahl Stellen pro Scanner-Status."""
+    if not DB.exists():
+        return {}
+    con = sqlite3.connect(DB)
+    rows = con.execute("SELECT status, COUNT(*) AS n FROM stellen GROUP BY status").fetchall()
+    con.close()
+    return {r[0]: r[1] for r in rows}
 
 
 @st.cache_data(ttl=60)
@@ -39,12 +59,12 @@ def lade_bewerbungen():
     con.row_factory = sqlite3.Row
     rows = con.execute("""
         SELECT s.url, s.firma, s.titel, s.status AS scanner_status,
-               bs.stufe, bs.beworben_am, bs.kommentar,
+               bs.beworben_am, bs.kommentar,
                b.score
-        FROM bewerbungsstatus bs
-        JOIN stellen s ON s.url = bs.url
-        LEFT JOIN bewertungen b ON b.url = bs.url
-        WHERE (bs.stufe != '' OR (bs.kommentar IS NOT NULL AND bs.kommentar != ''))
+        FROM stellen s
+        LEFT JOIN bewerbungsstatus bs ON bs.url = s.url
+        LEFT JOIN bewertungen b ON b.url = s.url
+        WHERE s.status IN (6, 7, 8)
         ORDER BY bs.beworben_am DESC NULLS LAST
     """).fetchall()
     con.close()
@@ -65,7 +85,7 @@ def lade_firmen():
                SUM(CASE WHEN b.score >= 70 THEN 1 ELSE 0 END) AS relevante
         FROM stellen s
         JOIN bewertungen b ON b.url = s.url
-        WHERE s.status NOT IN (0,7,8,9)
+        WHERE s.status NOT IN (0, 9)
         GROUP BY s.firma
         HAVING COUNT(*) >= 1
         ORDER BY relevante DESC, avg_score DESC
@@ -82,9 +102,10 @@ if not DB.exists():
     st.error("Datenbank nicht gefunden.")
     st.stop()
 
-df_s = lade_stellen()
-df_b = lade_bewerbungen()
-df_f = lade_firmen()
+df_s      = lade_stellen()
+df_b      = lade_bewerbungen()
+df_f      = lade_firmen()
+counts    = lade_status_counts()
 
 if df_s.empty:
     st.warning("Keine Daten vorhanden.")
@@ -92,36 +113,26 @@ if df_s.empty:
 
 df_bewertet = df_s[df_s["score"].notna()].copy()
 
-STUFEN = {
-    "beworben":     ("✅ Beworben",            "#f1c40f"),
-    "kennenlernen": ("📞 Kennenlerngespräch",  "#2980b9"),
-    "einladung":    ("📅 Einladung",            "#8e44ad"),
-    "zusage":       ("🎉 Zusage",               "#27ae60"),
-    "absage":       ("❌ Absage",               "#e74c3c"),
-}
-
 # ---------------------------------------------------------------------------
 # KPI
 # ---------------------------------------------------------------------------
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Stellen (aktiv)",   len(df_s))
+c1.metric("Stellen gesamt",    sum(counts.values()))
 c2.metric("Bewertet",          len(df_bewertet))
 c3.metric("Score ≥ 70 %",      int((df_bewertet["score"] >= 70).sum()))
-c4.metric("Bewerbungen",       len(df_b))
-beworben_offen = int((df_b["scanner_status"] == 6).sum()) if not df_b.empty and "scanner_status" in df_b.columns else 0
-c5.metric("Beworben (offen)",  beworben_offen)
-vergaben_bew   = int(df_b["scanner_status"].isin([7, 8]).sum()) if not df_b.empty and "scanner_status" in df_b.columns else 0
-c6.metric("Vergaben/Absagen",  vergaben_bew)
+c4.metric("Beworben (aktiv)",  counts.get(6, 0))
+c5.metric("Ghosting",          counts.get(7, 0))
+c6.metric("Absagen",           counts.get(8, 0))
 
 st.markdown("---")
 
 # ---------------------------------------------------------------------------
-# Status-Karten
+# Status-Karten (Scanner-Status 4–9)
 # ---------------------------------------------------------------------------
-st.subheader("📬 Bewerbungsstatus")
-cols = st.columns(5)
-for i, (stufe, (label, farbe)) in enumerate(STUFEN.items()):
-    n = int((df_b["stufe"] == stufe).sum()) if not df_b.empty else 0
+st.subheader("📬 Scanner-Status")
+cols = st.columns(len(SCANNER_STATUS))
+for i, (sv, (label, farbe)) in enumerate(SCANNER_STATUS.items()):
+    n = counts.get(sv, 0)
     cols[i].markdown(
         f'<div style="padding:16px;border-radius:8px;background:{farbe}22;'
         f'border-top:4px solid {farbe};text-align:center;">'
@@ -174,24 +185,14 @@ st.markdown("---")
 col_l2, col_r2 = st.columns([1, 2])
 
 with col_l2:
-    st.subheader("📋 Bewerbungen")
+    st.subheader("📋 Bewerbungen (Status 6–8)")
     if df_b.empty:
         st.info("Noch keine Bewerbungen.")
     else:
-        _SCANNER_STATUS_LABEL = {
-            7: ("📭 Vergaben", "#7f8c8d"),
-            8: ("❌ Absage erhalten", "#c0392b"),
-        }
         heute = pd.Timestamp.now()
         for _, row in df_b.iterrows():
-            stufe = row["stufe"] or ""
             sc_status = int(row.get("scanner_status") or 0)
-            if sc_status in _SCANNER_STATUS_LABEL:
-                label, farbe = _SCANNER_STATUS_LABEL[sc_status]
-            elif stufe in STUFEN:
-                label, farbe = STUFEN[stufe]
-            else:
-                label, farbe = "Mit Aktivität", "#e67e22"
+            label, farbe = SCANNER_STATUS.get(sc_status, ("–", "#aaa"))
             try:
                 bam = row["beworben_am"]
                 if bam and str(bam) not in ("", "None", "NaT", "nan"):
@@ -201,10 +202,9 @@ with col_l2:
                     tage_txt = "–"
             except Exception:
                 tage_txt = "–"
-            opacity = "opacity:0.55;" if sc_status in (6, 7) else ""
             st.markdown(
                 f'<div style="padding:8px 12px;margin:4px 0;background:{farbe}22;'
-                f'border-left:4px solid {farbe};border-radius:4px;{opacity}">'
+                f'border-left:4px solid {farbe};border-radius:4px;">'
                 f'<strong>{row["firma"]}</strong><br>'
                 f'<span style="font-size:0.82em;color:#555;">{str(row["titel"])[:50]}</span><br>'
                 f'<span style="font-size:0.8em;">{label}'
@@ -221,13 +221,12 @@ with col_r2:
     else:
         for _, row in df_top.iterrows():
             farbe = "#27ae60" if row["score"] >= 80 else "#f39c12"
-            match = df_b[df_b["url"] == row["url"]] if not df_b.empty else pd.DataFrame()
-            badge = ""
-            if not match.empty:
-                s = match.iloc[0]["stufe"]
-                if s and s in STUFEN:
-                    badge = (f' &nbsp;<span style="font-size:0.75em;background:#eee;'
-                             f'padding:2px 6px;border-radius:10px;">{STUFEN[s][0]}</span>')
+            sc_status = int(row.get("status") or 0)
+            st_label, st_farbe = SCANNER_STATUS.get(sc_status, ("", ""))
+            badge = (
+                f' &nbsp;<span style="font-size:0.75em;background:{st_farbe}22;'
+                f'color:{st_farbe};padding:2px 6px;border-radius:10px;">{st_label}</span>'
+            ) if st_label else ""
             st.markdown(
                 f'<div style="padding:6px 12px;margin:3px 0;background:#f8f9fa;'
                 f'border-radius:4px;border-left:4px solid {farbe};">'

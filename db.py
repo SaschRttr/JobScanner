@@ -1,10 +1,8 @@
 """
 db.py  –  Datenbankmodul für Job-Scanner
 =========================================
-Schreibt und liest Job-Daten aus einer SQLite-Datenbank.
-Wird von scanner.py, bewertung.py und report.py aufgerufen.
-
-Datenbank: ~/Documents/Python/Jobsuche/jobscanner.db
+Einzige Quelle der Wahrheit. stellen.json / bekannte_stellen.json
+werden nur noch als lesbare Spiegel exportiert.
 """
 
 import json
@@ -23,7 +21,7 @@ DB_PFAD = Path(__file__).parent / "jobscanner.db"
 def verbindung() -> sqlite3.Connection:
     DB_PFAD.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PFAD)
-    con.row_factory = sqlite3.Row  # Zugriff per Spaltenname
+    con.row_factory = sqlite3.Row
     return con
 
 
@@ -32,16 +30,24 @@ def erstelle_schema():
     with verbindung() as con:
         con.executescript("""
             CREATE TABLE IF NOT EXISTS stellen (
-                url             TEXT PRIMARY KEY,
-                firma           TEXT NOT NULL,
-                titel           TEXT NOT NULL,
-                treffer         TEXT,           -- JSON-Array
-                gefunden_am     TEXT,
-                geloescht_am    TEXT,
-                neu             INTEGER DEFAULT 1,  -- 1=ja, 0=nein
-                rohtext         TEXT,
-                stellentext     TEXT,
-                status          INTEGER DEFAULT 1
+                url                  TEXT PRIMARY KEY,
+                firma                TEXT NOT NULL,
+                titel                TEXT NOT NULL,
+                treffer              TEXT,
+                gefunden_am          TEXT,
+                geloescht_am         TEXT,
+                neu                  INTEGER DEFAULT 1,
+                rohtext              TEXT,
+                stellentext          TEXT,
+                status               INTEGER DEFAULT 1,
+                standort             TEXT,
+                nicht_passend        INTEGER DEFAULT 0,
+                nicht_ladbar         INTEGER DEFAULT 0,
+                vergabe_status       INTEGER,
+                vergaben_bestaetigt  INTEGER DEFAULT 0,
+                steckbrief           TEXT,
+                lebenslauf_pfad      TEXT,
+                anschreiben_pfad     TEXT
             );
 
             CREATE TABLE IF NOT EXISTS bewertungen (
@@ -49,29 +55,30 @@ def erstelle_schema():
                 score                  INTEGER,
                 empfehlung             TEXT,
                 score_begruendung      TEXT,
-                staerken               TEXT,   -- JSON-Array
-                luecken                TEXT,   -- JSON-Array
-                lebenslauf_anpassungen TEXT,   -- JSON-Array
+                staerken               TEXT,
+                luecken                TEXT,
+                lebenslauf_anpassungen TEXT,
                 bewertet_am            TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
 
             CREATE TABLE IF NOT EXISTS status_historie (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                url         TEXT NOT NULL,
-                status_alt  INTEGER,
-                status_neu  INTEGER,
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                url          TEXT NOT NULL,
+                status_alt   INTEGER,
+                status_neu   INTEGER,
                 geaendert_am TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
 
             CREATE TABLE IF NOT EXISTS bewerbungsstatus (
                 url              TEXT PRIMARY KEY,
-                stufe            TEXT DEFAULT '',     -- beworben/kennenlernen/einladung/zusage/absage
+                stufe            TEXT DEFAULT '',
                 beworben_am      TEXT,
                 kennenlernen_am  TEXT,
                 einladung_am     TEXT,
                 ergebnis_am      TEXT,
+                kommentar        TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
 
@@ -86,7 +93,28 @@ def erstelle_schema():
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
         """)
-    print(f"  🗄️  Datenbank bereit: {DB_PFAD}")
+    _migriere_schema()
+
+
+def _migriere_schema():
+    """Fügt neue Spalten zur bestehenden DB hinzu (idempotent)."""
+    neue_spalten = [
+        "ALTER TABLE stellen ADD COLUMN standort TEXT",
+        "ALTER TABLE stellen ADD COLUMN nicht_passend INTEGER DEFAULT 0",
+        "ALTER TABLE stellen ADD COLUMN nicht_ladbar INTEGER DEFAULT 0",
+        "ALTER TABLE stellen ADD COLUMN vergabe_status INTEGER",
+        "ALTER TABLE stellen ADD COLUMN vergaben_bestaetigt INTEGER DEFAULT 0",
+        "ALTER TABLE stellen ADD COLUMN steckbrief TEXT",
+        "ALTER TABLE stellen ADD COLUMN lebenslauf_pfad TEXT",
+        "ALTER TABLE stellen ADD COLUMN anschreiben_pfad TEXT",
+        "ALTER TABLE bewerbungsstatus ADD COLUMN kommentar TEXT",
+    ]
+    with verbindung() as con:
+        for sql in neue_spalten:
+            try:
+                con.execute(sql)
+            except Exception:
+                pass  # Spalte existiert bereits
 
 
 # =============================================================================
@@ -94,23 +122,20 @@ def erstelle_schema():
 # =============================================================================
 
 def upsert_stelle(s: dict):
-    """
-    Legt eine neue Stelle an oder aktualisiert eine bestehende.
-    Felder die None sind werden nicht überschrieben.
-    """
+    """Legt eine neue Stelle an oder aktualisiert eine bestehende."""
     with verbindung() as con:
-        # Existiert die Stelle schon?
         vorhandene = con.execute(
             "SELECT status FROM stellen WHERE url = ?", (s["url"],)
         ).fetchone()
 
         if vorhandene is None:
-            # Neu einfügen
             con.execute("""
                 INSERT INTO stellen
                     (url, firma, titel, treffer, gefunden_am, geloescht_am,
-                     neu, rohtext, stellentext, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     neu, rohtext, stellentext, status, standort,
+                     nicht_passend, nicht_ladbar, vergabe_status, vergaben_bestaetigt,
+                     steckbrief, lebenslauf_pfad, anschreiben_pfad)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 s["url"],
                 s.get("firma", ""),
@@ -122,26 +147,81 @@ def upsert_stelle(s: dict):
                 s.get("rohtext"),
                 s.get("stellentext"),
                 s.get("status", 1),
+                s.get("standort"),
+                1 if s.get("nicht_passend") else 0,
+                1 if s.get("nicht_ladbar") else 0,
+                s.get("vergabe_status"),
+                1 if s.get("vergaben_bestaetigt") else 0,
+                json.dumps(s["steckbrief"], ensure_ascii=False) if s.get("steckbrief") else None,
+                s.get("lebenslauf_pfad"),
+                s.get("anschreiben_pfad"),
             ))
         else:
-            # Nur geänderte Felder aktualisieren
             felder = []
             werte  = []
 
-            if s.get("rohtext") is not None:
-                felder.append("rohtext = ?")
-                werte.append(s["rohtext"])
-            if s.get("stellentext") is not None:
-                felder.append("stellentext = ?")
-                werte.append(s["stellentext"])
+            for feld, wert in [
+                ("rohtext",      s.get("rohtext")),
+                ("stellentext",  s.get("stellentext")),
+            ]:
+                if wert is not None:
+                    felder.append(f"{feld} = ?")
+                    werte.append(wert)
+
             if s.get("geloescht_am") is not None:
                 felder.append("geloescht_am = ?")
                 werte.append(s["geloescht_am"])
+            elif "geloescht_am" in s and s["geloescht_am"] is None:
+                felder.append("geloescht_am = ?")
+                werte.append(None)
+
             if "neu" in s:
                 felder.append("neu = ?")
                 werte.append(1 if s["neu"] else 0)
+
+            if "standort" in s and s["standort"] is not None:
+                felder.append("standort = ?")
+                werte.append(s["standort"])
+
+            if "nicht_passend" in s:
+                felder.append("nicht_passend = ?")
+                werte.append(1 if s["nicht_passend"] else 0)
+
+            if "nicht_ladbar" in s:
+                felder.append("nicht_ladbar = ?")
+                werte.append(1 if s["nicht_ladbar"] else 0)
+
+            if "vergabe_status" in s:
+                felder.append("vergabe_status = ?")
+                werte.append(s["vergabe_status"])
+
+            if "vergaben_bestaetigt" in s:
+                felder.append("vergaben_bestaetigt = ?")
+                werte.append(1 if s["vergaben_bestaetigt"] else 0)
+
+            if "steckbrief" in s:
+                felder.append("steckbrief = ?")
+                werte.append(
+                    json.dumps(s["steckbrief"], ensure_ascii=False) if s["steckbrief"] else None
+                )
+
+            if "lebenslauf_pfad" in s:
+                felder.append("lebenslauf_pfad = ?")
+                werte.append(s["lebenslauf_pfad"])
+
+            if "anschreiben_pfad" in s:
+                felder.append("anschreiben_pfad = ?")
+                werte.append(s["anschreiben_pfad"])
+
+            if "titel" in s and s["titel"]:
+                felder.append("titel = ?")
+                werte.append(s["titel"])
+
+            if "firma" in s and s["firma"]:
+                felder.append("firma = ?")
+                werte.append(s["firma"])
+
             if "status" in s:
-                # Status-Historie schreiben
                 alter_status = vorhandene["status"]
                 neuer_status = s["status"]
                 if alter_status != neuer_status:
@@ -195,14 +275,12 @@ def stelle_als_geloescht_markieren(url: str, zeitstempel: str):
         alter_status = con.execute(
             "SELECT status FROM stellen WHERE url = ?", (url,)
         ).fetchone()
-
         if alter_status:
             con.execute("""
                 INSERT INTO status_historie
                     (url, status_alt, status_neu, geaendert_am)
                 VALUES (?, ?, 0, ?)
             """, (url, alter_status["status"], zeitstempel))
-
         con.execute("""
             UPDATE stellen
             SET status = 0, geloescht_am = ?, neu = 0
@@ -211,17 +289,11 @@ def stelle_als_geloescht_markieren(url: str, zeitstempel: str):
 
 
 def neu_flag_zuruecksetzen():
-    """Setzt neu=0 für alle Stellen — nach Report-Erstellung aufrufen."""
     with verbindung() as con:
         con.execute("UPDATE stellen SET neu = 0 WHERE neu = 1")
 
 
 def upsert_bewerbungsstatus(url: str, stufe: str):
-    """
-    Speichert die Bewerbungsstufe für eine Stelle.
-    Setzt den Timestamp der jeweiligen Stufe nur beim ersten Mal.
-    Stufen: beworben | kennenlernen | einladung | zusage | absage | (leer = zurücksetzen)
-    """
     jetzt = datetime.now().strftime("%Y-%m-%d %H:%M")
     with verbindung() as con:
         row = con.execute(
@@ -229,12 +301,11 @@ def upsert_bewerbungsstatus(url: str, stufe: str):
         ).fetchone()
 
         if row is None:
-            # Neu anlegen
             felder = {
-                "beworben_am":     jetzt if stufe == "beworben"              else None,
-                "kennenlernen_am": jetzt if stufe == "kennenlernen"          else None,
-                "einladung_am":    jetzt if stufe == "einladung"             else None,
-                "ergebnis_am":     jetzt if stufe in ("zusage", "absage")   else None,
+                "beworben_am":     jetzt if stufe == "beworben"            else None,
+                "kennenlernen_am": jetzt if stufe == "kennenlernen"        else None,
+                "einladung_am":    jetzt if stufe == "einladung"           else None,
+                "ergebnis_am":     jetzt if stufe in ("zusage", "absage") else None,
             }
             con.execute("""
                 INSERT INTO bewerbungsstatus
@@ -244,17 +315,15 @@ def upsert_bewerbungsstatus(url: str, stufe: str):
                   felder["beworben_am"], felder["kennenlernen_am"],
                   felder["einladung_am"], felder["ergebnis_am"]))
         else:
-            # Stufe immer aktualisieren, Timestamps nur beim ersten Mal setzen
             updates = {"stufe": stufe}
-            if stufe == "beworben"                    and not row["beworben_am"]:
+            if stufe == "beworben"               and not row["beworben_am"]:
                 updates["beworben_am"]     = jetzt
-            if stufe == "kennenlernen"                and not row["kennenlernen_am"]:
+            if stufe == "kennenlernen"            and not row["kennenlernen_am"]:
                 updates["kennenlernen_am"] = jetzt
-            if stufe == "einladung"                   and not row["einladung_am"]:
+            if stufe == "einladung"               and not row["einladung_am"]:
                 updates["einladung_am"]    = jetzt
-            if stufe in ("zusage", "absage")          and not row["ergebnis_am"]:
+            if stufe in ("zusage", "absage")      and not row["ergebnis_am"]:
                 updates["ergebnis_am"]     = jetzt
-
             set_clause = ", ".join(f"{k} = ?" for k in updates)
             con.execute(
                 f"UPDATE bewerbungsstatus SET {set_clause} WHERE url = ?",
@@ -267,7 +336,6 @@ def upsert_bewerbungsstatus(url: str, stufe: str):
 # =============================================================================
 
 def hole_fahrzeit_cache(url: str) -> dict | None:
-    """Gibt gecachte Fahrzeit-Daten für eine Stelle zurück, oder None wenn noch nicht gecacht."""
     with verbindung() as con:
         r = con.execute(
             "SELECT ziel, genau, auto_min, auto_km, transit_min FROM fahrzeit_cache WHERE url = ?", (url,)
@@ -318,6 +386,9 @@ def lade_alle_stellen() -> list[dict]:
                 s.url, s.firma, s.titel, s.treffer,
                 s.gefunden_am, s.geloescht_am, s.neu,
                 s.rohtext, s.stellentext, s.status,
+                s.standort, s.nicht_passend, s.nicht_ladbar,
+                s.vergabe_status, s.vergaben_bestaetigt,
+                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad,
                 b.score, b.empfehlung, b.score_begruendung,
                 b.staerken, b.luecken, b.lebenslauf_anpassungen,
                 b.bewertet_am
@@ -338,20 +409,54 @@ def lade_alle_stellen() -> list[dict]:
                 "luecken":                json.loads(r["luecken"] or "[]"),
                 "lebenslauf_anpassungen": json.loads(r["lebenslauf_anpassungen"] or "[]"),
             }
+        steckbrief = None
+        if r["steckbrief"]:
+            try:
+                steckbrief = json.loads(r["steckbrief"])
+            except Exception:
+                steckbrief = r["steckbrief"]
+
         ergebnis.append({
-            "url":          r["url"],
-            "firma":        r["firma"],
-            "titel":        r["titel"],
-            "treffer":      json.loads(r["treffer"] or "[]"),
-            "gefunden_am":  r["gefunden_am"],
-            "geloescht_am": r["geloescht_am"],
-            "neu":          bool(r["neu"]),
-            "rohtext":      r["rohtext"],
-            "stellentext":  r["stellentext"],
-            "status":       r["status"],
-            "bewertung":    bewertung,
+            "url":                 r["url"],
+            "firma":               r["firma"],
+            "titel":               r["titel"],
+            "treffer":             json.loads(r["treffer"] or "[]"),
+            "gefunden_am":         r["gefunden_am"],
+            "geloescht_am":        r["geloescht_am"],
+            "neu":                 bool(r["neu"]),
+            "rohtext":             r["rohtext"],
+            "stellentext":         r["stellentext"],
+            "status":              r["status"],
+            "standort":            r["standort"] or "",
+            "nicht_passend":       bool(r["nicht_passend"]),
+            "nicht_ladbar":        bool(r["nicht_ladbar"]),
+            "vergabe_status":      r["vergabe_status"],
+            "vergaben_bestaetigt": bool(r["vergaben_bestaetigt"]),
+            "steckbrief":          steckbrief,
+            "lebenslauf_pfad":     r["lebenslauf_pfad"],
+            "anschreiben_pfad":    r["anschreiben_pfad"],
+            "bewertung":           bewertung,
         })
     return ergebnis
+
+
+def lade_bekannte_dict() -> dict:
+    """Gibt {url: {status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt}} zurück."""
+    with verbindung() as con:
+        rows = con.execute("""
+            SELECT url, status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt
+            FROM stellen
+        """).fetchall()
+    return {
+        r["url"]: {
+            "status":              r["status"],
+            "gefunden_am":         r["gefunden_am"] or "",
+            "geloescht_am":        r["geloescht_am"],
+            "nicht_passend":       bool(r["nicht_passend"]),
+            "vergaben_bestaetigt": bool(r["vergaben_bestaetigt"]),
+        }
+        for r in rows
+    }
 
 
 def url_bekannt(url: str) -> bool:
@@ -382,14 +487,41 @@ def alle_aktiven_urls() -> set:
 
 
 # =============================================================================
-# SYNC: stellen.json → Datenbank
+# JSON-EXPORT (Spiegel der DB)
+# =============================================================================
+
+def exportiere_stellen_json(pfad: Path):
+    """Schreibt stellen.json als lesbaren Spiegel der DB."""
+    stellen = lade_alle_stellen()
+    pfad.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def exportiere_bekannte_json(pfad: Path):
+    """Schreibt bekannte_stellen.json als lesbaren Spiegel der DB."""
+    with verbindung() as con:
+        rows = con.execute("""
+            SELECT url, status, gefunden_am, geloescht_am, nicht_passend
+            FROM stellen
+        """).fetchall()
+    result = {}
+    for r in rows:
+        eintrag = {
+            "status":       r["status"],
+            "gefunden_am":  r["gefunden_am"] or "",
+            "geloescht_am": r["geloescht_am"],
+        }
+        if r["nicht_passend"]:
+            eintrag["nicht_passend"] = True
+        result[r["url"]] = eintrag
+    pfad.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# =============================================================================
+# SYNC: stellen.json → Datenbank (Einmalig / Notfall)
 # =============================================================================
 
 def sync_von_json(stellen: list):
-    """
-    Importiert alle Einträge aus stellen.json in die Datenbank.
-    Nützlich für die einmalige Migration vom alten System.
-    """
+    """Importiert alle Einträge aus stellen.json in die Datenbank."""
     erstelle_schema()
     neu = 0
     aktualisiert = 0
@@ -397,16 +529,8 @@ def sync_von_json(stellen: list):
     for s in stellen:
         vorher = status_von(s["url"])
         upsert_stelle({
-            "url":          s["url"],
-            "firma":        s.get("firma", ""),
-            "titel":        s.get("titel", ""),
-            "treffer":      s.get("treffer", []),
-            "gefunden_am":  s.get("gefunden_am"),
-            "geloescht_am": s.get("geloescht_am"),
-            "neu":          s.get("neu", False),
-            "rohtext":      s.get("rohtext"),
-            "stellentext":  s.get("stellentext"),
-            "status":       _status_aus_dict(s),
+            **s,
+            "status": _status_aus_dict(s),
         })
         if s.get("bewertung"):
             upsert_bewertung(s["url"], s["bewertung"])
@@ -416,11 +540,10 @@ def sync_von_json(stellen: list):
         else:
             aktualisiert += 1
 
-    print(f"  🗄️  Sync: {neu} neu, {aktualisiert} aktualisiert")
+    print(f"  Sync: {neu} neu, {aktualisiert} aktualisiert")
 
 
 def _status_aus_dict(s: dict) -> int:
-    """Leitet den Status-Code aus einem stellen.json-Eintrag ab."""
     if s.get("geloescht_am"):
         return 0
     if s.get("bewertung"):
@@ -434,20 +557,20 @@ def _status_aus_dict(s: dict) -> int:
 
 
 # =============================================================================
-# STATISTIK (für Dashboard)
+# STATISTIK
 # =============================================================================
 
 def statistik() -> dict:
     with verbindung() as con:
-        gesamt    = con.execute("SELECT COUNT(*) FROM stellen").fetchone()[0]
-        aktiv     = con.execute("SELECT COUNT(*) FROM stellen WHERE status NOT IN (0,7,8,9)").fetchone()[0]
-        vergeben  = con.execute("SELECT COUNT(*) FROM stellen WHERE status IN (0,7,8,9)").fetchone()[0]
-        bewertet  = con.execute("SELECT COUNT(*) FROM bewertungen").fetchone()[0]
-        beworben  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 6").fetchone()[0]
-        verg_bew  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 7").fetchone()[0]
-        absagen   = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 8").fetchone()[0]
-        verg_nie  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 9").fetchone()[0]
-        top       = con.execute("""
+        gesamt   = con.execute("SELECT COUNT(*) FROM stellen").fetchone()[0]
+        aktiv    = con.execute("SELECT COUNT(*) FROM stellen WHERE status NOT IN (0,7,8,9)").fetchone()[0]
+        vergeben = con.execute("SELECT COUNT(*) FROM stellen WHERE status IN (0,7,8,9)").fetchone()[0]
+        bewertet = con.execute("SELECT COUNT(*) FROM bewertungen").fetchone()[0]
+        beworben = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 6").fetchone()[0]
+        verg_bew = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 7").fetchone()[0]
+        absagen  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 8").fetchone()[0]
+        verg_nie = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 9").fetchone()[0]
+        top      = con.execute("""
             SELECT s.firma, s.titel, s.url, b.score, b.empfehlung
             FROM stellen s
             JOIN bewertungen b ON s.url = b.url
@@ -455,7 +578,6 @@ def statistik() -> dict:
             ORDER BY b.score DESC
             LIMIT 10
         """).fetchall()
-
         pro_firma = con.execute("""
             SELECT firma, COUNT(*) as anzahl
             FROM stellen
@@ -484,19 +606,17 @@ def statistik() -> dict:
 
 if __name__ == "__main__":
     import sys
-    from pathlib import Path
 
     STELLEN_JSON = Path(__file__).parent / "stellen.json"
 
     if "--sync" in sys.argv:
-        # Einmalige Migration: stellen.json → DB
         if not STELLEN_JSON.exists():
-            print(f"❌ stellen.json nicht gefunden: {STELLEN_JSON}")
+            print(f"stellen.json nicht gefunden: {STELLEN_JSON}")
             sys.exit(1)
         stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8"))
-        print(f"  📥 Importiere {len(stellen)} Einträge...")
+        print(f"  Importiere {len(stellen)} Eintraege...")
         sync_von_json(stellen)
-        print("  ✅ Migration abgeschlossen")
+        print("  Migration abgeschlossen")
 
     elif "--stats" in sys.argv:
         erstelle_schema()
@@ -509,8 +629,16 @@ if __name__ == "__main__":
         for s in stats["top10"]:
             print(f"    {s['score']:3d}%  {s['firma']}: {s['titel'][:50]}")
 
+    elif "--export" in sys.argv:
+        erstelle_schema()
+        basis = Path(__file__).parent
+        exportiere_stellen_json(basis / "stellen.json")
+        exportiere_bekannte_json(basis / "bekannte_stellen.json")
+        print("  JSON-Spiegel exportiert")
+
     else:
         erstelle_schema()
         print("  Nutzung:")
-        print("    python db.py --sync    # stellen.json → Datenbank importieren")
+        print("    python db.py --sync    # stellen.json -> Datenbank importieren")
         print("    python db.py --stats   # Statistik anzeigen")
+        print("    python db.py --export  # JSON-Spiegel aus DB generieren")

@@ -20,6 +20,7 @@ Endpunkte:
 """
 
 import json
+import sys
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -28,21 +29,19 @@ BASIS_PFAD      = Path(__file__).parent
 STATUS_JSON     = BASIS_PFAD / "status.json"
 REPORT_HTML     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
-STELLEN_JSON    = BASIS_PFAD / "stellen.json"
 CONFIG_PFAD     = BASIS_PFAD / "config.txt"
 LEBENSLAUF_TXT  = BASIS_PFAD / "lebenslauf.txt"
+
+sys.path.insert(0, str(BASIS_PFAD))
+import db as _db
 
 app = Flask(__name__)
 CORS(app)  # Erlaubt Browser-Zugriff von beliebiger Herkunft
 
 
 def lade_stellen() -> list:
-    if STELLEN_JSON.exists():
-        try:
-            return json.loads(STELLEN_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return []
+    _db.erstelle_schema()
+    return _db.lade_alle_stellen()
 
 
 def lade_steckbrief_config() -> dict:
@@ -159,10 +158,8 @@ def post_steckbrief():
     except Exception as e:
         return jsonify({"fehler": f"Claude-Fehler: {e}"}), 500
 
-    stelle["steckbrief"] = steckbrief
-    STELLEN_JSON.write_text(
-        json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _db.upsert_stelle({"url": url, "steckbrief": json.dumps(steckbrief, ensure_ascii=False)})
+    _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
     return jsonify({"ok": True, "steckbrief": steckbrief})
 
 

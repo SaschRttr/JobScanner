@@ -189,17 +189,18 @@ def sicherer_pfadname(text: str, max_len: int = 50) -> str:
 # =============================================================================
 
 _STATUS_LABELS = {
-    0: "vergaben",
+    0: "vergeben",
     1: "Link",
     2: "Rohtext",
     3: "Stellentext",
-    4: "bewerben ≥70%",
+    4: "bewerben",
     5: "nicht bewerben",
-    6: "beworben·offen",
-    7: "beworben·weg",
-    8: "Absage",
-    9: "vergaben·geprüft",
+    6: "Beworben, aktiv",
+    7: "Beworben, Ghosting",
+    8: "Absage erhalten",
+    9: "Vergeben, nie beworben",
 }
+_FILTER_STATUS_VALS = {4, 5, 6, 7, 8, 9}
 
 
 def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None) -> str:
@@ -207,28 +208,36 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     ist_geloescht = s.get("geloescht_am") is not None
     vergabe_st    = s.get("vergabe_status", 0)
 
-    if ist_geloescht:
-        css = "stelle stelle-geloescht"
-    elif ist_neu:
-        css = "stelle stelle-neu"
-    else:
-        css = "stelle"
-
     tags = "".join(f'<span class="tag">{t}</span>' for t in s.get("treffer", []))
     neu_badge = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
-    if vergabe_st == 6:
-        geloescht_badge = '<span class="badge badge-weg">BEWERBUNG VERGABEN</span>'
-    elif vergabe_st == 7:
-        geloescht_badge = '<span class="badge badge-weg" style="background:#c0392b;">ABSAGE</span>'
-    elif ist_geloescht:
-        geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>'
-    else:
-        geloescht_badge = ""
+
     if scanner_status is not None:
+        # Scanner-Status ist die einzige Wahrheit
         label = _STATUS_LABELS.get(scanner_status, str(scanner_status))
-        status_badge = f'<span class="scanner-status scanner-status-{scanner_status}" title="Status {scanner_status}: {label}">S{scanner_status}</span>'
+        status_badge = f'<span class="scanner-status scanner-status-{scanner_status}" title="Status {scanner_status}">{label}</span>'
+        geloescht_badge = ""
+        if scanner_status in (0, 9):
+            css = "stelle stelle-geloescht"
+        elif ist_neu:
+            css = "stelle stelle-neu"
+        else:
+            css = "stelle"
     else:
         status_badge = ""
+        if ist_geloescht:
+            css = "stelle stelle-geloescht"
+        elif ist_neu:
+            css = "stelle stelle-neu"
+        else:
+            css = "stelle"
+        if vergabe_st == 6:
+            geloescht_badge = '<span class="badge badge-weg">BEWERBUNG VERGABEN</span>'
+        elif vergabe_st == 7:
+            geloescht_badge = '<span class="badge badge-weg" style="background:#c0392b;">ABSAGE</span>'
+        elif ist_geloescht:
+            geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>'
+        else:
+            geloescht_badge = ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
     standort = s.get("standort") or ""
     standort_label = f' <span class="standort-label">📍 {standort}</span>' if standort and standort != "ok" else ""
@@ -416,7 +425,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             _transit_min_attr = str(fahrzeit["transit_min"])
 
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
-    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}>
+    _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
+    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{firma_label}{standort_label}{datum_label}
     {fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
@@ -1010,6 +1020,7 @@ JS = """
     // ── Filter & Sortierung ──────────────────────────────────────────
     let _aktiverFilter = null;
     let _aktiveSortierung = null;
+    let _aktiverStatusFilter = null;
     let _flatAktiv = false;
     const _stellenUrsprung = [];
 
@@ -1026,9 +1037,13 @@ JS = """
         _aktiveSortierung = (_aktiveSortierung === sort && sort !== null) ? null : sort;
         _aktualisiere();
     }
+    function setzeStatusFilter(status) {
+        _aktiverStatusFilter = (_aktiverStatusFilter === status) ? null : status;
+        _aktualisiere();
+    }
     function _aktualisiere() {
         _aktualisiereFilterBtns();
-        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null;
+        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null;
         if (brauchtFlach && !_flatAktiv) _aktiviereFlach();
         else if (!brauchtFlach && _flatAktiv) _deaktiviereFlach();
         else if (brauchtFlach && _flatAktiv) _aktualisiereFlach();
@@ -1050,6 +1065,11 @@ JS = """
             const btn = document.getElementById(id);
             if (btn) btn.classList.toggle('aktiv', aktiv);
         });
+        document.querySelectorAll('.btn-scanner-status').forEach(btn => {
+            btn.classList.toggle('aktiv', parseInt(btn.dataset.status) === _aktiverStatusFilter);
+        });
+        const btnStatusAlle = document.getElementById('btn-status-alle');
+        if (btnStatusAlle) btnStatusAlle.classList.toggle('aktiv', _aktiverStatusFilter === null);
     }
     function _aktiviereFlach() {
         const ha = document.getElementById('hauptansicht');
@@ -1090,6 +1110,9 @@ JS = """
         if (_aktiverFilter !== null) {
             gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
         }
+        if (_aktiverStatusFilter !== null) {
+            gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
+        }
         const zeigeGM = document.getElementById('cb-geringer-match')?.checked;
         if (!zeigeGM) {
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
@@ -1119,12 +1142,14 @@ JS = """
             zusage:       '🎉 Zusage',
             absage:       '❌ Absage',
         }[_aktiverFilter] || '';
+        const _stLabels = {4:'bewerben',5:'nicht bewerben',6:'Beworben, aktiv',7:'Beworben, Ghosting',8:'Absage erhalten',9:'Vergeben, nie beworben'};
+        const statusText = _aktiverStatusFilter !== null ? ('Status: ' + (_stLabels[_aktiverStatusFilter] || _aktiverStatusFilter)) : '';
         const sortText = {
             score:   '⭐ Nach Passung',
             auto:    '🚗 Nach Entfernung (Auto)',
             transit: '🚌 Nach Entfernung (ÖPNV)',
         }[_aktiveSortierung] || '';
-        info.textContent = [filterText, sortText].filter(Boolean).join(' · ')
+        info.textContent = [filterText, statusText, sortText].filter(Boolean).join(' · ')
             + ` — ${gefiltert.length} Stelle${gefiltert.length !== 1 ? 'n' : ''}`;
         fa.innerHTML = '';
         fa.appendChild(info);
@@ -1214,7 +1239,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     startpunkt = (config or {}).get("fahrzeit_startpunkt", "")
     firma_adressen = (config or {}).get("firma_adressen", {})
     fahrzeit_daten: dict = {}  # url → fahrzeit-dict
-    bekannte_status: dict = {url: e.get("status") for url, e in lade_json(BEKANNTE_JSON, {}).items()}
+    bekannte_status: dict = {s["url"]: s.get("status") for s in stellen}
 
     def _st(s: dict) -> int | None:
         return bekannte_status.get(s["url"])
@@ -1279,13 +1304,32 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
     aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
-    neue          = [s for s in aktive  if s.get("neu") and s["url"] not in absage_urls]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
     absagen       = [s for s in aktive  if s["url"] in absage_urls]
     geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
+
+    # Status-Zähler für Dashboard
+    status_counts = {}
+    for s in stellen:
+        sv = bekannte_status.get(s["url"])
+        if sv is not None:
+            status_counts[sv] = status_counts.get(sv, 0) + 1
+
+    _dashboard_status = [
+        (4, "📋 bewerben"),
+        (5, "👎 nicht bewerben"),
+        (6, "✅ Beworben, aktiv"),
+        (7, "👻 Beworben, Ghosting"),
+        (8, "❌ Absage erhalten"),
+        (9, "🗑️ Vergeben, nie beworben"),
+    ]
+    status_zeilen = " &nbsp;|&nbsp;\n        ".join(
+        f'<strong>{status_counts.get(sv, 0)}</strong> {lbl}'
+        for sv, lbl in _dashboard_status
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -1298,12 +1342,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 <body>
     <h1>🔍 Job-Scanner Report</h1>
     <div class="summary-box">
-        <strong>{len(aktive_haupt)}</strong> aktive Stellen &nbsp;|&nbsp;
-        <strong>{len(neue)}</strong> neu &nbsp;|&nbsp;
-        <strong>{len(geringer_match)}</strong> geringer Match &nbsp;|&nbsp;
-        <strong id="stat-absagen">{len(absagen)}</strong> Absagen &nbsp;|&nbsp;
-        <strong>{len(nicht_passend)}</strong> nicht passend &nbsp;|&nbsp;
-        <strong>{len(geloescht)}</strong> vergeben &nbsp;|&nbsp;
+        {status_zeilen} &nbsp;|&nbsp;
         Stand: {datum}
     </div>
     """
@@ -1362,6 +1401,18 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         </div>
     """
 
+    # Status-Filter-Buttons dynamisch aus vorhandenen Werten erzeugen
+    vorhandene_status_vals = sorted(set(v for v in bekannte_status.values() if v in _FILTER_STATUS_VALS))
+    status_filter_gruppe = ""
+    if vorhandene_status_vals:
+        status_filter_gruppe = '<div class="filter-gruppe">\n'
+        status_filter_gruppe += '            <span class="filter-label">Scanner-Status:</span>\n'
+        status_filter_gruppe += '            <button id="btn-status-alle" class="filter-btn aktiv" onclick="setzeStatusFilter(null)">Alle</button>\n'
+        for _sv in vorhandene_status_vals:
+            _lbl = _STATUS_LABELS.get(_sv, str(_sv))
+            status_filter_gruppe += f'            <button class="filter-btn btn-scanner-status" data-status="{_sv}" onclick="setzeStatusFilter({_sv})">{_lbl}</button>\n'
+        status_filter_gruppe += '        </div>\n'
+
     html += """
     <div class="filter-bar" id="filter-bar">
         <div class="filter-gruppe">
@@ -1373,7 +1424,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <button id="btn-zusage" class="filter-btn" onclick="setzeFilter('zusage')">🎉 Zusage</button>
             <button id="btn-absage" class="filter-btn" onclick="setzeFilter('absage')">❌ Absage</button>
         </div>
-        <div class="filter-gruppe">
+        """
+    html += status_filter_gruppe
+    html += """        <div class="filter-gruppe">
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-geringer-match" onchange="toggleGeringerMatch(this.checked)">
                 📉 Geringen Match einblenden
@@ -1667,18 +1720,16 @@ def main():
     config  = lade_config()
     global RASPI_IP
     RASPI_IP = config["raspi_ip"]
-    stellen = lade_json(STELLEN_JSON, [])
+    from db import lade_alle_stellen, lade_bekannte_dict, upsert_stelle, exportiere_stellen_json, exportiere_bekannte_json, erstelle_schema as _erstelle_schema
+    _erstelle_schema()
+    stellen = lade_alle_stellen()
 
     if not stellen:
-        print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
+        print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
-    # Duplikate entfernen (gleiche URL mehrfach in stellen.json)
-    _seen_urls: set = set()
-    stellen = [s for s in stellen if s["url"] not in _seen_urls and not _seen_urls.add(s["url"])]
-
-    # Datenreparatur: geloescht_am in stellen.json löschen wenn bekannte_stellen aktiv zeigt
-    bekannte = lade_json(BEKANNTE_JSON, {})
+    # Datenreparatur: geloescht_am löschen wenn Stelle laut DB noch aktiv ist
+    bekannte = lade_bekannte_dict()
     repariert = 0
     for s in stellen:
         if s.get("geloescht_am") and not s.get("nicht_passend"):
@@ -1686,12 +1737,12 @@ def main():
             if eintrag.get("status", 0) not in (0, 6, 7, 8):
                 s["geloescht_am"] = None
                 repariert += 1
+                upsert_stelle({"url": s["url"], "geloescht_am": None})
 
-    # Ausschluss-Prüfung: bekannte ist authoritative Quelle, Config greift auf Titel+Standort
+    # Ausschluss-Prüfung: re-evaluiere Titel+Standort gegen aktuelle Config
     ausschlussbegriffe  = config["ausschlussbegriffe"]
     verbotene_standorte = config["verbotene_standorte"]
     neu_ausgeschlossen  = 0
-    bekannte_geaendert  = False
 
     for s in stellen:
         if s.get("geloescht_am"):
@@ -1699,36 +1750,23 @@ def main():
         url = s.get("url", "")
         b   = bekannte.get(url, {})
 
-        # Regel 1: re-evaluiere gegen aktuelle Config (Titel + Standort-Feld)
-        # bekannte["nicht_passend"] wird ebenfalls aktualisiert, damit es nicht
-        # dauerhaft auf True stecken bleibt (z.B. wegen falschem Rohtext-Treffer)
         titel     = s.get("titel", "").lower()
         standort  = (s.get("standort") or "").lower()
         ausgeschlossen = any(t in titel   for t in ausschlussbegriffe)
-        # Standort nur prüfen wenn bekannt — leer oder "ok" (geprüft, nicht gefunden) → durchlassen
         standort_weg   = bool(standort) and standort != "ok" and any(v in standort for v in verbotene_standorte)
 
         if ausgeschlossen or standort_weg:
             s["nicht_passend"] = True
-            b["nicht_passend"] = True
-            bekannte[url]      = b
-            bekannte_geaendert = True
             neu_ausgeschlossen += 1
+            upsert_stelle({"url": url, "nicht_passend": True})
         else:
             s["nicht_passend"] = False
             if b.get("nicht_passend"):
-                b["nicht_passend"] = False
-                bekannte[url]      = b
-                bekannte_geaendert = True
+                upsert_stelle({"url": url, "nicht_passend": False})
 
-    if repariert or neu_ausgeschlossen or bekannte_geaendert:
-        STELLEN_JSON.write_text(
-            json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        if bekannte_geaendert:
-            BEKANNTE_JSON.write_text(
-                json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+    if repariert or neu_ausgeschlossen:
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
         if repariert:
             print(f"  🔧 {repariert} Stelle(n) reaktiviert (geloescht_am-Datenreparatur)")
         if neu_ausgeschlossen:
@@ -1757,25 +1795,18 @@ def main():
         print("  ℹ️  E-Mail deaktiviert (EMAIL_AKTIV = false)")
 
     # neu-Flag zurücksetzen nach Report-Erstellung
-    # (damit beim nächsten Lauf nur wirklich neue Stellen als NEU markiert sind)
     geaendert = 0
     for s in stellen:
         if s.get("neu"):
             s["neu"] = False
             geaendert += 1
     if geaendert:
-        STELLEN_JSON.write_text(
-            json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
         print(f"  🔄 neu-Flag für {geaendert} Stellen zurückgesetzt")
 
-    # Auch in Datenbank zurücksetzen
-    try:
-        from db import neu_flag_zuruecksetzen, erstelle_schema
-        erstelle_schema()
-        neu_flag_zuruecksetzen()
-    except Exception as e:
-        print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")
+    from db import neu_flag_zuruecksetzen
+    neu_flag_zuruecksetzen()
+    exportiere_stellen_json(STELLEN_JSON)
+    exportiere_bekannte_json(BEKANNTE_JSON)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

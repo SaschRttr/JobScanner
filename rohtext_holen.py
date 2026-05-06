@@ -186,15 +186,17 @@ def main():
         print(f"  Filter: nur {args.url[:60]}")
     print("=" * 60)
 
-    stellen  = lade_json(STELLEN_JSON,  [])
-    bekannte = lade_json(BEKANNTE_JSON, {})
+    sys.path.insert(0, str(BASIS_PFAD))
+    from db import lade_alle_stellen, upsert_stelle, exportiere_stellen_json, exportiere_bekannte_json, erstelle_schema
+    erstelle_schema()
+    stellen  = lade_alle_stellen()
 
     # Nur Stellen ohne Rohtext und status=1 (nicht bereits als nicht ladbar markiert)
     zu_laden = [
         (i, s) for i, s in enumerate(stellen)
         if not s.get("rohtext")
-        and bekannte.get(s["url"], {}).get("status", 0) <= 1
-        and not bekannte.get(s["url"], {}).get("nicht_ladbar")
+        and s.get("status", 0) <= 1
+        and not s.get("nicht_ladbar")
         and (args.url is None or s["url"] == args.url)
     ]
 
@@ -271,32 +273,18 @@ def main():
                     stellen[idx]["titel"] = titel
                     print(f"  🏷️  Titel: {titel[:70]}")
 
-                bekannte.setdefault(url, {})["status"]     = 2
-                bekannte[url]["rohtext_geholt_am"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 geladen += 1
                 print(f"  ✅ {len(rohtext)} Zeichen geladen")
 
-                # Auch DB aktualisieren
-                try:
-                    sys.path.insert(0, str(BASIS_PFAD))
-                    from db import upsert_stelle
-                    upsert_stelle({"url": url, "rohtext": rohtext, "titel": titel or stellen[idx]["titel"], "status": 2})
-                except Exception as e:
-                    print(f"  ⚠️  DB-Update fehlgeschlagen (nicht kritisch): {e}")
-
-                # Zwischenspeichern
-                STELLEN_JSON.write_text(
-                    json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-                BEKANNTE_JSON.write_text(
-                    json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
+                # In DB schreiben + JSON-Spiegel
+                upsert_stelle({"url": url, "rohtext": rohtext,
+                               "titel": titel or stellen[idx]["titel"], "status": 2})
+                exportiere_stellen_json(STELLEN_JSON)
+                exportiere_bekannte_json(BEKANNTE_JSON)
             else:
                 # URL nicht ladbar (403, Timeout, zu kurz) → nicht nochmal versuchen
-                bekannte.setdefault(url, {})["nicht_ladbar"] = True
-                BEKANNTE_JSON.write_text(
-                    json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
+                upsert_stelle({"url": url, "nicht_ladbar": True})
+                exportiere_bekannte_json(BEKANNTE_JSON)
                 print(f"  ⚠️  Kein verwertbarer Inhalt – als nicht ladbar markiert (wird übersprungen)")
 
         browser.close()

@@ -347,18 +347,16 @@ def bewerbung_erstellen():
     except Exception as e:
         print(f"⚠️ Anschreiben-Fehler (nicht kritisch): {e}")
 
-    # Schritt 4: Pfade in stellen.json speichern damit report.py sie findet
+    # Schritt 4: Pfade in DB speichern damit report.py sie findet
     try:
-        stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
-        for s in stellen:
-            if s.get("url") == stellen_url:
-                s["lebenslauf_pfad"] = str(lv_pfad)
-                if as_pfad.exists():
-                    s["anschreiben_pfad"] = str(as_pfad)
-                break
-        STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+        import db as _db
+        _upd = {"url": stellen_url, "lebenslauf_pfad": str(lv_pfad)}
+        if as_pfad.exists():
+            _upd["anschreiben_pfad"] = str(as_pfad)
+        _db.upsert_stelle(_upd)
+        _db.exportiere_stellen_json(STELLEN_JSON)
     except Exception as e:
-        print(f"⚠️ Konnte stellen.json nicht aktualisieren: {e}")
+        print(f"⚠️ Konnte DB nicht aktualisieren: {e}")
 
     # Schritt 5: Report neu generieren damit Links dauerhaft erscheinen
     subprocess.run(
@@ -439,8 +437,9 @@ def steckbrief_erstellen():
         return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
 
     url = data["url"]
-    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
-    stelle = next((s for s in stellen if s["url"] == url), None)
+    import db as _db
+    alle = _db.lade_alle_stellen()
+    stelle = next((s for s in alle if s["url"] == url), None)
     if not stelle:
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
 
@@ -494,8 +493,8 @@ def steckbrief_erstellen():
     except Exception as e:
         return jsonify({"fehler": f"Claude-Fehler: {e}"}), 500
 
-    stelle["steckbrief"] = steckbrief
-    STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
+    _db.upsert_stelle({"url": url, "steckbrief": steckbrief})
+    _db.exportiere_stellen_json(STELLEN_JSON)
 
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
@@ -513,8 +512,9 @@ def bewertung_erstellen():
         return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
 
     url = data["url"]
-    stellen = json.loads(STELLEN_JSON.read_text(encoding="utf-8-sig")) if STELLEN_JSON.exists() else []
-    stelle = next((s for s in stellen if s["url"] == url), None)
+    import db as _db
+    alle = _db.lade_alle_stellen()
+    stelle = next((s for s in alle if s["url"] == url), None)
     if not stelle:
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
 
@@ -561,18 +561,12 @@ def bewertung_erstellen():
     if not bewertung:
         return jsonify({"fehler": "KI-Bewertung fehlgeschlagen"}), 500
 
-    stelle["bewertung"] = bewertung
-    stelle["nicht_passend"] = False  # manuelles Bewerten überschreibt Ausschluss
-    STELLEN_JSON.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
-    if bekannte_pfad.exists():
-        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig"))
-        if url in bekannte:
-            score = (bewertung or {}).get("score", 0)
-            bekannte[url]["status"] = 4 if score >= 70 else 5
-            bekannte[url]["nicht_passend"] = False
-            bekannte_pfad.write_text(json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8")
+    score = (bewertung or {}).get("score", 0)
+    neuer_status = 4 if score >= 70 else 5
+    _db.upsert_bewertung(url, bewertung)
+    _db.upsert_stelle({"url": url, "status": neuer_status, "nicht_passend": False})
+    _db.exportiere_stellen_json(STELLEN_JSON)
+    _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
 
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
@@ -603,15 +597,14 @@ def stelle_einfuegen():
     from datetime import datetime
     jetzt = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # --- stellen.json + bekannte_stellen.json ----------------------------
+    # --- DB (single source of truth) -------------------------------------
     try:
-        stellen_pfad  = BASIS_PFAD / "stellen.json"
-        bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.erstelle_schema()
 
-        stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8-sig"))  if stellen_pfad.exists()  else []
-        bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig")) if bekannte_pfad.exists() else {}
-
-        if any(s.get("url") == stellen_url for s in stellen):
+        vorhandene = _db.lade_alle_stellen()
+        if any(s.get("url") == stellen_url for s in vorhandene):
             return jsonify({"ok": False, "fehler": "Stelle bereits vorhanden"}), 409
 
         rohtext = None
@@ -624,7 +617,7 @@ def stelle_einfuegen():
             except Exception as e:
                 print(f"  ⚠️  PDF-Extraktion fehlgeschlagen: {e}")
 
-        stellen.append({
+        _db.upsert_stelle({
             "url":         stellen_url,
             "firma":       firma,
             "titel":       titel,
@@ -632,32 +625,10 @@ def stelle_einfuegen():
             "gefunden_am": jetzt,
             "neu":         True,
             "rohtext":     rohtext,
+            "status":      2 if rohtext else 1,
         })
-        stellen_pfad.write_text(
-            json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-        bekannte[stellen_url] = {"status": 2 if rohtext else 1, "gefunden_am": jetzt}
-        bekannte_pfad.write_text(
-            json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception as e:
-        return jsonify({"ok": False, "fehler": f"JSON-Fehler: {e}"}), 500
-
-    # --- SQLite-DB -------------------------------------------------------
-    try:
-        sys.path.insert(0, str(BASIS_PFAD))
-        import db
-        db.erstelle_schema()
-        db.upsert_stelle({
-            "url":         stellen_url,
-            "firma":       firma,
-            "titel":       titel,
-            "treffer":     [],
-            "gefunden_am": jetzt,
-            "neu":         True,
-            "status":      1,
-        })
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
@@ -708,26 +679,24 @@ def stelle_neu_laden():
         return jsonify({"fehler": "Parameter 'url' fehlt"}), 400
 
     url = data["url"]
-    stellen_pfad  = BASIS_PFAD / "stellen.json"
-    bekannte_pfad = BASIS_PFAD / "bekannte_stellen.json"
 
-    stellen  = json.loads(stellen_pfad.read_text(encoding="utf-8-sig"))  if stellen_pfad.exists()  else []
-    bekannte = json.loads(bekannte_pfad.read_text(encoding="utf-8-sig")) if bekannte_pfad.exists() else {}
+    sys.path.insert(0, str(BASIS_PFAD))
+    import db as _db
+    _db.erstelle_schema()
 
-    stelle = next((s for s in stellen if s["url"] == url), None)
-    if not stelle:
+    alle = _db.lade_alle_stellen()
+    if not any(s.get("url") == url for s in alle):
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
 
-    stelle["rohtext"]      = None
-    stelle["stellentext"]  = None
-    stelle["nicht_passend"] = False
-
-    stellen_pfad.write_text(json.dumps(stellen, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    if url in bekannte:
-        bekannte[url]["status"]       = 1
-        bekannte[url]["nicht_passend"] = False
-        bekannte_pfad.write_text(json.dumps(bekannte, ensure_ascii=False, indent=2), encoding="utf-8")
+    _db.upsert_stelle({
+        "url":          url,
+        "rohtext":      None,
+        "stellentext":  None,
+        "nicht_passend": False,
+        "status":       1,
+    })
+    _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+    _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
 
     return jsonify({"ok": True})
 

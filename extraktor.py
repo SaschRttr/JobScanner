@@ -203,29 +203,30 @@ def main():
         sys.exit(1)
 
     client      = anthropic_lib.Anthropic(api_key=config["api_key"])
-    stellen:    list = lade_json(STELLEN_JSON, [])
-    bekannte:   dict = lade_json(BEKANNTE_JSON, {})
+    sys.path.insert(0, str(BASIS_PFAD))
+    from db import lade_alle_stellen, upsert_stelle, exportiere_stellen_json, exportiere_bekannte_json, erstelle_schema
+    erstelle_schema()
+    stellen:    list = lade_alle_stellen()
     strukturen: dict = lade_json(STRUKTUREN_JSON, {})
 
     if not stellen:
-        print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
+        print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
-    # Repair: Status 4 ohne bewertung/stellentext aber mit rohtext → zurück auf Status 2
+    # Repair: Status 4/5 ohne bewertung/stellentext aber mit rohtext → zurück auf Status 2
     repariert = 0
     for s in stellen:
-        url = s.get("url", "")
-        eintrag = bekannte.get(url, {})
-        if eintrag.get("status") in (4, 5) and not s.get("bewertung") and s.get("rohtext") and not s.get("stellentext"):
-            eintrag["status"] = 2
+        if s.get("status") in (4, 5) and not s.get("bewertung") and s.get("rohtext") and not s.get("stellentext"):
+            upsert_stelle({"url": s["url"], "status": 2})
+            s["status"] = 2
             repariert += 1
             print(f"  🔧 Repariert (Status 4 ohne Bewertung/Stellentext): {s.get('titel','?')[:50]}")
     if repariert:
-        speichere_json(BEKANNTE_JSON, bekannte)
+        exportiere_bekannte_json(BEKANNTE_JSON)
 
     zu_bearbeiten = [
         (i, s) for i, s in enumerate(stellen)
-        if bekannte.get(s["url"], {}).get("status") == 2
+        if s.get("status") == 2
         and s.get("rohtext")
         and (args.url is None or s["url"] == args.url)
     ]
@@ -233,7 +234,7 @@ def main():
     # Backfill: Stellen mit Stellentext aber ohne Standort nachträglich verarbeiten
     standort_backfill = [
         (i, s) for i, s in enumerate(stellen)
-        if bekannte.get(s["url"], {}).get("status") in (3, 4, 5)
+        if s.get("status") in (3, 4, 5)
         and not s.get("standort")
         and (s.get("stellentext") or s.get("rohtext"))
         and (args.url is None or s["url"] == args.url)
@@ -282,30 +283,27 @@ def main():
 
         if stellentext and len(stellentext) > 100:
             stellen[idx]["stellentext"] = stellentext
-            bekannte[url]["status"] = 3
+            stellen[idx]["status"] = 3
             extrahiert += 1
+            upsert_stelle({"url": url, "stellentext": stellentext,
+                           "standort": stellen[idx].get("standort") or "", "status": 3})
         elif rohtext and len(rohtext) > 100:
             print(f"  ⚠️  Extraktion fehlgeschlagen – verwende Rohtext als Fallback")
             stellen[idx]["stellentext"] = rohtext[:8000]
-            bekannte[url]["status"] = 3
+            stellen[idx]["status"] = 3
             extrahiert += 1
+            upsert_stelle({"url": url, "stellentext": rohtext[:8000],
+                           "standort": stellen[idx].get("standort") or "", "status": 3})
         else:
             print(f"  ⚠️  Rohtext zu kurz oder leer – Status auf 1 zurückgesetzt (scanner.py lädt neu)")
             stellen[idx]["rohtext"] = None
-            bekannte[url]["status"] = 1
+            stellen[idx]["status"] = 1
+            upsert_stelle({"url": url, "rohtext": None, "status": 1})
 
         # Zwischenspeichern nach jeder Stelle
-        speichere_json(STELLEN_JSON, stellen)
-        speichere_json(BEKANNTE_JSON, bekannte)
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
         speichere_json(STRUKTUREN_JSON, strukturen)
-
-        # Datenbank aktualisieren (nur wenn Extraktion erfolgreich)
-        if bekannte[url]["status"] == 3:
-            try:
-                from db import upsert_stelle
-                upsert_stelle({"url": url, "stellentext": stellentext, "status": 3})
-            except Exception as e:
-                print(f"  ⚠️  Datenbank-Fehler (nicht kritisch): {e}")
 
     # Standort-Backfill für bestehende Stellen ohne Standort
     backfilled = 0
@@ -321,7 +319,8 @@ def main():
             backfilled += 1
         else:
             print(f"     → nicht erkannt, als 'ok' markiert")
-        speichere_json(STELLEN_JSON, stellen)
+        upsert_stelle({"url": stelle["url"], "standort": standort or "ok"})
+        exportiere_stellen_json(STELLEN_JSON)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")
