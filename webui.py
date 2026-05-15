@@ -25,6 +25,7 @@ import urllib.parse
 import json
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
+from utils import lade_config
 print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
@@ -419,6 +420,17 @@ def post_status():
     if data["feld"] == "stufe":
         import db
         db.upsert_bewerbungsstatus(data["url"], data["wert"])
+        if data["wert"] == "beworben":
+            with db.verbindung() as _con:
+                _row = _con.execute(
+                    "SELECT status, geloescht_am FROM stellen WHERE url = ?", (data["url"],)
+                ).fetchone()
+            if _row and _row["status"] not in (0, 6, 7, 8, 9) and not _row["geloescht_am"]:
+                db.upsert_stelle({"url": data["url"], "status": 6})
+        elif data["wert"] == "absage":
+            current = db.status_von(data["url"])
+            if current in (6, 7):
+                db.upsert_stelle({"url": data["url"], "status": 8})
     elif data["feld"] == "kommentar":
         import db
         con = db.verbindung()
@@ -429,6 +441,31 @@ def post_status():
         """, (data["url"], data["wert"]))
         con.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/pruefe-stelle", methods=["POST"])
+def api_pruefe_stelle():
+    """Prüft eine einzelne URL auf Erreichbarkeit und gibt das Ergebnis zurück."""
+    data = request.get_json()
+    if not data or "url" not in data:
+        return jsonify({"fehler": "url fehlt"}), 400
+    url = data["url"]
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        from vergaben_check import pruefe_url
+        code = pruefe_url(url)
+    except Exception as e:
+        return jsonify({"fehler": str(e)}), 500
+
+    if code in (404, 410, 0):
+        ergebnis = "vergaben"
+    elif code == 200:
+        ergebnis = "aktiv"
+    else:
+        ergebnis = "unklar"
+
+    return jsonify({"ergebnis": ergebnis, "code": code})
+
 
 @app.route("/steckbrief-erstellen", methods=["POST"])
 def steckbrief_erstellen():
@@ -443,27 +480,9 @@ def steckbrief_erstellen():
     if not stelle:
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
 
-    config_pfad = BASIS_PFAD / "config.txt"
-    api_key = ""
-    steckbrief_prompt = ""
-    aktiver_abschnitt = None
-    puffer = []
-    for zeile in config_pfad.read_text(encoding="utf-8").splitlines():
-        z = zeile.strip()
-        if z.startswith("[\\") and z.endswith("]"):
-            if z[2:-1].lower() == "steckbrief_prompt":
-                steckbrief_prompt = "\n".join(puffer).strip()
-            aktiver_abschnitt = None
-            puffer = []
-            continue
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            puffer = []
-            continue
-        if aktiver_abschnitt == "steckbrief_prompt":
-            puffer.append(zeile)
-        elif aktiver_abschnitt is None and z.upper().startswith("API_KEY"):
-            api_key = z.split("=", 1)[1].strip()
+    _cfg = lade_config()
+    api_key = _cfg["api_key"]
+    steckbrief_prompt = _cfg["steckbrief_prompt"]
 
     if not api_key or not steckbrief_prompt:
         return jsonify({"fehler": "API-Key oder Steckbrief-Prompt fehlt"}), 500
@@ -522,27 +541,9 @@ def bewertung_erstellen():
     if not stellentext:
         return jsonify({"fehler": "Kein Stellentext vorhanden"}), 400
 
-    config_pfad = BASIS_PFAD / "config.txt"
-    api_key = ""
-    prompt_vorlage = ""
-    aktiver_abschnitt = None
-    puffer = []
-    for zeile in config_pfad.read_text(encoding="utf-8").splitlines():
-        z = zeile.strip()
-        if z.startswith("[\\") and z.endswith("]"):
-            if z[2:-1].lower() == "prompt":
-                prompt_vorlage = "\n".join(puffer).strip()
-            aktiver_abschnitt = None
-            puffer = []
-            continue
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            puffer = []
-            continue
-        if aktiver_abschnitt == "prompt":
-            puffer.append(zeile)
-        elif aktiver_abschnitt is None and z.upper().startswith("API_KEY"):
-            api_key = z.split("=", 1)[1].strip()
+    _cfg = lade_config()
+    api_key = _cfg["api_key"]
+    prompt_vorlage = _cfg["prompt"]
 
     if not api_key or not prompt_vorlage:
         return jsonify({"fehler": "API-Key oder Prompt fehlt"}), 500
@@ -688,13 +689,7 @@ def stelle_neu_laden():
     if not any(s.get("url") == url for s in alle):
         return jsonify({"fehler": "Stelle nicht gefunden"}), 404
 
-    _db.upsert_stelle({
-        "url":          url,
-        "rohtext":      None,
-        "stellentext":  None,
-        "nicht_passend": False,
-        "status":       1,
-    })
+    _db.reset_stelle_fuer_neuverarbeitung(url)
     _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
     _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
 

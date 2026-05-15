@@ -9,10 +9,8 @@ Nutzung:
 """
 
 import argparse
-import json
 import platform
 import sys
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -27,35 +25,11 @@ try:
 except ImportError:
     STEALTH_VERFUEGBAR = False
 
-BASIS_PFAD      = Path(__file__).parent
-STELLEN_JSON    = BASIS_PFAD / "stellen.json"
-BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
+from utils import klick_cookie_banner
 
-COOKIE_SELEKTOREN = [
-    "text=ALLES AKZEPTIEREN", "text=Alles akzeptieren",
-    "text=Alle akzeptieren", "text=Alle Cookies akzeptieren",
-    "text=Akzeptieren", "text=ABLEHNEN", "text=Ablehnen",
-    "text=Nur notwendige", "text=Nur erforderliche",
-    "text=Accept All", "text=Accept all", "text=Accept all cookies",
-    "text=Accept Cookies", "text=Reject All", "text=Reject all",
-    "text=I Accept", "text=Got it", "text=OK",
-    "#onetrust-accept-btn-handler",
-    "button[id*='cookie-accept']", "button[id*='accept-all']",
-    "button[id*='onetrust-accept']",
-]
-
-
-def klick_cookie_banner(page):
-    for sel in COOKIE_SELEKTOREN:
-        try:
-            btn = page.locator(sel).first
-            if btn.is_visible(timeout=400):
-                btn.click()
-                page.wait_for_timeout(1500)
-                return True
-        except Exception:
-            continue
-    return False
+BASIS_PFAD    = Path(__file__).parent
+STELLEN_JSON  = BASIS_PFAD / "stellen.json"
+BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
 
 
 def extrahiere_titel(page) -> str | None:
@@ -166,15 +140,6 @@ def hole_rohtext(page, url: str) -> str | None:
         return None
 
 
-def lade_json(pfad: Path, standard):
-    if pfad.exists():
-        try:
-            return json.loads(pfad.read_text(encoding="utf-8-sig"))
-        except Exception:
-            pass
-    return standard
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default=None, help="Nur diese URL verarbeiten")
@@ -195,8 +160,8 @@ def main():
     zu_laden = [
         (i, s) for i, s in enumerate(stellen)
         if not s.get("rohtext")
-        and s.get("status", 0) <= 1
-        and not s.get("nicht_ladbar")
+        and s.get("status") == 1
+        and (args.url is not None or not s.get("nicht_ladbar"))
         and (args.url is None or s["url"] == args.url)
     ]
 

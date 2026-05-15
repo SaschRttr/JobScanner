@@ -40,8 +40,10 @@ def erstelle_schema():
                 rohtext              TEXT,
                 stellentext          TEXT,
                 status               INTEGER DEFAULT 1,
+                arbeitsort           TEXT,
                 standort             TEXT,
                 nicht_passend        INTEGER DEFAULT 0,
+                nicht_passend_grund  TEXT,
                 nicht_ladbar         INTEGER DEFAULT 0,
                 vergabe_status       INTEGER,
                 vergaben_bestaetigt  INTEGER DEFAULT 0,
@@ -99,8 +101,10 @@ def erstelle_schema():
 def _migriere_schema():
     """Fügt neue Spalten zur bestehenden DB hinzu (idempotent)."""
     neue_spalten = [
+        "ALTER TABLE stellen ADD COLUMN arbeitsort TEXT",
         "ALTER TABLE stellen ADD COLUMN standort TEXT",
         "ALTER TABLE stellen ADD COLUMN nicht_passend INTEGER DEFAULT 0",
+        "ALTER TABLE stellen ADD COLUMN nicht_passend_grund TEXT",
         "ALTER TABLE stellen ADD COLUMN nicht_ladbar INTEGER DEFAULT 0",
         "ALTER TABLE stellen ADD COLUMN vergabe_status INTEGER",
         "ALTER TABLE stellen ADD COLUMN vergaben_bestaetigt INTEGER DEFAULT 0",
@@ -108,6 +112,7 @@ def _migriere_schema():
         "ALTER TABLE stellen ADD COLUMN lebenslauf_pfad TEXT",
         "ALTER TABLE stellen ADD COLUMN anschreiben_pfad TEXT",
         "ALTER TABLE bewerbungsstatus ADD COLUMN kommentar TEXT",
+        "ALTER TABLE stellen ADD COLUMN pruef_vormerken TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -132,10 +137,11 @@ def upsert_stelle(s: dict):
             con.execute("""
                 INSERT INTO stellen
                     (url, firma, titel, treffer, gefunden_am, geloescht_am,
-                     neu, rohtext, stellentext, status, standort,
-                     nicht_passend, nicht_ladbar, vergabe_status, vergaben_bestaetigt,
+                     neu, rohtext, stellentext, status, arbeitsort, standort,
+                     nicht_passend, nicht_passend_grund, nicht_ladbar,
+                     vergabe_status, vergaben_bestaetigt,
                      steckbrief, lebenslauf_pfad, anschreiben_pfad)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 s["url"],
                 s.get("firma", ""),
@@ -147,8 +153,10 @@ def upsert_stelle(s: dict):
                 s.get("rohtext"),
                 s.get("stellentext"),
                 s.get("status", 1),
-                s.get("standort"),
+                s.get("arbeitsort") or None,
+                s.get("standort") or None,
                 1 if s.get("nicht_passend") else 0,
+                s.get("nicht_passend_grund") or None,
                 1 if s.get("nicht_ladbar") else 0,
                 s.get("vergabe_status"),
                 1 if s.get("vergaben_bestaetigt") else 0,
@@ -160,13 +168,10 @@ def upsert_stelle(s: dict):
             felder = []
             werte  = []
 
-            for feld, wert in [
-                ("rohtext",      s.get("rohtext")),
-                ("stellentext",  s.get("stellentext")),
-            ]:
-                if wert is not None:
+            for feld in ["rohtext", "stellentext"]:
+                if feld in s:
                     felder.append(f"{feld} = ?")
-                    werte.append(wert)
+                    werte.append(s[feld])
 
             if s.get("geloescht_am") is not None:
                 felder.append("geloescht_am = ?")
@@ -179,13 +184,24 @@ def upsert_stelle(s: dict):
                 felder.append("neu = ?")
                 werte.append(1 if s["neu"] else 0)
 
-            if "standort" in s and s["standort"] is not None:
+            if "arbeitsort" in s:
+                felder.append("arbeitsort = ?")
+                werte.append(s["arbeitsort"] or None)
+
+            if "standort" in s:
                 felder.append("standort = ?")
-                werte.append(s["standort"])
+                werte.append(s["standort"] or None)
 
             if "nicht_passend" in s:
                 felder.append("nicht_passend = ?")
                 werte.append(1 if s["nicht_passend"] else 0)
+                if not s["nicht_passend"] and "nicht_passend_grund" not in s:
+                    felder.append("nicht_passend_grund = ?")
+                    werte.append(None)
+
+            if "nicht_passend_grund" in s:
+                felder.append("nicht_passend_grund = ?")
+                werte.append(s["nicht_passend_grund"] or None)
 
             if "nicht_ladbar" in s:
                 felder.append("nicht_ladbar = ?")
@@ -212,6 +228,10 @@ def upsert_stelle(s: dict):
             if "anschreiben_pfad" in s:
                 felder.append("anschreiben_pfad = ?")
                 werte.append(s["anschreiben_pfad"])
+
+            if "pruef_vormerken" in s:
+                felder.append("pruef_vormerken = ?")
+                werte.append(s["pruef_vormerken"])  # None löscht, Timestamp setzt
 
             if "titel" in s and s["titel"]:
                 felder.append("titel = ?")
@@ -270,22 +290,147 @@ def upsert_bewertung(url: str, b: dict):
         ))
 
 
+def reset_stelle_fuer_neuverarbeitung(url: str):
+    """Setzt rohtext/stellentext auf NULL und status=1, damit die Pipeline neu verarbeitet."""
+    with verbindung() as con:
+        alter = con.execute("SELECT status FROM stellen WHERE url = ?", (url,)).fetchone()
+        if alter and alter["status"] != 1:
+            con.execute("""
+                INSERT INTO status_historie (url, status_alt, status_neu, geaendert_am)
+                VALUES (?, ?, 1, ?)
+            """, (url, alter["status"], datetime.now().strftime("%Y-%m-%d %H:%M")))
+        con.execute("""
+            UPDATE stellen
+            SET rohtext = NULL, stellentext = NULL, status = 1,
+                nicht_passend = 0, nicht_passend_grund = NULL, nicht_ladbar = 0
+            WHERE url = ?
+        """, (url,))
+
+
+def _status_bei_vergabe(url: str, con) -> int:
+    """Bestimmt den korrekten Vergabe-Status anhand der Bewerbungsstufe."""
+    row = con.execute(
+        "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (url,)
+    ).fetchone()
+    stufe = (row["stufe"] if row else "") or ""
+    if stufe in ("beworben", "kennenlernen", "einladung"):
+        return 7
+    if stufe in ("absage", "zusage"):
+        return 8
+    return 9
+
+
 def stelle_als_geloescht_markieren(url: str, zeitstempel: str):
     with verbindung() as con:
         alter_status = con.execute(
             "SELECT status FROM stellen WHERE url = ?", (url,)
         ).fetchone()
+        neuer_status = _status_bei_vergabe(url, con)
         if alter_status:
             con.execute("""
                 INSERT INTO status_historie
                     (url, status_alt, status_neu, geaendert_am)
-                VALUES (?, ?, 0, ?)
-            """, (url, alter_status["status"], zeitstempel))
+                VALUES (?, ?, ?, ?)
+            """, (url, alter_status["status"], neuer_status, zeitstempel))
         con.execute("""
             UPDATE stellen
-            SET status = 0, geloescht_am = ?, neu = 0
+            SET status = ?, geloescht_am = ?, neu = 0
             WHERE url = ?
-        """, (zeitstempel, url))
+        """, (neuer_status, zeitstempel, url))
+
+
+_STATUS_PRIO = {6: 10, 5: 8, 4: 7, 7: 6, 8: 5, 9: 4, 3: 3, 2: 2, 1: 1, 0: 0}
+
+
+def repariere_inkonsistente_status():
+    """
+    Läuft bei jedem vergaben_check-Start. Behebt:
+    1. status=0 + aktive Bewerbung → status=7/8 (Ghosting/Absage)
+    2. status in (1-5) + stufe='beworben' + nicht gelöscht → status=6
+    3. URL-Duplikate (trailing slash) → beste Version behalten
+    4. Titel+Firma-Duplikate → beste Version behalten, Bewerbungsstatus migrieren
+    """
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    with verbindung() as con:
+        # 1. status=0 mit aktiver Bewerbung → korrekten Vergabe-Status setzen
+        betroffene = con.execute("""
+            SELECT s.url, b.stufe FROM stellen s
+            LEFT JOIN bewerbungsstatus b ON s.url = b.url
+            WHERE s.status = 0 AND s.geloescht_am IS NOT NULL
+              AND b.stufe IN ('beworben','kennenlernen','einladung','absage','zusage')
+        """).fetchall()
+        for r in betroffene:
+            stufe = r["stufe"] or ""
+            neu_st = 7 if stufe in ("beworben", "kennenlernen", "einladung") else 8
+            con.execute("UPDATE stellen SET status = ? WHERE url = ?", (neu_st, r["url"]))
+            con.execute("""
+                INSERT INTO status_historie (url, status_alt, status_neu, geaendert_am)
+                VALUES (?, 0, ?, ?)
+            """, (r["url"], neu_st, ts))
+
+        # 2. status in (1-5) + beworben + nicht gelöscht → status=6
+        con.execute("""
+            UPDATE stellen SET status = 6
+            WHERE status IN (1,2,3,4,5) AND geloescht_am IS NULL
+              AND url IN (SELECT url FROM bewerbungsstatus WHERE stufe = 'beworben')
+        """)
+
+        # 3+4. Duplikate bereinigen (trailing slash + gleicher Titel+Firma)
+        alle = con.execute("""
+            SELECT url, status, geloescht_am, gefunden_am FROM stellen
+        """).fetchall()
+
+        # Trailing-Slash-Duplikate
+        url_set = {r["url"] for r in alle}
+        for r in list(alle):
+            url = r["url"]
+            alt = url.rstrip("/") if url.endswith("/") else url + "/"
+            if alt in url_set and url in url_set:
+                prio_orig = (_STATUS_PRIO.get(r["status"], 0), 0 if r["geloescht_am"] else 1)
+                r_alt = next(x for x in alle if x["url"] == alt)
+                prio_alt  = (_STATUS_PRIO.get(r_alt["status"], 0), 0 if r_alt["geloescht_am"] else 1)
+                loeschen = url if prio_alt > prio_orig else alt
+                con.execute("DELETE FROM stellen WHERE url = ?", (loeschen,))
+                con.execute("DELETE FROM bewertungen WHERE url = ?", (loeschen,))
+                con.execute("DELETE FROM bewerbungsstatus WHERE url = ?", (loeschen,))
+                con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (loeschen,))
+                url_set.discard(loeschen)
+
+        # Titel+Firma-Duplikate
+        groups = con.execute("""
+            SELECT lower(titel) as lt, lower(firma) as lf, COUNT(*) as cnt
+            FROM stellen GROUP BY lower(titel), lower(firma) HAVING cnt > 1
+        """).fetchall()
+        for g in groups:
+            rows = con.execute("""
+                SELECT url, status, geloescht_am, gefunden_am FROM stellen
+                WHERE lower(titel) = ? AND lower(firma) = ?
+            """, (g["lt"], g["lf"])).fetchall()
+
+            def _prio(r):
+                live = 1 if not r["geloescht_am"] else 0
+                return (live, _STATUS_PRIO.get(r["status"], 0), r["gefunden_am"] or "")
+
+            behalten  = max(rows, key=_prio)
+            loeschen  = [r for r in rows if r["url"] != behalten["url"]]
+            for r in loeschen:
+                # Bewerbungsstatus migrieren falls vorhanden
+                bew = con.execute(
+                    "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (r["url"],)
+                ).fetchone()
+                if bew and bew["stufe"]:
+                    ex = con.execute(
+                        "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (behalten["url"],)
+                    ).fetchone()
+                    if not ex or not ex["stufe"]:
+                        con.execute(
+                            "UPDATE bewerbungsstatus SET url = ? WHERE url = ?",
+                            (behalten["url"], r["url"])
+                        )
+                con.execute("DELETE FROM stellen WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM bewertungen WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM bewerbungsstatus WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (r["url"],))
 
 
 def neu_flag_zuruecksetzen():
@@ -386,9 +531,9 @@ def lade_alle_stellen() -> list[dict]:
                 s.url, s.firma, s.titel, s.treffer,
                 s.gefunden_am, s.geloescht_am, s.neu,
                 s.rohtext, s.stellentext, s.status,
-                s.standort, s.nicht_passend, s.nicht_ladbar,
+                s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
-                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad,
+                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken,
                 b.score, b.empfehlung, b.score_begruendung,
                 b.staerken, b.luecken, b.lebenslauf_anpassungen,
                 b.bewertet_am
@@ -427,11 +572,14 @@ def lade_alle_stellen() -> list[dict]:
             "rohtext":             r["rohtext"],
             "stellentext":         r["stellentext"],
             "status":              r["status"],
+            "arbeitsort":          r["arbeitsort"] or "",
             "standort":            r["standort"] or "",
             "nicht_passend":       bool(r["nicht_passend"]),
+            "nicht_passend_grund": r["nicht_passend_grund"] or "",
             "nicht_ladbar":        bool(r["nicht_ladbar"]),
             "vergabe_status":      r["vergabe_status"],
             "vergaben_bestaetigt": bool(r["vergaben_bestaetigt"]),
+            "pruef_vormerken":     r["pruef_vormerken"],
             "steckbrief":          steckbrief,
             "lebenslauf_pfad":     r["lebenslauf_pfad"],
             "anschreiben_pfad":    r["anschreiben_pfad"],
@@ -441,10 +589,10 @@ def lade_alle_stellen() -> list[dict]:
 
 
 def lade_bekannte_dict() -> dict:
-    """Gibt {url: {status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt}} zurück."""
+    """Gibt {url: {status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt, pruef_vormerken}} zurück."""
     with verbindung() as con:
         rows = con.execute("""
-            SELECT url, status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt
+            SELECT url, status, gefunden_am, geloescht_am, nicht_passend, vergaben_bestaetigt, pruef_vormerken
             FROM stellen
         """).fetchall()
     return {
@@ -454,6 +602,7 @@ def lade_bekannte_dict() -> dict:
             "geloescht_am":        r["geloescht_am"],
             "nicht_passend":       bool(r["nicht_passend"]),
             "vergaben_bestaetigt": bool(r["vergaben_bestaetigt"]),
+            "pruef_vormerken":     r["pruef_vormerken"],
         }
         for r in rows
     }

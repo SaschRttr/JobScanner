@@ -25,110 +25,21 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from utils import lade_config, ist_ausgeschlossen, text_matched
+
 
 # =============================================================================
 # PFADE
 # =============================================================================
 
 BASIS_PFAD      = Path(__file__).parent
-STELLEN_JSON  = BASIS_PFAD / "stellen.json"
-BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
-REPORT_PFAD   = BASIS_PFAD / "report.html"
-CONFIG_PFAD   = Path(__file__).parent / "config.txt"
+STELLEN_JSON    = BASIS_PFAD / "stellen.json"
+BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
+REPORT_PFAD     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
-STATUS_JSON   = BASIS_PFAD / "status.json"
-RASPI_IP = ""
+STATUS_JSON     = BASIS_PFAD / "status.json"
 
 
-# =============================================================================
-# CONFIG
-# =============================================================================
-
-def lade_config() -> dict:
-    if not CONFIG_PFAD.exists():
-        print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
-        sys.exit(1)
-
-    result = {
-        "email_aktiv": False,
-        "email_absender": "",
-        "email_passwort": "",
-        "email_empfaenger": "",
-        "firmen_reihenfolge": [],
-        "raspi_ip": "",
-        "ausschlussbegriffe": [],
-        "verbotene_standorte": [],
-        "google_maps_key": "",
-        "fahrzeit_startpunkt": "",
-        "firma_adressen": {},   # firma_name → "Straße, PLZ Ort"
-    }
-
-    aktiver_abschnitt = None
-
-    for zeile in CONFIG_PFAD.read_text(encoding="utf-8").splitlines():
-        z = zeile.strip()
-
-        if z.startswith("[\\") and z.endswith("]"):
-            aktiver_abschnitt = None
-            continue
-
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            continue
-
-        if z.startswith("#") or not z:
-            continue
-
-        if aktiver_abschnitt is None:
-            if z.upper().startswith("EMAIL_AKTIV"):
-                result["email_aktiv"] = z.split("=", 1)[1].strip().lower() == "true"
-            elif z.upper().startswith("EMAIL_ABSENDER"):
-                result["email_absender"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("EMAIL_PASSWORT"):
-                result["email_passwort"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("EMAIL_EMPFAENGER"):
-                result["email_empfaenger"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("RASPI_IP"):
-                result["raspi_ip"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("GOOGLE_MAPS_KEY"):
-                result["google_maps_key"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("FAHRZEIT_STARTPUNKT"):
-                result["fahrzeit_startpunkt"] = z.split("=", 1)[1].strip()
-
-        elif aktiver_abschnitt == "firma_anschreiben":
-            if "|" in z:
-                teile = [t.strip() for t in z.split("|")]
-                if len(teile) >= 6:
-                    firma_name = teile[0]
-                    adresse = f"{teile[3]}, {teile[4]} {teile[5]}"
-                    result["firma_adressen"][firma_name] = adresse
-
-        elif aktiver_abschnitt == "firmen":
-            if "|" in z:
-                name = z.split("|", 1)[0].strip()
-                if name:
-                    result["firmen_reihenfolge"].append(name)
-
-        elif aktiver_abschnitt == "ausschlussbegriffe":
-            result["ausschlussbegriffe"].append(z.lower())
-
-        elif aktiver_abschnitt == "verbotene_standorte":
-            result["verbotene_standorte"].append(z.lower())
-
-    return result
-
-
-# =============================================================================
-# JSON-HILFSFUNKTIONEN
-# =============================================================================
-
-def lade_json(pfad: Path, standard):
-    if pfad.exists():
-        try:
-            return json.loads(pfad.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return standard
 
 
 
@@ -203,13 +114,20 @@ _STATUS_LABELS = {
 _FILTER_STATUS_VALS = {4, 5, 6, 7, 8, 9}
 
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None) -> str:
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False) -> str:
+    import html as _html
     ist_neu       = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
     vergabe_st    = s.get("vergabe_status", 0)
 
     tags = "".join(f'<span class="tag">{t}</span>' for t in s.get("treffer", []))
     neu_badge = '<span class="badge badge-neu">NEU</span>' if ist_neu else ""
+
+    np_grund = s.get("nicht_passend_grund") or ""
+    np_grund_html = (
+        f'<div class="np-grund-label" title="{_html.escape(np_grund)}">'
+        f'🚫 <strong>Grund:</strong> {_html.escape(np_grund)}</div>'
+    ) if np_grund else ""
 
     if scanner_status is not None:
         # Scanner-Status ist die einzige Wahrheit
@@ -239,8 +157,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         else:
             geloescht_badge = ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
-    standort = s.get("standort") or ""
-    standort_label = f' <span class="standort-label">📍 {standort}</span>' if standort and standort != "ok" else ""
+    arbeitsort = s.get("arbeitsort") or ""
+    standort_label = f' <span class="standort-label">📍 {arbeitsort}</span>' if arbeitsort and not (fahrzeit and not fahrzeit.get("kein_ziel") and not fahrzeit.get("genau", True)) else ""
     firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {s["firma"]}</span>'
     gefunden_am    = s.get("gefunden_am", "")[:10]
     geloescht_am   = s.get("geloescht_am", "")
@@ -374,12 +292,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         </div>"""
     else:
         lebenslauf_html = ""
-    import html as html_mod
-
     # Stellentext-Block (aufklappbar)
     stellentext = s.get("stellentext") or s.get("rohtext") or ""
     if stellentext:
-        st_escaped = html_mod.escape(stellentext[:4000]).replace("\n", "<br>")
+        st_escaped = _html.escape(stellentext[:4000]).replace("\n", "<br>")
         stellentext_html = f"""
         <details class="stellentext-details">
             <summary>📄 Stellentext anzeigen</summary>
@@ -395,15 +311,15 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         for fq in steckbrief.get("interview_fragen", []):
             fragen_html += f"""
             <details style="margin:4px 0;">
-                <summary style="cursor:pointer;">{html_mod.escape(str(fq.get('frage', '')))}</summary>
-                <p style="margin:6px 0 0 16px; color:#444;">{html_mod.escape(str(fq.get('antwort', '')))}</p>
+                <summary style="cursor:pointer;">{_html.escape(str(fq.get('frage', '')))}</summary>
+                <p style="margin:6px 0 0 16px; color:#444;">{_html.escape(str(fq.get('antwort', '')))}</p>
             </details>"""
         steckbrief_html = f"""
         <details class="steckbrief-details">
             <summary>🧠 Steckbrief anzeigen</summary>
             <div class="steckbrief-inhalt">
-                <p><strong>Firma:</strong> {html_mod.escape(str(steckbrief.get('firma_beschreibung', '')))}</p>
-                <p><strong>Warum ich passe:</strong> {html_mod.escape(str(steckbrief.get('warum_ich_passe', '')))}</p>
+                <p><strong>Firma:</strong> {_html.escape(str(steckbrief.get('firma_beschreibung', '')))}</p>
+                <p><strong>Warum ich passe:</strong> {_html.escape(str(steckbrief.get('warum_ich_passe', '')))}</p>
                 <p><strong>Interview-Fragen:</strong></p>
                 {fragen_html}
             </div>
@@ -414,6 +330,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
     bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_escaped}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
     neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_escaped}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
+    vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
+    pruef_btn       = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
     _auto_min_attr = ""
@@ -425,16 +343,22 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             _transit_min_attr = str(fahrzeit["transit_min"])
 
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
+    _zw_attr = ' data-zu-weit="1"' if zu_weit else ''
+    if zu_weit:
+        css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
-    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr} data-scanner-status="{_scanner_status_attr}">
-    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{firma_label}{standort_label}{datum_label}
-    {fahrzeit_html}<div class="tags">{tags}</div>
+    zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
+    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr} data-scanner-status="{_scanner_status_attr}">
+    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
+    {vormerken_badge}
+    {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
     {stellentext_html}
     {steckbrief_html}
     {steckbrief_btn}
     {bewertung_btn}
     {neu_laden_btn}
+    {pruef_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -469,6 +393,7 @@ CSS = """
     .stelle.zusage        { background: #d5f5e3; border-left-color: #27ae60; }
     .stelle.absage        { background: #fde8e8; border-left-color: #e74c3c; }
     .stelle-bewerbung { background: #d6eaf8; border-left-color: #2980b9; }
+    .stelle-zu-weit { background: #fef5e4; border-left-color: #e67e22; }
     .stelle.mit-aktivitaet { background: #fefaf0; border-left-color: #e8c547; }
     .tags { margin-top: 5px; }
     .tag {
@@ -481,6 +406,7 @@ CSS = """
     }
     .badge-neu { background: #e74c3c; }
     .badge-weg { background: #aaa; }
+    .badge-zu-weit { background: #e67e22; }
     .firma-label { color: #999; font-size: 0.85em; }
     .firma-label-auto { display: none; color: #999; font-size: 0.85em; }
     #flat-ansicht .firma-label-auto { display: inline; }
@@ -489,6 +415,11 @@ CSS = """
     .fahrzeit-unbekannt { color: #aaa; font-style: italic; }
     .fahrzeit-hinweis { color: #aaa; font-size: 0.9em; }
     .fahrzeit-maps { text-decoration: none; margin-left: 4px; }
+    .np-grund-label {
+        font-size: 0.82em; color: #c0392b; margin: 3px 0 2px 0;
+        background: #fdecea; border-radius: 4px; padding: 2px 6px;
+        display: inline-block;
+    }
     .bewertung {
         margin-top: 10px; padding: 10px; background: #fff;
         border-radius: 6px; font-size: 0.9em;
@@ -537,6 +468,20 @@ CSS = """
         margin-top: 8px; padding: 12px; background: #fff;
         border: 1px solid #ddd; border-radius: 4px;
         font-size: 0.85em; line-height: 1.6; color: #333;
+    }
+    .pruef-btn {
+        margin-top: 8px; background: none; border: 1px solid #aaa;
+        border-radius: 4px; padding: 3px 10px; cursor: pointer;
+        font-size: 0.82em; color: #555;
+    }
+    .pruef-btn:hover { background: #eee; }
+    .pruef-vormerken-badge {
+        display: inline-block; background: #fff3cd; color: #856404;
+        border: 1px solid #ffc107; border-radius: 4px;
+        padding: 2px 8px; font-size: 0.8em; margin-left: 6px;
+    }
+    .pruef-ergebnis {
+        display: inline-block; font-size: 0.82em; margin-left: 10px; font-weight: bold;
     }
     .steckbrief-btn {
         margin-top: 8px; background: none; color: inherit;
@@ -605,6 +550,32 @@ CSS = """
 JS = """
     const SERVER = window.location.origin;
 
+    const _STUFE_ZU_STATUS = { beworben: 6, absage: 8 };
+    const _STATUS_BADGE_LABELS = {4:'bewerben', 5:'nicht bewerben', 6:'Beworben, aktiv', 7:'Beworben, Ghosting', 8:'Absage erhalten'};
+
+    function aktualisiereStatusBadge(el, neuerStatus) {
+        const badge = el.querySelector('.scanner-status');
+        if (!badge) return;
+        for (let i = 0; i <= 9; i++) badge.classList.remove('scanner-status-' + i);
+        badge.classList.add('scanner-status-' + neuerStatus);
+        badge.title = 'Status ' + neuerStatus;
+        badge.textContent = _STATUS_BADGE_LABELS[neuerStatus] || String(neuerStatus);
+        el.dataset.scannerStatus = String(neuerStatus);
+        aktualisiereStatusCounts();
+    }
+
+    function aktualisiereStatusCounts() {
+        const counts = {};
+        document.querySelectorAll('.stelle[data-scanner-status]').forEach(el => {
+            const s = el.dataset.scannerStatus;
+            if (s !== '') counts[s] = (counts[s] || 0) + 1;
+        });
+        [4, 5, 6, 7, 8, 9].forEach(sv => {
+            const el = document.getElementById('stat-status-' + sv);
+            if (el) el.textContent = counts[sv] || 0;
+        });
+    }
+
     async function speichern(url, feld, wert) {
         const status = JSON.parse(localStorage.getItem('job_status') || '{}');
         if (!status[url]) status[url] = {};
@@ -632,6 +603,12 @@ JS = """
                     // Status zurückgesetzt → ggf. wieder ockergelb wenn Aktivität vorhanden
                     const hatAkt = el.dataset.hatLebenslauf === '1' || !!status[url]?.kommentar;
                     if (hatAkt) el.classList.add('mit-aktivitaet');
+                }
+                if (wert && _STUFE_ZU_STATUS[wert]) {
+                    const _curSt2 = parseInt(el.dataset.scannerStatus);
+                    if (isNaN(_curSt2) || ![0, 7, 8, 9].includes(_curSt2)) {
+                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[wert]);
+                    }
                 }
             }
             // Timestamp anzeigen
@@ -703,6 +680,12 @@ JS = """
             if (stufe) {
                 ['beworben','kennenlernen','einladung','zusage','absage'].forEach(k => el.classList.remove(k));
                 el.classList.add(stufe);
+                if (_STUFE_ZU_STATUS[stufe]) {
+                    const _curSt = parseInt(el.dataset.scannerStatus);
+                    if (isNaN(_curSt) || ![0, 7, 8, 9].includes(_curSt)) {
+                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[stufe]);
+                    }
+                }
             }
             // Dropdown setzen
             const sel = el.querySelector('.stufen-select');
@@ -731,6 +714,7 @@ JS = """
         if (statAbsagen) {
             statAbsagen.textContent = document.querySelectorAll('.stelle.absage').length;
         }
+        aktualisiereStatusCounts();
     }
 
     window.onload = function() { ladeStatus(); ladeFirmen(); };
@@ -1029,6 +1013,11 @@ JS = """
         if (section) section.style.display = checked ? '' : 'none';
         if (_flatAktiv) _aktualisiereFlach();
     }
+    function toggleZuWeit(checked) {
+        const section = document.getElementById('zu-weit-section');
+        if (section) section.style.display = checked ? '' : 'none';
+        if (_flatAktiv) _aktualisiereFlach();
+    }
     function setzeFilter(filter) {
         _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
         _aktualisiere();
@@ -1109,6 +1098,12 @@ JS = """
         let gefiltert = _stellenUrsprung.map(o => o.el);
         if (_aktiverFilter !== null) {
             gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
+            // Vergabene/gelöschte Stellen aus Stufen-Filtern ausschließen (Status 0, 7, 8, 9)
+            const _inaktiveStatus = new Set([0, 7, 8, 9]);
+            gefiltert = gefiltert.filter(el => {
+                const s = parseInt(el.dataset.scannerStatus);
+                return isNaN(s) || !_inaktiveStatus.has(s);
+            });
         }
         if (_aktiverStatusFilter !== null) {
             gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
@@ -1116,6 +1111,10 @@ JS = """
         const zeigeGM = document.getElementById('cb-geringer-match')?.checked;
         if (!zeigeGM) {
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
+        }
+        const zeigeZW = document.getElementById('cb-zu-weit')?.checked;
+        if (!zeigeZW) {
+            gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
@@ -1161,6 +1160,35 @@ JS = """
         } else {
             gefiltert.forEach(el => fa.appendChild(el));
         }
+    }
+
+    async function stellePruefen(btn, url) {
+        const ergebnisEl = btn.nextElementSibling;
+        btn.disabled = true;
+        btn.textContent = '⏳ Prüfe...';
+        try {
+            const res = await fetch('/api/pruefe-stelle', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (data.ergebnis === 'aktiv') {
+                ergebnisEl.textContent = '✅ Erreichbar';
+                ergebnisEl.style.color = '#27ae60';
+            } else if (data.ergebnis === 'vergaben') {
+                ergebnisEl.textContent = `❌ Nicht erreichbar (HTTP ${data.code})`;
+                ergebnisEl.style.color = '#e74c3c';
+            } else {
+                ergebnisEl.textContent = `❓ Unklar (HTTP ${data.code ?? '–'})`;
+                ergebnisEl.style.color = '#888';
+            }
+        } catch(e) {
+            ergebnisEl.textContent = '⚠️ Fehler';
+            ergebnisEl.style.color = '#e74c3c';
+        }
+        btn.disabled = false;
+        btn.textContent = '🔍 Neu prüfen';
     }
 
     async function neueFirmaTesten() {
@@ -1221,6 +1249,7 @@ JS = """
 # =============================================================================
 
 GERINGER_MATCH_SCHWELLE = 65
+FAHRZEIT_MAX_AUTO_MIN   = 60
 
 def _hat_geringen_score(s: dict) -> bool:
     b = s.get("bewertung")
@@ -1257,11 +1286,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         for s in relevante:
             url      = s["url"]
             firma    = s.get("firma", "")
-            standort = s.get("standort") or ""
-            if standort == "ok":
-                standort = ""
+            arbeitsort = s.get("arbeitsort") or ""
             adresse = firma_adressen.get(firma)
-            ziel    = adresse or standort or None
+            ziel    = adresse or arbeitsort or None
             genau   = adresse is not None
 
             if not ziel:
@@ -1292,6 +1319,11 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             if daten:
                 fahrzeit_daten[url] = eintrag
 
+    zu_weit_urls = {
+        url for url, fz in fahrzeit_daten.items()
+        if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
+    }
+
     # Bewerbungsstatus aus Datenbank laden
     job_status = {}
     try:
@@ -1303,7 +1335,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         pass
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls]
+    zu_weit       = [s for s in stellen if s["url"] in zu_weit_urls and not s.get("geloescht_am")]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
     absagen       = [s for s in aktive  if s["url"] in absage_urls]
@@ -1327,7 +1360,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         (9, "🗑️ Vergeben, nie beworben"),
     ]
     status_zeilen = " &nbsp;|&nbsp;\n        ".join(
-        f'<strong>{status_counts.get(sv, 0)}</strong> {lbl}'
+        f'<strong id="stat-status-{sv}" style="cursor:pointer;text-decoration:underline dotted;" '
+        f'title="Klick: nach Scanner-Status {sv} filtern" '
+        f'onclick="setzeStatusFilter({sv})">{status_counts.get(sv, 0)}</strong> {lbl}'
         for sv, lbl in _dashboard_status
     )
 
@@ -1430,6 +1465,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-geringer-match" onchange="toggleGeringerMatch(this.checked)">
                 📉 Geringen Match einblenden
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-zu-weit" onchange="toggleZuWeit(this.checked)">
+                🚗 Zu weit einblenden (&gt;60 min)
             </label>
         </div>
         <div class="filter-gruppe">
@@ -1552,6 +1593,14 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 
+    if zu_weit:
+        html += f'<div id="zu-weit-section" style="display:none; margin:15px 0;">\n'
+        html += f'<div class="firma-block">\n'
+        html += f'<h2>🚗 Nicht passend – Zu weit (&gt;{FAHRZEIT_MAX_AUTO_MIN} min mit Auto) ({len(zu_weit)})</h2>\n'
+        for s in zu_weit:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), zu_weit=True)
+        html += '</div>\n</div>\n'
+
     html += '</div>\n'  # /hauptansicht
 
     html += f"""
@@ -1597,8 +1646,8 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         titel    = s.get("titel", "–")
         firma    = s.get("firma", "")
         url      = s.get("url", "#")
-        standort = s.get("standort") or ""
-        standort_text = f" · {standort}" if standort and standort != "ok" else ""
+        arbeitsort = s.get("arbeitsort") or ""
+        standort_text = f" · {arbeitsort}" if arbeitsort else ""
         score    = (s.get("bewertung") or {}).get("score")
         score_na = (s.get("bewertung") or {}).get("score_nach_anpassung")
         if score:
@@ -1751,14 +1800,21 @@ def main():
         b   = bekannte.get(url, {})
 
         titel     = s.get("titel", "").lower()
-        standort  = (s.get("standort") or "").lower()
-        ausgeschlossen = any(t in titel   for t in ausschlussbegriffe)
-        standort_weg   = bool(standort) and standort != "ok" and any(v in standort for v in verbotene_standorte)
+        arbeitsort_lc  = (s.get("arbeitsort") or "").lower()
+        ausgeschlossen = ist_ausgeschlossen(titel, ausschlussbegriffe)
+        standort_weg   = bool(arbeitsort_lc) and any(v in arbeitsort_lc for v in verbotene_standorte)
 
         if ausgeschlossen or standort_weg:
+            if ausgeschlossen:
+                _b_treffer = text_matched(titel, ausschlussbegriffe)
+                _b = _b_treffer[0] if _b_treffer else ""
+                np_grund = f"Ausschlussbegriff: '{_b}'" if _b else "Ausschlussbegriff"
+            else:
+                np_grund = f"Verbotener Standort: {s.get('arbeitsort', '?')}"
             s["nicht_passend"] = True
+            s["nicht_passend_grund"] = np_grund
             neu_ausgeschlossen += 1
-            upsert_stelle({"url": url, "nicht_passend": True})
+            upsert_stelle({"url": url, "nicht_passend": True, "nicht_passend_grund": np_grund})
         else:
             s["nicht_passend"] = False
             if b.get("nicht_passend"):

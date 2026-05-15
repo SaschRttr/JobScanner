@@ -37,10 +37,15 @@ import io
 import urllib.request
 import urllib.error
 import platform
-from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 import urllib.parse
+
+from utils import (
+    lade_config, lade_json, speichere_json, jetzt, domain,
+    berechne_standort, standort_verboten, text_matched, ist_ausgeschlossen,
+    klick_cookie_banner,
+)
 
 try:
     from playwright.sync_api import sync_playwright
@@ -76,94 +81,7 @@ BASIS_PFAD        = Path(__file__).parent
 STELLEN_JSON      = BASIS_PFAD / "stellen.json"
 BEKANNTE_JSON     = BASIS_PFAD / "bekannte_stellen.json"
 STRUKTUREN_JSON   = BASIS_PFAD / "strukturen.json"
-CONFIG_PFAD       = Path(__file__).parent / "config.txt"
 API_FIRMEN_PFAD   = Path(__file__).parent / "api_firmen.json"
-
-
-# =============================================================================
-# CONFIG EINLESEN
-# =============================================================================
-
-def lade_config() -> dict:
-    if not CONFIG_PFAD.exists():
-        print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
-        sys.exit(1)
-
-    result = {
-        "api_key": "",
-        "llm_bewertung": True,
-        "suchbegriffe": [],
-        "ausschlussbegriffe": [],
-        "verbotene_standorte": [],
-        "firmen": [],
-        "api_firmen": [],
-        "prompt": "",
-    }
-
-    zeilen = CONFIG_PFAD.read_text(encoding="utf-8").splitlines()
-    aktiver_abschnitt = None
-    puffer = []
-
-    for zeile in zeilen:
-        z = zeile.strip()
-
-        # Schließendes Tag
-        if z.startswith("[\\") and z.endswith("]"):
-            abschnitt = z[2:-1].lower()
-            if abschnitt == "prompt":
-                result["prompt"] = "\n".join(puffer).strip()
-            elif abschnitt == "api_firmen":
-                try:
-                    result["api_firmen"] = json.loads("\n".join(puffer))
-                except Exception as e:
-                    print(f"❌ Fehler beim Parsen von [api_firmen]: {e}")
-            aktiver_abschnitt = None
-            puffer = []
-            continue
-
-        # Öffnendes Tag
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            puffer = []
-            continue
-
-        # Außerhalb aller Abschnitte
-        if aktiver_abschnitt is None:
-            if z.startswith("#") or not z:
-                continue
-            if z.upper().startswith("API_KEY"):
-                result["api_key"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("LLM_BEWERTUNG"):
-                result["llm_bewertung"] = z.split("=", 1)[1].strip().lower() == "true"
-            continue
-
-        # Prompt- und api_firmen-Abschnitt: alles übernehmen
-        if aktiver_abschnitt in ("prompt", "api_firmen"):
-            puffer.append(zeile)
-            continue
-
-        # Alle anderen Abschnitte: Kommentare und Leerzeilen überspringen
-        if z.startswith("#") or not z:
-            continue
-
-        if aktiver_abschnitt == "suchbegriffe":
-            result["suchbegriffe"].append(z.lower())
-        elif aktiver_abschnitt == "ausschlussbegriffe":
-            result["ausschlussbegriffe"].append(z.lower())
-        elif aktiver_abschnitt == "verbotene_standorte":
-            result["verbotene_standorte"].append(z.lower())
-        elif aktiver_abschnitt == "firmen":
-            if "|" in z:
-                teile = z.split("|", 1)
-                name = teile[0].strip()
-                url  = teile[1].strip()
-                if name and url:
-                    result["firmen"].append({"name": name, "url": url})
-
-    print(f"📄 Config: {len(result['suchbegriffe'])} Suchbegriffe, "
-          f"{len(result['ausschlussbegriffe'])} Ausschlussbegriffe, "
-          f"{len(result['firmen'])} Firmen")
-    return result
 
 
 # =============================================================================
@@ -223,7 +141,6 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                 params[api_config["seiten_parameter"]] = seiten_wert
                 query = urllib.parse.urlencode(params)
                 url_mit_seite = f"{api_config['url']}?{query}"
-                #print(url_mit_seite)  # <- hier
                 req = urllib.request.Request(
                     url_mit_seite,
                     headers={
@@ -300,7 +217,15 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             if treffer:
                 if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
                         or standort_verboten(volltext, config["verbotene_standorte"])):
-                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                    _np_grund = ""
+                    for _b in config["ausschlussbegriffe"]:
+                        if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
+                            _np_grund = f"Ausschlussbegriff: '{_b}'"
+                            break
+                    if not _np_grund and standort:
+                        _np_grund = f"Verbotener Standort: {standort}"
+                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
+                                           "treffer": treffer, "nicht_passend_grund": _np_grund})
                     print(f"  🚫 Nicht passend: {titel[:70]}")
                 else:
                     ist_neu = url not in bekannte_urls
@@ -321,7 +246,8 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                         "firma": name,
                         "titel": titel,
                         "url": url,
-                        "standort": standort,
+                        "arbeitsort": standort,
+                        "standort": berechne_standort(standort, config["verbotene_standorte"]),
                         "treffer": treffer,
                         "neu": ist_neu,
                         "rohtext": rohtext,
@@ -340,48 +266,10 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
 # HILFSFUNKTIONEN
 # =============================================================================
 
-def jetzt() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
-
-
-def domain(url: str) -> str:
-    return urlparse(url).netloc.replace("www.", "")
-
-
 def root_domain(url: str) -> str:
     """Gibt die Root-Domain zurück (z.B. 'helmut-fischer.com' für 'stellenangebote.helmut-fischer.com')."""
     teile = urlparse(url).netloc.replace("www.", "").split(".")
     return ".".join(teile[-2:]) if len(teile) >= 2 else teile[0]
-
-
-def text_matched(text: str, begriffe: list) -> list:
-    t = text.lower()
-    treffer = []
-    for b in begriffe:
-        if "+" in b:
-            if all(teil in t for teil in b.split("+")):
-                treffer.append(b)
-        else:
-            if b in t:
-                treffer.append(b)
-    return treffer
-
-
-def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
-    t = titel.lower()
-    for b in begriffe:
-        if "+" in b:
-            if all(teil in t for teil in b.split("+")):
-                return True
-        else:
-            if b in t:
-                return True
-    return False
-
-
-def standort_verboten(text: str, verbotene: list) -> bool:
-    t = text[:3000].lower()
-    return any(v in t for v in verbotene)
 
 
 def ist_job_link(href: str) -> bool:
@@ -464,37 +352,6 @@ Wenn kein eindeutiges Muster erkennbar ist: {{"muster": null}}"""
 
 
 # =============================================================================
-# COOKIE-BANNER
-# =============================================================================
-
-COOKIE_SELEKTOREN = [
-    "text=ALLES AKZEPTIEREN", "text=Alles akzeptieren",
-    "text=Alle akzeptieren", "text=Alle Cookies akzeptieren",
-    "text=Akzeptieren", "text=ABLEHNEN", "text=Ablehnen",
-    "text=Nur notwendige", "text=Nur erforderliche",
-    "text=Accept All", "text=Accept all", "text=Accept all cookies",
-    "text=Accept Cookies", "text=Reject All", "text=Reject all",
-    "text=I Accept", "text=Got it", "text=OK",
-    "#onetrust-accept-btn-handler",
-    "button[id*='cookie-accept']", "button[id*='accept-all']",
-    "button[id*='onetrust-accept']",
-]
-
-
-def klick_cookie_banner(page):
-    for sel in COOKIE_SELEKTOREN:
-        try:
-            btn = page.locator(sel).first
-            if btn.is_visible(timeout=400):
-                btn.click()
-                page.wait_for_timeout(1500)
-                return True
-        except Exception:
-            continue
-    return False
-
-
-# =============================================================================
 # STELLENBÖRSE SCANNEN
 # =============================================================================
 
@@ -513,7 +370,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         page.goto(url_boerse, wait_until="domcontentloaded", timeout=45000)
     except Exception as e:
         print(f"  ❌ Seite nicht erreichbar: {e}")
-        return []
+        return [], []
 
     page.wait_for_timeout(3000)
     klick_cookie_banner(page)
@@ -579,7 +436,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
             else:
                 print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
-                return []
+                return [], []
 
     # Domain-Filter: nur Links der eigenen Root-Domain übernehmen
     rd = root_domain(url_boerse)
@@ -647,14 +504,23 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         if not treffer:
             treffer = ["pdf"]
         # Standort nur prüfen wenn bekannt (leer = durchlassen)
-        if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                or (standort_aus_text and standort_verboten(standort_aus_text.lower(), config["verbotene_standorte"]))):
-            ausgeschlossen.append({"firma": name, "titel": titel, "url": href, "treffer": treffer})
+        _np_grund = ""
+        if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
+            for _b in config["ausschlussbegriffe"]:
+                if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
+                    _np_grund = f"Ausschlussbegriff: '{_b}'"
+                    break
+        elif standort_aus_text and standort_verboten(standort_aus_text.lower(), config["verbotene_standorte"]):
+            _np_grund = f"Verbotener Standort: {standort_aus_text}"
+        if _np_grund:
+            ausgeschlossen.append({"firma": name, "titel": titel, "url": href,
+                                   "treffer": treffer, "nicht_passend_grund": _np_grund})
             print(f"  🚫 Nicht passend: {titel[:70]}")
             continue
 
         gefunden.append({"firma": name, "titel": titel, "url": href,
-                         "treffer": treffer, "standort": standort_aus_text})
+                         "treffer": treffer, "arbeitsort": standort_aus_text,
+                         "standort": berechne_standort(standort_aus_text, config["verbotene_standorte"])})
         print(f"  ✅ {titel[:70]}")
         print(f"     Treffer: {', '.join(treffer)}")
 
@@ -737,13 +603,23 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
             volltext = f"{titel} {standort}"
             if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
                     or standort_verboten(volltext, config["verbotene_standorte"])):
-                ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                _np_grund = ""
+                for _b in config["ausschlussbegriffe"]:
+                    if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
+                        _np_grund = f"Ausschlussbegriff: '{_b}'"
+                        break
+                if not _np_grund and standort:
+                    _np_grund = f"Verbotener Standort: {standort}"
+                ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
+                                       "treffer": treffer, "nicht_passend_grund": _np_grund})
                 print(f"  🚫 Nicht passend: {titel[:70]}")
             else:
                 ist_neu = url not in bekannte_urls
                 stellen.append({
                     "firma": name, "titel": titel, "url": url,
-                    "standort": standort, "treffer": treffer,
+                    "arbeitsort": standort,
+                    "standort": berechne_standort(standort, config["verbotene_standorte"]),
+                    "treffer": treffer,
                     "neu": ist_neu, "rohtext": None,
                 })
                 neu_label = "🆕 " if ist_neu else "   "
@@ -767,8 +643,9 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
     tenant = api_config["tenant"]
     portal = api_config["portal"]
 
-    api_url = f"https://{tenant}.wd3.myworkdayjobs.com/wday/cxs/{tenant}/{portal}/jobs"
-    basis_url = f"https://{tenant}.wd3.myworkdayjobs.com"
+    wd_ver = api_config.get("wd_version", "wd3")
+    api_url = f"https://{tenant}.{wd_ver}.myworkdayjobs.com/wday/cxs/{tenant}/{portal}/jobs"
+    basis_url = f"https://{tenant}.{wd_ver}.myworkdayjobs.com"
 
     print(f"\n{'='*60}")
     print(f"  Scanne: {name} (Workday API)")
@@ -807,6 +684,9 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             print(f"  ℹ️  Keine weiteren Jobs auf Seite {seite+1}")
             break
 
+        if seite > 0 and payload["offset"] >= total:
+            break
+
         print(f"  📋 Seite {seite+1}: {len(jobs)} Jobs ({payload['offset']+1}–{payload['offset']+len(jobs)} von {total})")
 
         for job in jobs:
@@ -819,9 +699,10 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             else:
                 url = basis_url + external_path
 
-            if titel in gesehen:
+            job_key = external_path.rstrip("/").split("/")[-1] if external_path else titel
+            if job_key in gesehen:
                 continue
-            gesehen.add(titel)
+            gesehen.add(job_key)
 
             volltext = f"{titel} {standort}"
             treffer = text_matched(titel, config["suchbegriffe"])
@@ -829,7 +710,15 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             if treffer:
                 if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
                         or standort_verboten(volltext, config["verbotene_standorte"])):
-                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url, "treffer": treffer})
+                    _np_grund = ""
+                    for _b in config["ausschlussbegriffe"]:
+                        if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
+                            _np_grund = f"Ausschlussbegriff: '{_b}'"
+                            break
+                    if not _np_grund and standort:
+                        _np_grund = f"Verbotener Standort: {standort}"
+                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
+                                           "treffer": treffer, "nicht_passend_grund": _np_grund})
                     print(f"  🚫 Nicht passend: {titel[:70]}")
                 else:
                     ist_neu = url not in bekannte_urls
@@ -837,7 +726,8 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
                         "firma": name,
                         "titel": titel,
                         "url": url,
-                        "standort": standort,
+                        "arbeitsort": standort,
+                        "standort": berechne_standort(standort, config["verbotene_standorte"]),
                         "treffer": treffer,
                         "neu": ist_neu,
                     })
@@ -926,11 +816,11 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list
 
     zu_entfernen = []
     for stelle in stellen:
-        standort = stelle.get("standort") or ""
-        if not standort:
-            # Kein Standort bekannt → kein Filter (sicher durchlassen)
+        arbeitsort = stelle.get("arbeitsort") or ""
+        if not arbeitsort:
+            # Kein Arbeitsort bekannt → kein Filter (sicher durchlassen)
             continue
-        if _verboten(standort):
+        if _verboten(arbeitsort):
             zu_entfernen.append(stelle)
 
     if zu_entfernen:
@@ -938,34 +828,19 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list
         for s in zu_entfernen:
             print(f"   🗑️  {s.get('firma', '?')} – {s.get('titel', '?')}")
             url = s.get("url")
+            grund = f"Verbotener Standort: {s.get('arbeitsort', '?')}"
             if url:
                 if url in bekannte:
                     bekannte[url]["nicht_passend"] = True
+                    bekannte[url]["nicht_passend_grund"] = grund
                 else:
-                    bekannte[url] = {"status": 0, "nicht_passend": True, "geloescht_am": jetzt()}
+                    bekannte[url] = {"status": 0, "nicht_passend": True,
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
 
         entfernte_urls = {s.get("url") for s in zu_entfernen}
         stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
 
     return len(zu_entfernen)
-
-
-# =============================================================================
-# JSON-HILFSFUNKTIONEN
-# =============================================================================
-
-def lade_json(pfad: Path, standard):
-    if pfad.exists():
-        try:
-            return json.loads(pfad.read_text(encoding="utf-8-sig"))
-        except Exception:
-            pass
-    return standard
-
-
-def speichere_json(pfad: Path, daten):
-    pfad.parent.mkdir(parents=True, exist_ok=True)
-    pfad.write_text(json.dumps(daten, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # =============================================================================
@@ -1003,84 +878,18 @@ def main():
     stellen_index = {s["url"]: i for i, s in enumerate(stellen)}
     gesehen_urls: set = set()
 
-    def reaktiviere_oder_neu_api(t, ts):
+    def reaktiviere_oder_neu(t, ts, rohtext=None):
+        """Verarbeitet eine gefundene Stelle – egal ob via API oder Playwright."""
+        rohtext = rohtext if rohtext is not None else t.get("rohtext")
         url = t["url"]
         gesehen_urls.add(url)
         idx = stellen_index.get(url)
-        # Standort nachrüsten wenn Stelle schon bekannt aber Feld fehlt
-        if idx is not None and t.get("standort") and not stellen[idx].get("standort"):
-            stellen[idx]["standort"] = t["standort"]
-        if url in bekannte and bekannte[url]["status"] == 0:
-            if idx is not None and stellen[idx].get("bewertung"):
-                score = (stellen[idx]["bewertung"] or {}).get("score", 0)
-                bekannte[url]["status"] = 4 if score >= 70 else 5
-                bekannte[url]["geloescht_am"] = None
-                bekannte[url]["nicht_passend"] = False
-                stellen[idx]["geloescht_am"] = None
-                stellen[idx]["nicht_passend"] = False
-                print(f"  ♻️  Reaktiviert (Bewertung vorhanden): {t['titel'][:60]}")
-            elif idx is not None and stellen[idx].get("stellentext"):
-                bekannte[url]["status"] = 3
-                bekannte[url]["geloescht_am"] = None
-                bekannte[url]["nicht_passend"] = False
-                stellen[idx]["geloescht_am"] = None
-                stellen[idx]["nicht_passend"] = False
-                print(f"  ♻️  Reaktiviert (Stellentext vorhanden): {t['titel'][:60]}")
-            else:
-                bekannte[url]["status"] = 1
-                bekannte[url]["geloescht_am"] = None
-                bekannte[url]["nicht_passend"] = False
-                if idx is not None:
-                    stellen[idx]["geloescht_am"] = None
-                    stellen[idx]["nicht_passend"] = False
-                print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
-            if idx is None:
-                stellen.append({
-                    "firma": t["firma"], "titel": t["titel"], "url": url,
-                    "standort": t.get("standort", ""),
-                    "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
-                    "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
-                    "nicht_passend": False,
-                })
-                stellen_index[url] = len(stellen) - 1
-                print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
-        elif url not in bekannte:
-            rohtext = t.get("rohtext")
-            bekannte[url] = {"status": 2 if rohtext else 1, "gefunden_am": ts, "geloescht_am": None}
-            stellen.append({
-                "firma": t["firma"], "titel": t["titel"], "url": url,
-                "standort": t.get("standort", ""),
-                "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
-                "neu": True, "rohtext": rohtext, "stellentext": None, "bewertung": None,
-            })
-            stellen_index[url] = len(stellen) - 1
-            print(f"  🆕 Neu: {t['titel'][:60]}")
-        elif idx is None:
-            # In bekannte vorhanden aber fehlt in stellen.json → wiederherstellen
-            rohtext = t.get("rohtext")
-            stellen.append({
-                "firma": t["firma"], "titel": t["titel"], "url": url,
-                "standort": t.get("standort", ""),
-                "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
-                "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
-            })
-            stellen_index[url] = len(stellen) - 1
-            # Status an tatsächlichen Inhalt anpassen – historischem Status nicht vertrauen,
-            # da stellen.json unabhängig von bekannte_stellen verloren gehen kann
-            if rohtext:
-                if bekannte[url]["status"] < 2:
-                    bekannte[url]["status"] = 2
-            else:
-                bekannte[url]["status"] = 1
-            print(f"  🔧 Wiederhergestellt (fehlte in stellen.json): {t['titel'][:60]}")
 
-    def reaktiviere_oder_neu_playwright(t, rohtext, ts):
-        url = t["url"]
-        gesehen_urls.add(url)
-        idx = stellen_index.get(url)
         # Standort nachrüsten wenn Stelle schon bekannt aber Feld fehlt
-        if idx is not None and t.get("standort") and not stellen[idx].get("standort"):
-            stellen[idx]["standort"] = t["standort"]
+        if idx is not None and t.get("arbeitsort") and not stellen[idx].get("arbeitsort"):
+            stellen[idx]["arbeitsort"] = t["arbeitsort"]
+            stellen[idx]["standort"] = berechne_standort(t["arbeitsort"], config["verbotene_standorte"])
+
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
                 score = (stellen[idx]["bewertung"] or {}).get("score", 0)
@@ -1104,12 +913,13 @@ def main():
                 if idx is not None:
                     stellen[idx]["geloescht_am"] = None
                     stellen[idx]["nicht_passend"] = False
-                if idx is not None and rohtext:
-                    stellen[idx]["rohtext"] = rohtext
+                    if rohtext:
+                        stellen[idx]["rohtext"] = rohtext
                 print(f"  ♻️  Reaktiviert (neu bewerten): {t['titel'][:60]}")
             if idx is None:
                 stellen.append({
                     "firma": t["firma"], "titel": t["titel"], "url": url,
+                    "arbeitsort": t.get("arbeitsort", ""),
                     "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                     "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
                     "nicht_passend": False,
@@ -1117,44 +927,56 @@ def main():
                 stellen_index[url] = len(stellen) - 1
                 print(f"  🔄 Wiederhergestellt: {t['titel'][:60]}")
         elif url not in bekannte:
-            bekannte[url] = {
-                "status": 2 if rohtext else 1,
-                "gefunden_am": ts, "geloescht_am": None,
-            }
+            bekannte[url] = {"status": 2 if rohtext else 1, "gefunden_am": ts, "geloescht_am": None}
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
-                "standort": t.get("standort", ""),
+                "arbeitsort": t.get("arbeitsort", ""),
                 "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
                 "neu": True, "rohtext": rohtext, "stellentext": None, "bewertung": None,
             })
             stellen_index[url] = len(stellen) - 1
             print(f"  🆕 Neu: {t['titel'][:60]}")
+        elif idx is None:
+            # In bekannte vorhanden aber fehlt in stellen → wiederherstellen
+            stellen.append({
+                "firma": t["firma"], "titel": t["titel"], "url": url,
+                "arbeitsort": t.get("arbeitsort", ""),
+                "treffer": t["treffer"], "gefunden_am": ts, "geloescht_am": None,
+                "neu": False, "rohtext": rohtext, "stellentext": None, "bewertung": None,
+            })
+            stellen_index[url] = len(stellen) - 1
+            bekannte[url]["status"] = (2 if rohtext else 1) if bekannte[url]["status"] < 2 else bekannte[url]["status"]
+            print(f"  🔧 Wiederhergestellt (fehlte in stellen.json): {t['titel'][:60]}")
         else:
-            if rohtext and bekannte[url]["status"] < 2:
-                bekannte[url]["status"] = 2
-                if idx is not None:
-                    stellen[idx]["rohtext"] = rohtext
+            if rohtext and not stellen[idx].get("rohtext"):
+                stellen[idx]["rohtext"] = rohtext
                 print(f"  📥 Rohtext ergänzt: {t['titel'][:60]}")
+                if bekannte[url]["status"] < 2:
+                    bekannte[url]["status"] = 2
 
     def markiere_nicht_passend(t, ts):
         url = t["url"]
         gesehen_urls.add(url)  # verhindert Auto-Vergaben durch den "nicht mehr gefunden"-Loop
         idx = stellen_index.get(url)
+        grund = t.get("nicht_passend_grund", "")
         if url not in bekannte:
-            bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None, "nicht_passend": True}
+            bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None, "nicht_passend": True,
+                             "nicht_passend_grund": grund}
             stellen.append({
                 "firma": t["firma"], "titel": t["titel"], "url": url,
                 "treffer": t.get("treffer", []), "gefunden_am": ts, "geloescht_am": None,
                 "neu": False, "rohtext": None, "stellentext": None, "bewertung": None,
-                "nicht_passend": True,
+                "nicht_passend": True, "nicht_passend_grund": grund,
             })
             stellen_index[url] = len(stellen) - 1
             print(f"  🚫 Nicht passend (neu erfasst): {t['titel'][:60]}")
         else:
             bekannte[url]["nicht_passend"] = True
+            bekannte[url]["nicht_passend_grund"] = grund
             bekannte[url]["geloescht_am"] = None
             if idx is not None:
                 stellen[idx]["nicht_passend"] = True
+                stellen[idx]["nicht_passend_grund"] = grund
                 stellen[idx]["geloescht_am"] = None
             print(f"  🚫 Nicht passend: {t['titel'][:60]}")
 
@@ -1181,7 +1003,7 @@ def main():
             for t in treffer_liste:
                 if t["url"] in gesehen_urls:
                     continue
-                reaktiviere_oder_neu_api(t, jetzt())
+                reaktiviere_oder_neu(t, jetzt())
         except Exception as e:
             print(f"\n❌ API-Fehler bei {api_firma['name']}: {e}")
 
@@ -1227,7 +1049,7 @@ def main():
                     continue
                 print(f"  📄 Lade Rohtext: {t['titel'][:60]}...")
                 rohtext = lade_rohtext(page, url)
-                reaktiviere_oder_neu_playwright(t, rohtext, jetzt())
+                reaktiviere_oder_neu(t, jetzt(), rohtext)
 
         # Rohtext für API-Firmen nachladen (Status 1, kein Rohtext)
         for stelle in stellen:
@@ -1242,53 +1064,195 @@ def main():
                     bekannte[url]["status"] = 2
                     print(f"  ✅ Rohtext geladen")
 
-        def _ist_vergeben(url: str) -> bool | None:
-            """HTTP-Check: True=vergaben (404/410/Domain-Wechsel), False=erreichbar, None=unbekannt."""
-            try:
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                    method="GET"
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    if resp.status in (404, 410):
-                        return True
-                    final_url = resp.url
-                    if urlparse(final_url).netloc != urlparse(url).netloc:
-                        return True
+        _http_warnungen: list[str] = []  # Rate-Limit / unklare Antworten sammeln
+
+        def _ist_vergeben(url: str) -> int | None:
+            """HTTP GET. Gibt den echten Status-Code zurück.
+            0  = Domain-Wechsel, Redirect auf Portal-Root, Closed-Marker oder Workday-API → vergaben.
+            None = Verbindungsfehler / Timeout.
+            403/429 werden einmalig mit Pause wiederholt.
+            404 wird einmalig mit kurzer Pause wiederholt (Schutz gegen Rate-Limit-404).
+            Workday-URLs (*.myworkdayjobs.com/*/job/*) werden per API auf Jobexistenz geprüft."""
+            import time as _time
+
+            _CLOSED_MARKERS = [
+                "no longer available",
+                "this job is no longer",
+                "position is no longer",
+                "stelle ist nicht mehr",
+                "nicht mehr verfügbar",
+                "job is closed",
+                "posting is no longer active",
+                "sorry, this job is",
+                "leider nicht mehr",
+                "bereits vergeben",
+            ]
+
+            def _einzel_request(u: str) -> tuple[int | None, str, str]:
+                """Gibt (status, final_url, body_snippet) zurück."""
+                try:
+                    req = urllib.request.Request(
+                        u,
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                        method="GET"
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        body = resp.read(8192).decode("utf-8", errors="ignore").lower()
+                        return resp.status, resp.url, body
+                except urllib.error.HTTPError as e:
+                    return e.code, u, ""
+                except Exception:
+                    return None, u, ""
+
+            def _prüfe_200(final_url: str, body: str) -> int:
+                """Prüft ob eine 200-Antwort in Wirklichkeit eine geschlossene Stelle ist (non-Workday)."""
+                orig_path    = urlparse(url).path
+                final_path   = urlparse(final_url).path
+                orig_netloc  = urlparse(url).netloc
+                final_netloc = urlparse(final_url).netloc
+
+                if orig_netloc != final_netloc:
+                    _http_warnungen.append(f"  📍 Domain-Wechsel → vergaben: {url[:70]}")
+                    return 0
+
+                if orig_path and len(final_path) < len(orig_path) * 0.5:
+                    _http_warnungen.append(f"  📍 Redirect auf Portal-Root → vergaben: {url[:70]}")
+                    return 0
+
+                for marker in _CLOSED_MARKERS:
+                    if marker in body:
+                        _http_warnungen.append(f"  📍 Closed-Marker '{marker}' → vergaben: {url[:70]}")
+                        return 0
+
+                return 200
+
+            def _workday_job_aktiv() -> bool | None:
+                """Prüft via Workday-API ob der Job noch existiert.
+                True = noch gelistet, False = nicht mehr gelistet, None = API-Fehler."""
+                parsed = urlparse(url)
+                netloc = parsed.netloc  # z.B. trumpf.wd3.myworkdayjobs.com
+                tenant = netloc.split(".")[0]
+
+                segments = [s for s in parsed.path.split("/") if s]
+                # Locale-Präfix entfernen (Format: de-DE, en-US, ...)
+                if segments and re.match(r'^[a-z]{2}-[A-Z]{2}$', segments[0]):
+                    segments = segments[1:]
+                if len(segments) < 2:
+                    return None
+
+                portal = segments[0]
+
+                # Job-External-ID aus letztem Pfadsegment (Format: ..._R00035907-1)
+                last_seg = segments[-1]
+                m = re.search(r'_(R\d+(?:-\d+)?)$', last_seg)
+                if not m:
+                    return None
+                job_id = m.group(1)
+
+                api_url = f"https://{netloc}/wday/cxs/{tenant}/{portal}/jobs"
+                payload = {"searchText": job_id, "limit": 5, "offset": 0, "appliedFacets": {}}
+                try:
+                    req = urllib.request.Request(
+                        api_url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        },
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                    jobs = data.get("jobPostings", [])
+                    for job in jobs:
+                        if job_id in job.get("externalPath", ""):
+                            return True
                     return False
-            except urllib.error.HTTPError as e:
-                if e.code in (404, 410):
-                    return True
-                return None
-            except Exception:
-                return None
+                except Exception:
+                    return None
+
+            code, final_url, body = _einzel_request(url)
+
+            if code in (403, 429):
+                # Rate-Limit-Signal → 8 Sekunden warten, dann nochmal
+                _time.sleep(8)
+                code2, final_url2, body2 = _einzel_request(url)
+                if code2 is not None:
+                    if code != code2:
+                        _http_warnungen.append(f"  ⚠️  {code}→{code2} (Rate-Limit?) {url[:70]}")
+                    code, final_url, body = code2, final_url2, body2
+
+            elif code == 404:
+                # Möglicherweise zu schnell gescannt → 3 Sekunden warten, dann nochmal
+                _time.sleep(3)
+                code2, final_url2, body2 = _einzel_request(url)
+                if code2 is not None and code2 != 404:
+                    _http_warnungen.append(f"  ⚠️  404→{code2} (Rate-Limit-404 korrigiert) {url[:70]}")
+                    code, final_url, body = code2, final_url2, body2
+
+            if code == 200:
+                if ".myworkdayjobs.com" in url and "/job/" in url:
+                    aktiv = _workday_job_aktiv()
+                    if aktiv is False:
+                        _http_warnungen.append(f"  📍 Workday-API: Job nicht mehr gelistet → vergaben: {url[:70]}")
+                        code = 0
+                    # aktiv is None → API-Fehler, konservativ: 200 behalten
+                else:
+                    code = _prüfe_200(final_url, body)
+
+            return code
 
         # Vergaben-Repair: bereits vergaben-markierte Stellen per HTTP prüfen
         if not nur_firma:
+            from datetime import datetime as _dt
+            _jetzt_dt = _dt.now()
+
+            def _recheck_erlaubt(eintrag: dict, idx) -> bool:
+                if not eintrag.get("vergaben_bestaetigt"):
+                    return True
+                if idx is None:
+                    return False
+                geloescht = stellen[idx].get("geloescht_am")
+                if not geloescht:
+                    return False
+                try:
+                    return (_jetzt_dt - _dt.fromisoformat(str(geloescht))).days <= 14
+                except Exception:
+                    return False
+
             vergaben_repair = [
                 url for url, eintrag in bekannte.items()
-                if eintrag.get("status") == 0
-                and not eintrag.get("vergaben_bestaetigt")
+                if eintrag.get("status") in (0, 9)
                 and stellen_index.get(url) is not None
                 and stellen[stellen_index[url]].get("geloescht_am")
                 and not stellen[stellen_index[url]].get("nicht_passend")
+                and _recheck_erlaubt(eintrag, stellen_index.get(url))
             ]
             if vergaben_repair:
                 print(f"\n  🔍 Prüfe {len(vergaben_repair)} vergaben-markierte Stelle(n) auf Erreichbarkeit (HTTP)...")
                 reaktiviert = 0
                 for url in vergaben_repair:
-                    vergeben = _ist_vergeben(url)
-                    if vergeben is False:  # noch erreichbar
+                    code = _ist_vergeben(url)
+                    if code == 200:  # noch erreichbar → reaktivieren
                         idx = stellen_index[url]
-                        stellen[idx]["nicht_passend"] = True
                         stellen[idx]["geloescht_am"] = None
+                        stellen[idx]["vergabe_status"] = None
+                        stellen[idx]["nicht_passend"] = False
+                        stellen[idx]["nicht_passend_grund"] = ""
+                        bekannte[url]["status"] = 1
+                        bekannte[url]["geloescht_am"] = None
+                        bekannte[url]["vergaben_bestaetigt"] = False
+                        bekannte[url]["nicht_passend"] = False
                         reaktiviert += 1
-                        print(f"  🚫 Vergaben→nicht_passend (noch erreichbar): {url[:70]}")
-                    elif vergeben is True:
+                        print(f"  ✅ Vergaben aufgehoben (HTTP 200, noch aktiv): {url[:70]}")
+                    elif code in (404, 410, 0):
                         bekannte[url]["vergaben_bestaetigt"] = True
+                        print(f"  ✅ Vergaben bestätigt (HTTP {code}): {url[:70]}")
+                    elif code is not None:
+                        print(f"  ❓ Unklarer Status HTTP {code}: {url[:70]}")
                 if reaktiviert:
-                    print(f"  ✅ {reaktiviert} Stelle(n) von vergaben zu nicht_passend verschoben")
+                    print(f"  ✅ {reaktiviert} Stelle(n) reaktiviert (war fälschlich als vergaben markiert)")
 
         # Nicht mehr gefundene Stellen → Playwright-Check vor Vergaben-Markierung
         # Nur für Domains die in diesem Scan mind. 1 Ergebnis hatten (Schutz gegen Ladeprobleme)
@@ -1331,8 +1295,10 @@ def main():
                 titel = stellen[idx].get("titel", url)[:60] if idx is not None else url[:60]
                 print(f"  🟢 Beworben + noch offen (Status 5): {titel}")
 
-        # Verfügbarkeits-Check: alle Status-4 Stellen (Score≥70%, bewerben empfohlen)
+        # Verfügbarkeits-Check: nur Status-4 Stellen (Score≥70%, bewerben empfohlen)
         # sowie aktive Bewerbungen die nicht mehr in den Listings gefunden wurden.
+        # Status-3 NICHT prüfen: HTTP-Check ist unzuverlässig für JS-gerenderte Portale
+        # (gibt false 404 zurück obwohl Stelle noch aktiv ist)
         kandidaten_vergaben = []
         for url, eintrag in bekannte.items():
             if url not in gesehen_urls and eintrag["status"] not in (0, 5, 6, 7, 8, 9):
@@ -1344,8 +1310,8 @@ def main():
             print(f"\n  🔍 Prüfe {len(kandidaten_vergaben)} nicht mehr gesehene Stelle(n) per HTTP...")
             for url in kandidaten_vergaben:
                 eintrag = bekannte[url]
-                vergeben = _ist_vergeben(url)
-                if vergeben is True:
+                code = _ist_vergeben(url)
+                if code in (404, 410, 0):
                     neuer_status = _status_bei_vergabe(url)
                     eintrag["status"] = neuer_status
                     eintrag["geloescht_am"] = ts
@@ -1356,20 +1322,22 @@ def main():
                         stellen[idx]["vergabe_status"] = neuer_status
                     deaktiviert += 1
                     _verg_label = {7: "📭 Vergeben (Bewerbung lief)", 8: "❌ Vergeben (Absage)", 9: "🗑️  Vergeben"}
-                    print(f"  {_verg_label.get(neuer_status, '🗑️  Vergeben')}: {url[:80]}")
-                elif vergeben is False:
-                    if url in _schutz_urls:
-                        # Aktive Bewerbung läuft — Stelle ist noch erreichbar,
-                        # nur nicht mehr in den Listings. Nicht anfassen.
-                        print(f"  🔒 Geschützt (aktive Bewerbung, noch erreichbar): {url[:70]}")
+                    print(f"  {_verg_label.get(neuer_status, '🗑️  Vergeben')} (HTTP {code}): {url[:75]}")
+                elif code == 200:
+                    if url in _schutz_urls or eintrag.get("status") == 4:
+                        # Aktive Bewerbung ODER Score≥70%: URL noch erreichbar → nicht anfassen
+                        print(f"  🔒 URL noch aktiv (HTTP 200), nicht mehr gelistet → Status bleibt: {url[:65]}")
                     else:
                         idx = stellen_index.get(url)
                         if idx is not None:
                             stellen[idx]["nicht_passend"] = True
+                            stellen[idx]["nicht_passend_grund"] = "Nicht mehr in Stellenbörse gelistet (HTTP 200)"
                             stellen[idx]["geloescht_am"] = None
                         bekannte[url]["nicht_passend"] = True
-                        print(f"  🚫 Nicht mehr gelistet → nicht_passend: {url[:70]}")
-                # None → kein Urteil, Status bleibt
+                        print(f"  🚫 Nicht mehr gelistet (HTTP 200) → nicht_passend: {url[:65]}")
+                elif code is not None:
+                    print(f"  ❓ Unklarer Status HTTP {code} → kein Urteil: {url[:70]}")
+                # None = Verbindungsfehler → kein Urteil, Status bleibt
 
         # Aktive Bewerbungen und Score≥70%-Stellen prüfen die nicht durch den
         # domain-basierten Check erfasst wurden (z.B. nicht mehr gescannte Domains)
@@ -1384,8 +1352,8 @@ def main():
         if bewerb_zu_pruefen:
             print(f"\n  🔍 Prüfe {len(bewerb_zu_pruefen)} URL(s) auf Erreichbarkeit (Bewerbungen, HTTP)...")
             for url in bewerb_zu_pruefen:
-                vergeben = _ist_vergeben(url)
-                if vergeben is True:
+                code = _ist_vergeben(url)
+                if code in (404, 410, 0):
                     neuer_status = _status_bei_vergabe(url)
                     if url in bekannte:
                         bekannte[url]["status"] = neuer_status
@@ -1397,8 +1365,16 @@ def main():
                         stellen[idx]["vergabe_status"] = neuer_status
                     deaktiviert += 1
                     _verg_label = {7: "📭 Bewerbung vergeben", 8: "❌ Absage + vergaben", 9: "🗑️  Vergaben"}
-                    print(f"  {_verg_label.get(neuer_status, '🗑️')}: {url[:80]}")
+                    print(f"  {_verg_label.get(neuer_status, '🗑️')} (HTTP {code}): {url[:75]}")
+                elif code == 200:
+                    print(f"  🔒 Noch erreichbar (HTTP 200): {url[:75]}")
+                elif code is not None:
+                    print(f"  ❓ Unklarer Status HTTP {code}: {url[:75]}")
 
+        if _http_warnungen:
+            print(f"\n  ⚠️  Rate-Limit / korrigierte HTTP-Codes ({len(_http_warnungen)}):")
+            for w in _http_warnungen:
+                print(w)
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
     # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.
@@ -1416,8 +1392,11 @@ def main():
     from db import upsert_stelle, upsert_bewertung, exportiere_stellen_json, exportiere_bekannte_json
     for s in stellen:
         b = bekannte.get(s["url"], {})
+        # standort ableiten falls noch nicht gesetzt aber arbeitsort vorhanden
+        standort_wert = s.get("standort") or berechne_standort(s.get("arbeitsort", ""), config["verbotene_standorte"])
         upsert_stelle({
             **s,
+            "standort":            standort_wert,
             "status":              b.get("status", s.get("status", 1)),
             "nicht_passend":       b.get("nicht_passend", s.get("nicht_passend", False)),
             "geloescht_am":        b.get("geloescht_am") if b.get("geloescht_am") is not None else s.get("geloescht_am"),
@@ -1433,6 +1412,7 @@ def main():
             upsert_stelle({"url": url, "firma": "", "titel": "",
                            "status": b.get("status", 1),
                            "nicht_passend": b.get("nicht_passend", False),
+                           "nicht_passend_grund": b.get("nicht_passend_grund", ""),
                            "geloescht_am": b.get("geloescht_am"),
                            "vergaben_bestaetigt": b.get("vergaben_bestaetigt", False)})
 

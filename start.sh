@@ -1,9 +1,11 @@
-call C:\Users\sasch\anaconda3\Scripts\activate.bat
-cd C:\Users\sasch\Documents\Python\Jobsuche\Jobsuche_V2
+#!/bin/bash
+# Job-Scanner Pipeline
+cd "$(dirname "$0")"
+source .venv/bin/activate
+
 python scanner2.py
 python rohtext_holen2.py
 python vergaben_check.py
 python extraktor.py
 python bewertung.py
 python report.py
-pause

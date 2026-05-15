@@ -15,7 +15,6 @@ Nutzung:
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -24,120 +23,61 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
+from utils import lade_config
+
 
 # =============================================================================
 # PFADE
 # =============================================================================
 
 BASIS_PFAD      = Path(__file__).parent
-STELLEN_JSON  = BASIS_PFAD / "stellen.json"
-BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
+STELLEN_JSON    = BASIS_PFAD / "stellen.json"
+BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 LEBENSLAUF_PFAD = BASIS_PFAD / "lebenslauf.txt"
-CONFIG_PFAD   = Path(__file__).parent / "config.txt"
 
 KI_MODELL = "claude-haiku-4-5-20251001"
-
-
-# =============================================================================
-# CONFIG
-# =============================================================================
-
-def lade_config() -> dict:
-    if not CONFIG_PFAD.exists():
-        print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
-        sys.exit(1)
-
-    result = {"api_key": "", "prompt": "", "verbotene_standorte": []}
-    zeilen = CONFIG_PFAD.read_text(encoding="utf-8").splitlines()
-    aktiver_abschnitt = None
-    puffer = []
-
-    for zeile in zeilen:
-        z = zeile.strip()
-
-        if z.startswith("[\\") and z.endswith("]"):
-            abschnitt = z[2:-1].lower()
-            if abschnitt == "prompt":
-                result["prompt"] = "\n".join(puffer).strip()
-            aktiver_abschnitt = None
-            puffer = []
-            continue
-
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            puffer = []
-            continue
-
-        if aktiver_abschnitt is None:
-            if z.startswith("#") or not z:
-                continue
-            if z.upper().startswith("API_KEY"):
-                result["api_key"] = z.split("=", 1)[1].strip()
-            continue
-
-        if aktiver_abschnitt == "prompt":
-            puffer.append(zeile)
-        elif aktiver_abschnitt == "verbotene_standorte":
-            if z and not z.startswith("#"):
-                result["verbotene_standorte"].append(z.lower())
-
-    return result
-
-
-# =============================================================================
-# JSON-HILFSFUNKTIONEN
-# =============================================================================
-
-def lade_json(pfad: Path, standard):
-    if pfad.exists():
-        try:
-            return json.loads(pfad.read_text(encoding="utf-8-sig"))
-        except Exception:
-            pass
-    return standard
-
-
-def speichere_json(pfad: Path, daten):
-    pfad.parent.mkdir(parents=True, exist_ok=True)
-    pfad.write_text(json.dumps(daten, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # =============================================================================
 # KI-BEWERTUNG
 # =============================================================================
 
+def _parse_json_antwort(text: str) -> dict:
+    text = text.removeprefix("```json").removesuffix("```").strip()
+    start = text.find("{")
+    ende  = text.rfind("}") + 1
+    if start != -1 and ende > start:
+        text = text[start:ende]
+    return json.loads(text)
+
+
 def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, client) -> dict | None:
     prompt = prompt_vorlage.replace("{stellentext}", stellentext[:5000])
     prompt = prompt.replace("{lebenslauf}", lebenslauf)
 
-    try:
-        antwort = client.messages.create(
-            model=KI_MODELL,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = antwort.content[0].text.strip()
-        text = text.removeprefix("```json").removesuffix("```").strip()
-        # Nur JSON-Block extrahieren falls extra Text vorhanden
-        start = text.find("{")
-        ende  = text.rfind("}") + 1
-        if start != -1 and ende > start:
-            text = text[start:ende]
-        ergebnis = json.loads(text)
-        # score_aktuell als Hauptscore setzen (Rückwärtskompatibilität)
-        if "score_aktuell" in ergebnis and "score" not in ergebnis:
-            ergebnis["score"] = ergebnis["score_aktuell"]
-        ergebnis["empfehlung"] = "bewerben" if ergebnis.get("score", 0) >= 70 else "nicht bewerben"
-        # Sprache des Stellentexts erkennen
-        if "sprache" not in ergebnis:
-            ergebnis["sprache"] = "de"
-        return ergebnis
-    except json.JSONDecodeError as e:
-        print(f"  ⚠️  JSON-Parse-Fehler: {e}")
-        return None
-    except Exception as e:
-        print(f"  ❌ API-Fehler: {e}")
-        return None
+    for versuch in range(1, 4):
+        try:
+            antwort = client.messages.create(
+                model=KI_MODELL,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = antwort.content[0].text.strip()
+            ergebnis = _parse_json_antwort(text)
+            if "score_aktuell" in ergebnis and "score" not in ergebnis:
+                ergebnis["score"] = ergebnis["score_aktuell"]
+            ergebnis["empfehlung"] = "bewerben" if ergebnis.get("score", 0) >= 70 else "nicht bewerben"
+            if "sprache" not in ergebnis:
+                ergebnis["sprache"] = "de"
+            return ergebnis
+        except json.JSONDecodeError as e:
+            print(f"  ⚠️  JSON-Parse-Fehler (Versuch {versuch}/3): {e}")
+            if versuch == 3:
+                return None
+        except Exception as e:
+            print(f"  ❌ API-Fehler: {e}")
+            return None
+    return None
 
 
 # =============================================================================
@@ -183,10 +123,10 @@ def main():
     verbotene = config["verbotene_standorte"]
 
     def standort_ok(s: dict) -> bool:
-        standort = (s.get("standort") or "").lower()
-        if not standort or standort == "ok":
+        arbeitsort = (s.get("arbeitsort") or "").lower()
+        if not arbeitsort:
             return True
-        return not any(v in standort for v in verbotene)
+        return not any(v in arbeitsort for v in verbotene)
 
     # Stellen mit verbotenem Standort explizit als nicht_passend markieren
     zu_markieren = [
@@ -200,8 +140,25 @@ def main():
         print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
         for idx, stelle in zu_markieren:
             stellen[idx]["nicht_passend"] = True
-            upsert_stelle({"url": stelle["url"], "nicht_passend": True})
-            print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('standort','')})")
+            np_grund = f"Verbotener Standort: {stelle.get('arbeitsort', '?')}"
+            stellen[idx]["nicht_passend_grund"] = np_grund
+            upsert_stelle({"url": stelle["url"], "nicht_passend": True, "nicht_passend_grund": np_grund})
+            print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('arbeitsort','')})")
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
+
+    # Status-3 Stellen die bereits nicht_passend=True sind → Status 9 (nie beworben)
+    # verhindert dauerhaftes Feststecken bei Status 3
+    zu_bereinigen = [
+        (i, s) for i, s in enumerate(stellen)
+        if s.get("status") == 3 and s.get("nicht_passend")
+    ]
+    if zu_bereinigen:
+        print(f"  {len(zu_bereinigen)} nicht_passend-Stellen (Status 3) → Status 9:")
+        for idx, stelle in zu_bereinigen:
+            stellen[idx]["status"] = 9
+            upsert_stelle({"url": stelle["url"], "status": 9})
+            print(f"    🗑️  {stelle['firma']}: {stelle['titel'][:60]}")
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
 
@@ -215,6 +172,20 @@ def main():
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bewerten (Status 3)")
+
+    # Diagnose: zeige noch verbliebene status=3 Stellen die übersprungen werden
+    nicht_bewertet = [
+        s for s in stellen
+        if s.get("status") == 3 and s not in [st for _, st in zu_bearbeiten]
+    ]
+    if nicht_bewertet and len(zu_bearbeiten) == 0:
+        print(f"  ℹ️  {len(nicht_bewertet)} Status-3 Stellen werden übersprungen:")
+        for s in nicht_bewertet:
+            if not s.get("stellentext"):
+                grund = "⚠️  kein Stellentext"
+            else:
+                grund = f"Arbeitsort: {s.get('arbeitsort', '?')}"
+            print(f"     {s['firma']}: {s['titel'][:55]} → {grund}")
 
     bewertet = 0
 
