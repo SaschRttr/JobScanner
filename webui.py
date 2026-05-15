@@ -402,12 +402,19 @@ def get_status():
     import db
     with db.verbindung() as con:
         rows = con.execute("""
-            SELECT url, stufe, beworben_am, kennenlernen_am, einladung_am, ergebnis_am, kommentar
+            SELECT url, stufe, beworben_am, kennenlernen_am, einladung_am, ergebnis_am, kommentar, nicht_beworben_grund
             FROM bewerbungsstatus
         """).fetchall()
+        scanner_rows = con.execute(
+            "SELECT url, status FROM stellen WHERE status = 10"
+        ).fetchall()
     result = {}
     for r in rows:
         result[r["url"]] = dict(r)
+    for r in scanner_rows:
+        if r["url"] not in result:
+            result[r["url"]] = {}
+        result[r["url"]]["scanner_status"] = r["status"]
     return jsonify(result)
 
 
@@ -438,6 +445,18 @@ def post_status():
             INSERT INTO bewerbungsstatus (url, kommentar)
             VALUES (?, ?)
             ON CONFLICT(url) DO UPDATE SET kommentar = excluded.kommentar
+        """, (data["url"], data["wert"]))
+        con.commit()
+    elif data["feld"] == "nicht_beworben":
+        import db
+        db.upsert_stelle({"url": data["url"], "status": 10})
+    elif data["feld"] == "nicht_beworben_grund":
+        import db
+        con = db.verbindung()
+        con.execute("""
+            INSERT INTO bewerbungsstatus (url, nicht_beworben_grund)
+            VALUES (?, ?)
+            ON CONFLICT(url) DO UPDATE SET nicht_beworben_grund = excluded.nicht_beworben_grund
         """, (data["url"], data["wert"]))
         con.commit()
     return jsonify({"ok": True})

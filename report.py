@@ -110,8 +110,9 @@ _STATUS_LABELS = {
     7: "Beworben, Ghosting",
     8: "Absage erhalten",
     9: "Vergeben, nie beworben",
+    10: "nicht beworben",
 }
-_FILTER_STATUS_VALS = {4, 5, 6, 7, 8, 9}
+_FILTER_STATUS_VALS = {4, 5, 6, 7, 8, 9, 10}
 
 
 def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False) -> str:
@@ -249,6 +250,9 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
                 <textarea class="kommentar" rows="2"
                     placeholder="Notizen..."
                     onblur="speichern('{url_escaped}', 'kommentar', this.value)"></textarea>
+                <textarea class="nicht-beworben-grund" rows="2"
+                    placeholder="Nicht beworben weil..."
+                    onblur="speichern('{url_escaped}', 'nicht_beworben_grund', this.value)"></textarea>
             </div>
         </details>"""
 
@@ -331,7 +335,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_escaped}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
     neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_escaped}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
-    pruef_btn       = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
+    pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
+    nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_escaped}\')">🚫 Nicht beworben</button>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
     _auto_min_attr = ""
@@ -359,6 +364,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     {bewertung_btn}
     {neu_laden_btn}
     {pruef_btn}
+    {nicht_beworben_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -440,7 +446,7 @@ CSS = """
     .begruendung { color: #555; }
     .notizen { margin-top: 8px; }
     .notizen summary { cursor: pointer; color: #888; font-size: 0.85em; }
-    .kommentar {
+    .kommentar, .nicht-beworben-grund {
         width: 100%; margin-top: 4px; font-size: 0.85em;
         border: 1px solid #ddd; border-radius: 4px; padding: 4px;
         box-sizing: border-box;
@@ -503,7 +509,8 @@ CSS = """
     .scanner-status-6 { background: #f1c40f; color: #555; }
     .scanner-status-7 { background: #e67e22; }
     .scanner-status-8 { background: #e74c3c; }
-    .scanner-status-9 { background: #7f8c8d; }
+    .scanner-status-9  { background: #7f8c8d; }
+    .scanner-status-10 { background: #c0392b; }
     .scan-box {
         background: white; border-radius: 8px; padding: 20px;
         margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -551,12 +558,12 @@ JS = """
     const SERVER = window.location.origin;
 
     const _STUFE_ZU_STATUS = { beworben: 6, absage: 8 };
-    const _STATUS_BADGE_LABELS = {4:'bewerben', 5:'nicht bewerben', 6:'Beworben, aktiv', 7:'Beworben, Ghosting', 8:'Absage erhalten'};
+    const _STATUS_BADGE_LABELS = {4:'bewerben', 5:'nicht bewerben', 6:'Beworben, aktiv', 7:'Beworben, Ghosting', 8:'Absage erhalten', 10:'Nicht beworben'};
 
     function aktualisiereStatusBadge(el, neuerStatus) {
         const badge = el.querySelector('.scanner-status');
         if (!badge) return;
-        for (let i = 0; i <= 9; i++) badge.classList.remove('scanner-status-' + i);
+        for (let i = 0; i <= 10; i++) badge.classList.remove('scanner-status-' + i);
         badge.classList.add('scanner-status-' + neuerStatus);
         badge.title = 'Status ' + neuerStatus;
         badge.textContent = _STATUS_BADGE_LABELS[neuerStatus] || String(neuerStatus);
@@ -566,11 +573,17 @@ JS = """
 
     function aktualisiereStatusCounts() {
         const counts = {};
-        document.querySelectorAll('.stelle[data-scanner-status]').forEach(el => {
+        const seenUrls = new Set();
+        document.querySelectorAll('.stelle[data-scanner-status][data-url]').forEach(el => {
+            const url = el.dataset.url;
+            if (url) {
+                if (seenUrls.has(url)) return;
+                seenUrls.add(url);
+            }
             const s = el.dataset.scannerStatus;
             if (s !== '') counts[s] = (counts[s] || 0) + 1;
         });
-        [4, 5, 6, 7, 8, 9].forEach(sv => {
+        [4, 5, 6, 7, 8, 9, 10].forEach(sv => {
             const el = document.getElementById('stat-status-' + sv);
             if (el) el.textContent = counts[sv] || 0;
         });
@@ -606,7 +619,7 @@ JS = """
                 }
                 if (wert && _STUFE_ZU_STATUS[wert]) {
                     const _curSt2 = parseInt(el.dataset.scannerStatus);
-                    if (isNaN(_curSt2) || ![0, 7, 8, 9].includes(_curSt2)) {
+                    if (isNaN(_curSt2) || ![0, 7, 8, 9, 10].includes(_curSt2)) {
                         aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[wert]);
                     }
                 }
@@ -682,7 +695,7 @@ JS = """
                 el.classList.add(stufe);
                 if (_STUFE_ZU_STATUS[stufe]) {
                     const _curSt = parseInt(el.dataset.scannerStatus);
-                    if (isNaN(_curSt) || ![0, 7, 8, 9].includes(_curSt)) {
+                    if (isNaN(_curSt) || ![0, 7, 8, 9, 10].includes(_curSt)) {
                         aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[stufe]);
                     }
                 }
@@ -701,6 +714,15 @@ JS = """
             // Kommentar wiederherstellen
             const ta = el.querySelector('.kommentar');
             if (s.kommentar && ta) ta.value = s.kommentar;
+
+            // Nicht-beworben-Grund wiederherstellen
+            const nbg = el.querySelector('.nicht-beworben-grund');
+            if (s.nicht_beworben_grund && nbg) nbg.value = s.nicht_beworben_grund;
+
+            // Scanner-Status aus DB anwenden (überschreibt eingebackenen HTML-Wert)
+            if (s.scanner_status !== undefined) {
+                aktualisiereStatusBadge(el, s.scanner_status);
+            }
 
             // Ockergelb: Lebenslauf oder Notizen vorhanden, aber kein Status gesetzt
             const hatAktivitaet = el.dataset.hatLebenslauf === '1' || !!s.kommentar;
@@ -1039,8 +1061,9 @@ JS = """
     }
     function _aktualisiereFilterBtns() {
         const map = {
-            'btn-alle':          _aktiverFilter === null,
-            'btn-beworben':      _aktiverFilter === 'beworben',
+            'btn-alle':          _aktiverFilter === null && _aktiverStatusFilter === null,
+            'btn-beworben':      _aktiverStatusFilter === 6,
+            'btn-nicht-beworben': _aktiverStatusFilter === 10,
             'btn-kennenlernen':  _aktiverFilter === 'kennenlernen',
             'btn-einladung':     _aktiverFilter === 'einladung',
             'btn-zusage':        _aktiverFilter === 'zusage',
@@ -1099,7 +1122,7 @@ JS = """
         if (_aktiverFilter !== null) {
             gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
             // Vergabene/gelöschte Stellen aus Stufen-Filtern ausschließen (Status 0, 7, 8, 9)
-            const _inaktiveStatus = new Set([0, 7, 8, 9]);
+            const _inaktiveStatus = new Set([0, 7, 8, 9, 10]);
             gefiltert = gefiltert.filter(el => {
                 const s = parseInt(el.dataset.scannerStatus);
                 return isNaN(s) || !_inaktiveStatus.has(s);
@@ -1141,7 +1164,7 @@ JS = """
             zusage:       '🎉 Zusage',
             absage:       '❌ Absage',
         }[_aktiverFilter] || '';
-        const _stLabels = {4:'bewerben',5:'nicht bewerben',6:'Beworben, aktiv',7:'Beworben, Ghosting',8:'Absage erhalten',9:'Vergeben, nie beworben'};
+        const _stLabels = {4:'bewerben',5:'nicht bewerben',6:'Beworben, aktiv',7:'Beworben, Ghosting',8:'Absage erhalten',9:'Vergeben, nie beworben',10:'Nicht beworben'};
         const statusText = _aktiverStatusFilter !== null ? ('Status: ' + (_stLabels[_aktiverStatusFilter] || _aktiverStatusFilter)) : '';
         const sortText = {
             score:   '⭐ Nach Passung',
@@ -1189,6 +1212,26 @@ JS = """
         }
         btn.disabled = false;
         btn.textContent = '🔍 Neu prüfen';
+    }
+
+    async function nichtBeworben(btn, url) {
+        if (!confirm('Stelle als "Nicht beworben" markieren?')) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            await fetch(SERVER + '/status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url, feld: 'nicht_beworben', wert: '1'})
+            });
+            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
+            if (el) aktualisiereStatusBadge(el, 10);
+            btn.textContent = '🚫 Nicht beworben';
+            btn.style.opacity = '0.5';
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '🚫 Nicht beworben';
+        }
     }
 
     async function neueFirmaTesten() {
@@ -1335,11 +1378,13 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         pass
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls]
+    nicht_beworben_urls = {url for url, st in bekannte_status.items() if st == 10}
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls]
     zu_weit       = [s for s in stellen if s["url"] in zu_weit_urls and not s.get("geloescht_am")]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
-    geloescht     = [s for s in stellen if s.get("geloescht_am")]
-    absagen       = [s for s in aktive  if s["url"] in absage_urls]
+    geloescht        = [s for s in stellen if s.get("geloescht_am")]
+    nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
+    absagen          = [s for s in aktive  if s["url"] in absage_urls]
     geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
@@ -1358,6 +1403,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         (7, "👻 Beworben, Ghosting"),
         (8, "❌ Absage erhalten"),
         (9, "🗑️ Vergeben, nie beworben"),
+        (10, "🚫 Nicht beworben"),
     ]
     status_zeilen = " &nbsp;|&nbsp;\n        ".join(
         f'<strong id="stat-status-{sv}" style="cursor:pointer;text-decoration:underline dotted;" '
@@ -1452,8 +1498,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     <div class="filter-bar" id="filter-bar">
         <div class="filter-gruppe">
             <span class="filter-label">Filter:</span>
-            <button id="btn-alle" class="filter-btn aktiv" onclick="setzeFilter(null)">Alle</button>
-            <button id="btn-beworben" class="filter-btn" onclick="setzeFilter('beworben')">✅ Beworben</button>
+            <button id="btn-alle" class="filter-btn aktiv" onclick="setzeFilter(null); setzeStatusFilter(null);">Alle</button>
+            <button id="btn-beworben" class="filter-btn" onclick="setzeStatusFilter(6)">✅ Beworben aktiv</button>
+            <button id="btn-nicht-beworben" class="filter-btn" onclick="setzeStatusFilter(10)">🚫 Nicht beworben</button>
             <button id="btn-kennenlernen" class="filter-btn" onclick="setzeFilter('kennenlernen')">📞 Kennenlernen</button>
             <button id="btn-einladung" class="filter-btn" onclick="setzeFilter('einladung')">📅 Einladung</button>
             <button id="btn-zusage" class="filter-btn" onclick="setzeFilter('zusage')">🎉 Zusage</button>
@@ -1505,7 +1552,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
     top10 = sorted(
-        [s for s in aktive_haupt if (s.get("bewertung") or {}).get("score", 0) > 0],
+        [s for s in aktive_haupt if (s.get("bewertung") or {}).get("score", 0) > 0
+         and bekannte_status.get(s["url"]) in (4, 6)],
         key=lambda s: max(s["bewertung"].get("score", 0), s["bewertung"].get("score_nach_anpassung") or 0),
         reverse=True
     )[:10]
@@ -1579,6 +1627,17 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in absagen:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+        html += '</div>\n</details>\n'
+
+    if nicht_beworben:
+        html += f'''<details style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#f9ebea; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        🚫 Nicht beworben ({len(nicht_beworben)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in nicht_beworben:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 

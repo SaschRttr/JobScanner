@@ -71,18 +71,25 @@ def ki_extrahiere_standort(text: str, dom: str, client) -> str:
 
     prompt = f"""Aus dem folgenden Stellentext von '{dom}': Welche Stadt/Ort ist der Arbeitsort dieser Stelle?
 Es handelt sich um eine Stellenanzeige eines deutschsprachigen oder europäischen Unternehmens.
-Antworte NUR mit dem Ortsnamen (z.B. "Böblingen" oder "München"). Kein Land, keine Zusätze.
-Wenn wirklich keine Stadt erkennbar ist, antworte mit "".
+Antworte NUR mit dem Ort oder der Adresse (z.B. "Böblingen" oder "Herrenberger Str. 130, 71034 Böblingen").
+Wenn wirklich keine Stadt erkennbar ist, antworte exakt: UNBEKANNT
 
 === TEXT ===
 {text_snippet}"""
     try:
         antwort = client.messages.create(
-            model=KI_MODELL, max_tokens=50,
+            model=KI_MODELL, max_tokens=100,
             messages=[{"role": "user", "content": prompt}],
         )
         standort = antwort.content[0].text.strip().strip('"').strip("'")
-        return standort if len(standort) < 60 else ""
+        # Ablehnen wenn KI einen Erklärungssatz zurückgibt statt Ort/Adresse
+        _SATZ_START = re.compile(
+            r'^(?:der|die|das|kein|keine|leider|es |ich |im text|der text|der stellentext|in dem)',
+            re.IGNORECASE
+        )
+        if standort.upper() == "UNBEKANNT" or _SATZ_START.match(standort) or len(standort) >= 100:
+            return ""
+        return standort
     except Exception:
         return ""
 
@@ -208,11 +215,17 @@ def main():
         and (args.url is None or s["url"] == args.url)
     ]
 
-    # Backfill: Stellen mit Stellentext aber ohne Arbeitsort nachträglich verarbeiten
+    # Backfill: Stellen mit Stellentext aber ohne (sinnvollen) Arbeitsort nachträglich verarbeiten
+    _satz_re = re.compile(r'^(?:der|die|das|kein|keine|leider|es |im text|der text|der stellentext)', re.IGNORECASE)
+
+    def _kein_sinnvoller_ort(s: dict) -> bool:
+        ao = s.get("arbeitsort") or ""
+        return not ao or _satz_re.match(ao) or len(ao) >= 100
+
     standort_backfill = [
         (i, s) for i, s in enumerate(stellen)
         if s.get("status") in (3, 4, 5)
-        and not s.get("arbeitsort")
+        and _kein_sinnvoller_ort(s)
         and not s.get("nicht_passend")
         and (s.get("stellentext") or s.get("rohtext"))
         and (args.url is None or s["url"] == args.url)
@@ -256,7 +269,9 @@ def main():
                     strukturen[dom] = neue_struktur
                     print(f"  💾 Struktur für '{dom}' aktualisiert")
             elif not arbeitsort:
-                arbeitsort = ki_extrahiere_standort(stellentext or rohtext, dom, client)
+                arbeitsort = ki_extrahiere_standort(stellentext, dom, client)
+                if not arbeitsort:
+                    arbeitsort = ki_extrahiere_standort(rohtext, dom, client)
                 if arbeitsort:
                     print(f"  📍 Arbeitsort: {arbeitsort}")
         else:

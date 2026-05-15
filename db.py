@@ -113,6 +113,7 @@ def _migriere_schema():
         "ALTER TABLE stellen ADD COLUMN anschreiben_pfad TEXT",
         "ALTER TABLE bewerbungsstatus ADD COLUMN kommentar TEXT",
         "ALTER TABLE stellen ADD COLUMN pruef_vormerken TEXT",
+        "ALTER TABLE bewerbungsstatus ADD COLUMN nicht_beworben_grund TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -339,7 +340,7 @@ def stelle_als_geloescht_markieren(url: str, zeitstempel: str):
         """, (neuer_status, zeitstempel, url))
 
 
-_STATUS_PRIO = {6: 10, 5: 8, 4: 7, 7: 6, 8: 5, 9: 4, 3: 3, 2: 2, 1: 1, 0: 0}
+_STATUS_PRIO = {6: 10, 5: 8, 4: 7, 7: 6, 8: 5, 9: 4, 10: 3, 3: 3, 2: 2, 1: 1, 0: 0}
 
 
 def repariere_inkonsistente_status():
@@ -624,7 +625,7 @@ def status_von(url: str) -> int | None:
     return r["status"] if r else None
 
 
-INAKTIVE_STATUSWERTE = (0, 7, 8, 9)
+INAKTIVE_STATUSWERTE = (0, 7, 8, 9, 10)
 
 def alle_aktiven_urls() -> set:
     with verbindung() as con:
