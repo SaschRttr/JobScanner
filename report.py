@@ -25,7 +25,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import lade_config, ist_ausgeschlossen, text_matched
+from utils import lade_config, ist_ausgeschlossen, text_matched, standort_ablehnungsgrund
 
 
 # =============================================================================
@@ -159,7 +159,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             geloescht_badge = ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
     arbeitsort = s.get("arbeitsort") or ""
-    standort_label = f' <span class="standort-label">📍 {arbeitsort}</span>' if arbeitsort and not (fahrzeit and not fahrzeit.get("kein_ziel") and not fahrzeit.get("genau", True)) else ""
+    _ort_text  = _html.escape(arbeitsort) if arbeitsort else "kein Standort"
+    _ort_farbe = "#888" if arbeitsort else "#e67e22"
+    standort_label = (
+        f' <span class="standort-label" data-url="{url_escaped}" style="cursor:pointer; color:{_ort_farbe};" '
+        f'title="Klicken zum Bearbeiten" onclick="standortBearbeiten(this)">📍 {_ort_text} ✏️</span>'
+    )
     firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {s["firma"]}</span>'
     gefunden_am    = s.get("gefunden_am", "")[:10]
     geloescht_am   = s.get("geloescht_am", "")
@@ -885,6 +890,56 @@ JS = """
         }
     }
 
+    function standortBearbeiten(el) {
+        const url = el.dataset.url;
+        const aktuell = el.textContent.replace('📍', '').replace('✏️', '').trim();
+        const vorbelegt = aktuell === 'kein Standort' ? '' : aktuell;
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'standort-label';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = vorbelegt;
+        input.placeholder = 'Ort eingeben...';
+        input.style.cssText = 'padding:2px 4px; font-size:0.85em; border:1px solid #ccc; border-radius:3px; width:140px;';
+
+        const btn = document.createElement('button');
+        btn.textContent = '💾';
+        btn.className = 'scan-btn';
+        btn.style.cssText = 'padding:2px 8px; font-size:0.85em; margin-left:4px;';
+        btn.onclick = async () => {
+            const arbeitsort = input.value.trim();
+            if (!arbeitsort) return;
+            btn.disabled = true;
+            input.disabled = true;
+            try {
+                const res = await fetch(SERVER + '/standort-setzen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, arbeitsort })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    location.reload();
+                } else {
+                    alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                    btn.disabled = false;
+                    input.disabled = false;
+                }
+            } catch(e) {
+                alert('Server nicht erreichbar');
+                btn.disabled = false;
+                input.disabled = false;
+            }
+        };
+
+        wrapper.appendChild(input);
+        wrapper.appendChild(btn);
+        el.replaceWith(wrapper);
+        input.focus();
+    }
+
     async function bewerbungErstellen(checkbox, stellenUrl, firma, titel) {
         if (!checkbox.checked) return;
 
@@ -1379,9 +1434,21 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
     nicht_beworben_urls = {url for url, st in bekannte_status.items() if st == 10}
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls]
+    ohne_standort_urls = {
+        s["url"] for s in stellen
+        if not s.get("arbeitsort") and not s.get("nicht_passend") and not s.get("geloescht_am")
+    }
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls and s["url"] not in ohne_standort_urls]
     zu_weit       = [s for s in stellen if s["url"] in zu_weit_urls and not s.get("geloescht_am")]
-    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+
+    def _ist_standort_grund(grund: str) -> bool:
+        return grund.startswith("Außerhalb Umkreis") or grund.startswith("Verbotener Standort")
+
+    nicht_passend_alle     = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    nicht_passend_standort = [s for s in nicht_passend_alle if _ist_standort_grund(s.get("nicht_passend_grund") or "")]
+    nicht_passend_standort_urls = {s["url"] for s in nicht_passend_standort}
+    nicht_passend = [s for s in nicht_passend_alle if s["url"] not in nicht_passend_standort_urls]
+    ohne_standort    = [s for s in stellen if s["url"] in ohne_standort_urls]
     geloescht        = [s for s in stellen if s.get("geloescht_am")]
     nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
     absagen          = [s for s in aktive  if s["url"] in absage_urls]
@@ -1652,6 +1719,28 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
         html += '</div>\n</details>\n'
 
+    if nicht_passend_standort:
+        html += f'''<details style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#fdebd0; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        📍 Nicht passend – Standort außerhalb/verboten ({len(nicht_passend_standort)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in nicht_passend_standort:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+        html += '</div>\n</details>\n'
+
+    if ohne_standort:
+        html += f'''<details open style="margin: 15px 0;">
+    <summary style="cursor:pointer; background:#eaf2f8; padding:12px 20px;
+        border-radius:8px; font-weight:bold; font-size:1.05em;">
+        📍 Stellen ohne Standort ({len(ohne_standort)})
+    </summary>
+    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
+        for s in ohne_standort:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+        html += '</div>\n</details>\n'
+
     if zu_weit:
         html += f'<div id="zu-weit-section" style="display:none; margin:15px 0;">\n'
         html += f'<div class="firma-block">\n'
@@ -1849,6 +1938,7 @@ def main():
 
     # Ausschluss-Prüfung: re-evaluiere Titel+Standort gegen aktuelle Config
     ausschlussbegriffe  = config["ausschlussbegriffe"]
+    erlaubte_standorte  = config["erlaubte_standorte"]
     verbotene_standorte = config["verbotene_standorte"]
     neu_ausgeschlossen  = 0
 
@@ -1858,18 +1948,18 @@ def main():
         url = s.get("url", "")
         b   = bekannte.get(url, {})
 
-        titel     = s.get("titel", "").lower()
-        arbeitsort_lc  = (s.get("arbeitsort") or "").lower()
+        titel          = s.get("titel", "").lower()
+        arbeitsort     = s.get("arbeitsort") or ""
         ausgeschlossen = ist_ausgeschlossen(titel, ausschlussbegriffe)
-        standort_weg   = bool(arbeitsort_lc) and any(v in arbeitsort_lc for v in verbotene_standorte)
+        standort_grund = standort_ablehnungsgrund(arbeitsort, erlaubte_standorte, verbotene_standorte)
 
-        if ausgeschlossen or standort_weg:
+        if ausgeschlossen or standort_grund:
             if ausgeschlossen:
                 _b_treffer = text_matched(titel, ausschlussbegriffe)
                 _b = _b_treffer[0] if _b_treffer else ""
                 np_grund = f"Ausschlussbegriff: '{_b}'" if _b else "Ausschlussbegriff"
             else:
-                np_grund = f"Verbotener Standort: {s.get('arbeitsort', '?')}"
+                np_grund = standort_grund
             s["nicht_passend"] = True
             s["nicht_passend_grund"] = np_grund
             neu_ausgeschlossen += 1

@@ -34,9 +34,25 @@ import urllib.parse
 from pathlib import Path
 from urllib.parse import urlparse
 
-BASIS_PFAD    = Path(__file__).parent
-STELLEN_JSON  = BASIS_PFAD / "stellen.json"
-BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+BASIS_PFAD          = Path(__file__).parent
+STELLEN_JSON        = BASIS_PFAD / "stellen.json"
+BEKANNTE_JSON       = BASIS_PFAD / "bekannte_stellen.json"
+MANUELL_VERGEBEN_TXT = BASIS_PFAD / "manuell_vergeben.txt"
+
+
+def lade_manuell_vergeben() -> list[str]:
+    """URLs aus manuell_vergeben.txt, eine pro Zeile, '#'-Kommentare ignoriert."""
+    if not MANUELL_VERGEBEN_TXT.exists():
+        return []
+    urls = []
+    for zeile in MANUELL_VERGEBEN_TXT.read_text(encoding="utf-8").splitlines():
+        z = zeile.strip()
+        if z and not z.startswith("#"):
+            urls.append(z)
+    return urls
 
 _CLOSED_MARKERS = [
     "no longer available",
@@ -50,6 +66,33 @@ _CLOSED_MARKERS = [
     "leider nicht mehr",
     "bereits vergeben",
 ]
+
+# Diese Marker sind nur innerhalb des sichtbar gerenderten Seitenanfangs
+# aussagekräftig. Viele SPA-Portale liefern weiter hinten im HTML ein
+# vollständiges i18n-Übersetzungswörterbuch mit, das exakt dieselben Phrasen
+# (z.B. "no longer available") als generische Fehlertext-Bausteine enthält –
+# und zwar auf JEDER Seite, egal ob der Job aktiv oder vergeben ist. Deshalb
+# NICHT auf den vollen (großen) Body anwenden, sonst Massen an False Positives.
+_CLOSED_MARKERS_BEREICH = 8192
+
+# Strukturelle Marker (z.B. eine nur im "not found"-Zustand gerenderte CSS-Klasse)
+# sind dagegen unabhängig von der Position im Body aussagekräftig, da sie vom
+# Framework nur bedingt gerendert werden statt Teil eines statischen
+# Übersetzungs-Bundles zu sein. Diese dürfen im ganzen (großen) Body gesucht werden.
+_CLOSED_MARKERS_STRUKTURELL = [
+    "page-not-found-wrapper",  # Apple Jobs SPA: HTTP 200, aber serverseitig als 404 gerendert
+]
+
+# URL-Segmente, die Portale beim Redirect auf eine "Job nicht gefunden"-Seite anhängen
+# (z.B. dvinci-hr: /de/jobPublication/notFound/<id>)
+_NOTFOUND_URL_MARKERS = ["notfound", "not-found", "job-not-found"]
+
+# Manche SPA-Job-Portale (z.B. jobs.apple.com) rendern die "not found"-Meldung
+# erst weit hinten im HTML (Übersetzungs-Bundles, eingebettete State-JSONs
+# etc. kommen zuerst). Ein zu kleiner Lesepuffer sieht die Meldung nie - daher
+# wird trotzdem ein großer Puffer gelesen, nur eben nicht für die generischen
+# Marker oben ausgewertet.
+_MAX_BODY_BYTES = 2_000_000
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -70,7 +113,7 @@ def _einzel_request(url: str) -> tuple[int | None, str, str]:
             method="GET"
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
-            body = resp.read(8192).decode("utf-8", errors="ignore").lower()
+            body = resp.read(_MAX_BODY_BYTES).decode("utf-8", errors="ignore").lower()
             return resp.status, resp.url, body
     except urllib.error.HTTPError as e:
         return e.code, url, ""
@@ -90,7 +133,15 @@ def _prüfe_200(orig_url: str, final_url: str, body: str) -> int:
     if orig_path and len(final_path) < len(orig_path) * 0.5:
         return 0  # Redirect auf Portal-Root → vergaben
 
+    final_path_lower = final_path.lower()
+    if any(marker in final_path_lower for marker in _NOTFOUND_URL_MARKERS):
+        return 0  # Redirect auf "nicht gefunden"-URL → vergaben
+
     for marker in _CLOSED_MARKERS:
+        if marker in body[:_CLOSED_MARKERS_BEREICH]:
+            return 0
+
+    for marker in _CLOSED_MARKERS_STRUKTURELL:
         if marker in body:
             return 0
 
@@ -216,12 +267,47 @@ def main():
             return 8
         return 9
 
+    ts = __import__("utils").jetzt()
+
+    # Manuelle Overrides (manuell_vergeben.txt) sofort verarbeiten - hier hat
+    # ein Mensch schon geprüft, daher ohne die übliche Zwei-Läufe-Bestätigung.
+    manuell_markiert = 0
+    for url in lade_manuell_vergeben():
+        eintrag = bekannte.get(url)
+        if not eintrag or eintrag.get("geloescht_am"):
+            continue
+        neuer_status = status_bei_vergabe(url)
+        bekannte[url]["status"]              = neuer_status
+        bekannte[url]["geloescht_am"]        = ts
+        bekannte[url]["vergaben_bestaetigt"] = True
+        bekannte[url]["pruef_vormerken"]     = None
+        idx = stellen_index.get(url)
+        if idx is not None:
+            stellen[idx]["geloescht_am"]  = ts
+            stellen[idx]["vergabe_status"] = neuer_status
+        upsert_stelle({
+            "url":            url,
+            "status":         neuer_status,
+            "geloescht_am":   ts,
+            "pruef_vormerken": None,
+        })
+        manuell_markiert += 1
+        print(f"  📝 Manuell vergeben: {url[:70]}")
+
+    if manuell_markiert:
+        print(f"  {manuell_markiert} URL(s) aus manuell_vergeben.txt markiert.")
+
     # Kandidaten bestimmen
     if args.url:
         kandidaten = [args.url] if args.url in bekannte else []
         if not kandidaten:
             print(f"  ⚠️  URL nicht in bekannte_stellen.json gefunden")
             return
+    elif args.alle:
+        kandidaten = [
+            url for url, eintrag in bekannte.items()
+            if not eintrag.get("geloescht_am")
+        ]
     else:
         kandidaten = [
             url for url, eintrag in bekannte.items()
@@ -231,6 +317,8 @@ def main():
         ]
 
     if not kandidaten:
+        exportiere_stellen_json(STELLEN_JSON)
+        exportiere_bekannte_json(BEKANNTE_JSON)
         print(f"  ℹ️  Keine aktiven Stellen zu prüfen.")
         return
 
@@ -240,7 +328,6 @@ def main():
     vorgemerkt  = 0
     noch_aktiv  = 0
     unklar      = 0
-    ts = __import__("utils").jetzt()
 
     for url in kandidaten:
         idx    = stellen_index.get(url)

@@ -1,0 +1,12 @@
+# Manuell als vergeben markierte Stellen.
+# Eine URL pro Zeile (muss der exakten URL in bekannte_stellen.json entsprechen).
+# Für Portale, bei denen die automatische Erreichbarkeits-Pruefung (vergaben_check.py)
+# nicht erkennen kann, dass eine Stelle weg ist - z.B. weil die Seite komplett
+# client-seitig (JavaScript) gerendert wird und der rohe HTML-Code fuer aktive
+# und vergebene Stellen identisch aussieht (Beispiel: Kistler-Karriereseite).
+#
+# Wird beim naechsten Lauf von vergaben_check.py sofort (ohne zweite Bestaetigung)
+# als vergeben markiert, da hier ein Mensch die Pruefung schon gemacht hat.
+# Eintrag kann danach hier stehen bleiben oder entfernt werden - sobald die
+# Stelle als geloescht_am markiert ist, passiert nichts mehr damit.
+https://www.kistler.com/DE/de/software-developer-c-embedded-/job/3647

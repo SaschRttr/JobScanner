@@ -1,0 +1,231 @@
+# Whitelist der erlaubten Standorte (Umkreis).
+# Ein Ort/Substring pro Zeile, Groß-/Kleinschreibung egal.
+# Solange diese Datei leer ist (nur Kommentarzeilen), ist die Whitelist
+# deaktiviert und es wird nur nach der Blacklist in config.txt gefiltert.
+Wendlingen am Neckar
+Esslingen am Neckar
+Plochingen
+Botnang
+Sonnenberg
+Murrhardt
+Möhringen
+Calw
+Bad Liebenzell
+Ditzingen
+Weilimdorf
+Lederberg
+Hedelfingen
+Heumaden
+Liebersbronn
+Waldenbuch
+Schmiden
+Holzgerlingen
+Ludwigsburg
+Mühlacker
+Remshalden
+Weinstadt
+Nürtingen
+Neckartenzlingen
+Reutlingen
+Welzheim
+Großbottwar
+Bad Cannstatt
+Alm
+Münchingen
+Tamm
+Zuffenhausen
+Rutesheim
+Ebersbach an der Fils
+Brackenheim
+Bönnigheim
+Bad Urach
+Hausen
+Gehenbühl
+Maulbronn
+Schwieberdingen
+Weilheim an der Teck
+Kirchheim unter Teck
+Kallenberg
+Leinfelden
+Besigheim
+Sillenbuch
+Wangen
+Bietigheim-Bissingen
+Bissingen
+Neubulach
+Kernen im Remstal
+Hegensberg
+Oberesslingen
+Neuffen
+Korntal-Münchingen
+Pattonville
+Uhlbach
+Kornwestheim
+Rot
+Herrenberg
+Hohenheim
+Dürrlewang
+Lenningen
+Stuttgart-Mitte
+Owen
+Zazenhausen
+Asemwald
+Pforzheim
+Degerloch
+Weissach im Tal
+Remseck am Neckar
+Schönberg
+Aichtal
+Leinfelden-Echterdingen
+Niefern-Öschelbronn
+Münster
+Bergheim
+Böblingen
+Steckfeld
+Aichwald
+Metzingen
+Untertürkheim
+Rohr
+Fellbach
+Obertürkheim
+Eislingen/Fils
+Bietigheim
+Hoffeld
+Steinheim an der Murr
+Ostfildern
+Stuttgart-Süd
+Göppingen
+Feuerbach
+Tübingen
+Gäufelden
+Auenwald
+Rottenburg am Neckar
+Gerlingen
+St. Johann
+Sommerrain
+Marbach am Neckar
+Birkach
+Grafenau
+Stuttgart-Ost
+Berglen
+Uhingen
+Walddorfhäslach
+Stuttgart-Nord
+Eningen unter Achalm
+Asperg
+Beilstein
+Luginsland
+Riedenberg
+Pfullingen
+Lichtenstein
+Vaihingen an der Enz
+Burgstetten
+Mönchfeld
+Lorch
+Kaltental
+Löwenstein
+Rohracker
+Freiberg am Neckar
+Winnenden
+Lauffen am Neckar
+Stuttgart-West
+Freiberg
+Neckarweihingen
+Oßweil
+Heumaden
+Geisingen
+Beihingen
+Heutingsheim
+Kentheim
+Schlösslesfeld
+Beutelsbach
+Eltingen
+Eglosheim
+Ohmenhausen
+Sondelfingen
+Sulpach
+Dillweißenstein
+Schillerhöhe
+Zollberg
+Buchhalde
+Wimberg
+Alzenberg
+Stumpenhof
+Neuhausen an der Erms
+Echterdingen
+Glems
+Maichingen
+Wildberg
+Sachsenheim
+Hofen
+Mühlhausen
+Neugereut
+Steinhaldenfeld
+Untermberg
+Böckingen
+Klingenberg
+Sontheim
+Großsachsenheim
+Bonlanden
+Filderstadt
+Stammheim
+Heimsheim
+Renningen
+Horkheim
+Kammgarnspinnerei
+Buch
+Korntal
+Backnang
+Weil der Stadt
+Oeffingen
+Schorndorf
+Vaihingen
+Büsnau
+Betzingen
+Kleinsachsenheim
+Metterzimmern
+Stuttgart
+Bernhausen
+Endersbach
+Fasanenhof
+Unterboihingen
+Derendingen
+Wernau (Neckar)
+Lustnau
+Ludwigsburg - Mitte
+Ludwigsburg - Nord
+Ludwigsburg - Ost
+Ludwigsburg - Süd
+Ludwigsburg - West
+Pflugfelden
+Sulzgries
+Hoheneck
+Markgröningen
+Waiblingen
+Berg
+Sindelfingen
+Plieningen
+Wolfbusch
+Grünbühl-Sonnenberg
+Giebel
+Leonberg
+Ramtel
+Buckenberg
+Oststadt
+Nordstadt
+Innenstadt
+Weststadt
+Brötzingen
+Südweststadt
+Südoststadt
+Haidach
+Ingersheim
+Heslach
+Sachsenweiler
+Lichtenwald
+Orschel-Hagen
+Ammerbuch
+Aspach
+Jettingen
+Bad Teinach-Zavelstein
+Ölbronn-Dürrn

@@ -6,9 +6,10 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 CONFIG_PFAD = Path(__file__).parent / "config.txt"
+WHITELIST_PFAD = Path(__file__).parent / "whitelist_standorte.txt"
 
 
 # =============================================================================
@@ -21,6 +22,20 @@ def jetzt() -> str:
 
 def domain(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
+
+
+def normalisiere_url(url: str) -> str:
+    """Normalisiert eine URL für den Duplikat-Vergleich: dekodiert Prozent-Encoding
+    (auch mehrfach kodiert, z.B. %2528 -> %28 -> '(') und entfernt trailing slash."""
+    if not url:
+        return url
+    dekodiert = url
+    for _ in range(3):
+        neu = unquote(dekodiert)
+        if neu == dekodiert:
+            break
+        dekodiert = neu
+    return dekodiert.rstrip("/")
 
 
 # =============================================================================
@@ -45,6 +60,18 @@ def speichere_json(pfad: Path, daten):
 # SUCHLOGIK
 # =============================================================================
 
+_UMLAUT_ERSATZ = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
+
+
+def normalisiere_ort(text: str) -> str:
+    """Lowercase + Umlaute als Digraph (ü->ue, ö->oe, ä->ae, ß->ss), damit z.B.
+    'Gehenbühl' und 'Gehenbuehl' beim Standort-Abgleich als gleich gelten."""
+    t = text.lower()
+    for umlaut, digraph in _UMLAUT_ERSATZ.items():
+        t = t.replace(umlaut, digraph)
+    return t
+
+
 def text_matched(text: str, begriffe: list) -> list:
     t = text.lower()
     treffer = []
@@ -63,17 +90,41 @@ def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:
-    t = text[:3000].lower()
+    t = normalisiere_ort(text[:3000])
     return any(v in t for v in verbotene)
 
 
-def berechne_standort(arbeitsort: str, verbotene: list) -> str:
-    """Gibt 'ok', 'verboten' oder '' zurück basierend auf der Verbotsliste."""
+def standort_erlaubt(text: str, erlaubte: list) -> bool:
+    """True wenn keine Whitelist konfiguriert ist, oder ein Whitelist-Ort im Text vorkommt.
+    Vergleich in beide Richtungen, da manche Whitelist-Einträge amtliche Zusätze
+    haben (z.B. 'Wendlingen am Neckar'), während erkannte Orte oft nur den
+    Kurznamen enthalten (z.B. 'Wendlingen')."""
+    if not erlaubte:
+        return True
+    t = normalisiere_ort(text[:3000])
+    return any(o in t or t in o for o in erlaubte)
+
+
+def berechne_standort(arbeitsort: str, erlaubte: list, verbotene: list) -> str:
+    """Gibt 'ok', 'verboten' oder '' zurück. Reihenfolge: erst Whitelist (Umkreis), dann Blacklist."""
     if not arbeitsort:
         return ""
+    if not standort_erlaubt(arbeitsort, erlaubte):
+        return "verboten"
     if standort_verboten(arbeitsort, verbotene):
         return "verboten"
     return "ok"
+
+
+def standort_ablehnungsgrund(arbeitsort: str, erlaubte: list, verbotene: list) -> str:
+    """Liefert einen menschenlesbaren Ablehnungsgrund, oder '' wenn der Standort ok bzw. unbekannt ist."""
+    if not arbeitsort:
+        return ""
+    if not standort_erlaubt(arbeitsort, erlaubte):
+        return f"Außerhalb Umkreis: {arbeitsort}"
+    if standort_verboten(arbeitsort, verbotene):
+        return f"Verbotener Standort: {arbeitsort}"
+    return ""
 
 
 # =============================================================================
@@ -129,6 +180,7 @@ def lade_config() -> dict:
         "suchbegriffe":        [],
         "ausschlussbegriffe":  [],
         "verbotene_standorte": [],
+        "erlaubte_standorte":  [],
         "firmen":              [],
         "firmen_reihenfolge":  [],
         "api_firmen":          [],
@@ -198,7 +250,7 @@ def lade_config() -> dict:
         elif aktiver_abschnitt == "ausschlussbegriffe":
             result["ausschlussbegriffe"].append(z.lower())
         elif aktiver_abschnitt == "verbotene_standorte":
-            result["verbotene_standorte"].append(z.lower())
+            result["verbotene_standorte"].append(normalisiere_ort(z))
         elif aktiver_abschnitt == "firmen":
             if "|" in z:
                 teile = z.split("|", 1)
@@ -212,5 +264,11 @@ def lade_config() -> dict:
                 teile = [t.strip() for t in z.split("|")]
                 if len(teile) >= 6:
                     result["firma_adressen"][teile[0]] = f"{teile[3]}, {teile[4]} {teile[5]}"
+
+    if WHITELIST_PFAD.exists():
+        for zeile in WHITELIST_PFAD.read_text(encoding="utf-8").splitlines():
+            z = zeile.strip()
+            if z and not z.startswith("#"):
+                result["erlaubte_standorte"].append(normalisiere_ort(z))
 
     return result

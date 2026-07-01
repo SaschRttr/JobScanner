@@ -43,7 +43,8 @@ import urllib.parse
 
 from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
-    berechne_standort, standort_verboten, text_matched, ist_ausgeschlossen,
+    berechne_standort, standort_ablehnungsgrund,
+    text_matched, ist_ausgeschlossen,
     klick_cookie_banner,
 )
 
@@ -206,8 +207,6 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                 print(f"  ⚠️  Leere/ungültige URL für '{titel[:50]}' – übersprungen (id={job_id!r})")
                 continue
 
-            volltext = f"{titel} {standort}"
-
             if titel in gesehen:
                 continue
             gesehen.add(titel)
@@ -215,15 +214,15 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             treffer = text_matched(titel, config["suchbegriffe"])
 
             if treffer:
-                if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                        or standort_verboten(volltext, config["verbotene_standorte"])):
-                    _np_grund = ""
+                _np_grund = ""
+                if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
                     for _b in config["ausschlussbegriffe"]:
                         if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
                             _np_grund = f"Ausschlussbegriff: '{_b}'"
                             break
-                    if not _np_grund and standort:
-                        _np_grund = f"Verbotener Standort: {standort}"
+                if not _np_grund:
+                    _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+                if _np_grund:
                     ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                            "treffer": treffer, "nicht_passend_grund": _np_grund})
                     print(f"  🚫 Nicht passend: {titel[:70]}")
@@ -247,7 +246,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                         "titel": titel,
                         "url": url,
                         "arbeitsort": standort,
-                        "standort": berechne_standort(standort, config["verbotene_standorte"]),
+                        "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
                         "treffer": treffer,
                         "neu": ist_neu,
                         "rohtext": rohtext,
@@ -510,8 +509,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
                     _np_grund = f"Ausschlussbegriff: '{_b}'"
                     break
-        elif standort_aus_text and standort_verboten(standort_aus_text.lower(), config["verbotene_standorte"]):
-            _np_grund = f"Verbotener Standort: {standort_aus_text}"
+        if not _np_grund:
+            _np_grund = standort_ablehnungsgrund(standort_aus_text, config["erlaubte_standorte"], config["verbotene_standorte"])
         if _np_grund:
             ausgeschlossen.append({"firma": name, "titel": titel, "url": href,
                                    "treffer": treffer, "nicht_passend_grund": _np_grund})
@@ -520,7 +519,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
         gefunden.append({"firma": name, "titel": titel, "url": href,
                          "treffer": treffer, "arbeitsort": standort_aus_text,
-                         "standort": berechne_standort(standort_aus_text, config["verbotene_standorte"])})
+                         "standort": berechne_standort(standort_aus_text, config["erlaubte_standorte"], config["verbotene_standorte"])})
         print(f"  ✅ {titel[:70]}")
         print(f"     Treffer: {', '.join(treffer)}")
 
@@ -600,16 +599,15 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
             if not treffer:
                 continue
 
-            volltext = f"{titel} {standort}"
-            if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                    or standort_verboten(volltext, config["verbotene_standorte"])):
-                _np_grund = ""
+            _np_grund = ""
+            if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
                 for _b in config["ausschlussbegriffe"]:
                     if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
                         _np_grund = f"Ausschlussbegriff: '{_b}'"
                         break
-                if not _np_grund and standort:
-                    _np_grund = f"Verbotener Standort: {standort}"
+            if not _np_grund:
+                _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+            if _np_grund:
                 ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                        "treffer": treffer, "nicht_passend_grund": _np_grund})
                 print(f"  🚫 Nicht passend: {titel[:70]}")
@@ -618,7 +616,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
                 stellen.append({
                     "firma": name, "titel": titel, "url": url,
                     "arbeitsort": standort,
-                    "standort": berechne_standort(standort, config["verbotene_standorte"]),
+                    "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
                     "treffer": treffer,
                     "neu": ist_neu, "rohtext": None,
                 })
@@ -704,19 +702,18 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
                 continue
             gesehen.add(job_key)
 
-            volltext = f"{titel} {standort}"
             treffer = text_matched(titel, config["suchbegriffe"])
 
             if treffer:
-                if (ist_ausgeschlossen(titel, config["ausschlussbegriffe"])
-                        or standort_verboten(volltext, config["verbotene_standorte"])):
-                    _np_grund = ""
+                _np_grund = ""
+                if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
                     for _b in config["ausschlussbegriffe"]:
                         if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
                             _np_grund = f"Ausschlussbegriff: '{_b}'"
                             break
-                    if not _np_grund and standort:
-                        _np_grund = f"Verbotener Standort: {standort}"
+                if not _np_grund:
+                    _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+                if _np_grund:
                     ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                            "treffer": treffer, "nicht_passend_grund": _np_grund})
                     print(f"  🚫 Nicht passend: {titel[:70]}")
@@ -727,7 +724,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
                         "titel": titel,
                         "url": url,
                         "arbeitsort": standort,
-                        "standort": berechne_standort(standort, config["verbotene_standorte"]),
+                        "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
                         "treffer": treffer,
                         "neu": ist_neu,
                     })
@@ -802,33 +799,32 @@ def lade_rohtext(page, url: str) -> str | None:
 # BEREINIGUNG: VERBOTENE STANDORTE AUS BESTAND ENTFERNEN
 # =============================================================================
 
-def bereinige_verbotene_standorte(stellen: list, bekannte: dict, verbotene: list) -> int:
-    """Entfernt bereits gespeicherte Stellen, deren Text einen verbotenen Standort enthält.
-    Markiert den bekannte-Eintrag als nicht_passend (statt löschen), damit die Stelle
-    im selben Scan-Lauf nicht neu hinzugefügt wird.
+def bereinige_verbotene_standorte(stellen: list, bekannte: dict, erlaubte: list, verbotene: list) -> int:
+    """Entfernt bereits gespeicherte Stellen, deren Arbeitsort außerhalb der Whitelist liegt
+    oder auf der Blacklist steht. Markiert den bekannte-Eintrag als nicht_passend (statt löschen),
+    damit die Stelle im selben Scan-Lauf nicht neu hinzugefügt wird.
     Gibt die Anzahl entfernter Stellen zurück."""
-    if not verbotene:
+    if not erlaubte and not verbotene:
         return 0
 
-    def _verboten(text: str) -> bool:
-        t = text[:5000].lower()
-        return any(v in t for v in verbotene)
-
     zu_entfernen = []
+    gruende = {}
     for stelle in stellen:
         arbeitsort = stelle.get("arbeitsort") or ""
         if not arbeitsort:
             # Kein Arbeitsort bekannt → kein Filter (sicher durchlassen)
             continue
-        if _verboten(arbeitsort):
+        grund = standort_ablehnungsgrund(arbeitsort, erlaubte, verbotene)
+        if grund:
             zu_entfernen.append(stelle)
+            gruende[stelle.get("url")] = grund
 
     if zu_entfernen:
-        print(f"\n🧹 {len(zu_entfernen)} Stelle(n) wegen verbotenem Standort entfernt:")
+        print(f"\n🧹 {len(zu_entfernen)} Stelle(n) wegen Standort entfernt:")
         for s in zu_entfernen:
             print(f"   🗑️  {s.get('firma', '?')} – {s.get('titel', '?')}")
             url = s.get("url")
-            grund = f"Verbotener Standort: {s.get('arbeitsort', '?')}"
+            grund = gruende.get(url, "")
             if url:
                 if url in bekannte:
                     bekannte[url]["nicht_passend"] = True
@@ -873,7 +869,7 @@ def main():
     strukturen: dict = lade_json(STRUKTUREN_JSON, {})
     print(f"  📂 Stellen geladen: {len(stellen)}")
 
-    bereinige_verbotene_standorte(stellen, bekannte, config["verbotene_standorte"])
+    bereinige_verbotene_standorte(stellen, bekannte, config["erlaubte_standorte"], config["verbotene_standorte"])
 
     stellen_index = {s["url"]: i for i, s in enumerate(stellen)}
     gesehen_urls: set = set()
@@ -888,7 +884,7 @@ def main():
         # Standort nachrüsten wenn Stelle schon bekannt aber Feld fehlt
         if idx is not None and t.get("arbeitsort") and not stellen[idx].get("arbeitsort"):
             stellen[idx]["arbeitsort"] = t["arbeitsort"]
-            stellen[idx]["standort"] = berechne_standort(t["arbeitsort"], config["verbotene_standorte"])
+            stellen[idx]["standort"] = berechne_standort(t["arbeitsort"], config["erlaubte_standorte"], config["verbotene_standorte"])
 
         if url in bekannte and bekannte[url]["status"] == 0:
             if idx is not None and stellen[idx].get("bewertung"):
@@ -1378,7 +1374,7 @@ def main():
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
     # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.
-    bereinige_verbotene_standorte(stellen, bekannte, config["verbotene_standorte"])
+    bereinige_verbotene_standorte(stellen, bekannte, config["erlaubte_standorte"], config["verbotene_standorte"])
 
     speichere_json(STRUKTUREN_JSON, strukturen)
 
@@ -1393,7 +1389,7 @@ def main():
     for s in stellen:
         b = bekannte.get(s["url"], {})
         # standort ableiten falls noch nicht gesetzt aber arbeitsort vorhanden
-        standort_wert = s.get("standort") or berechne_standort(s.get("arbeitsort", ""), config["verbotene_standorte"])
+        standort_wert = s.get("standort") or berechne_standort(s.get("arbeitsort", ""), config["erlaubte_standorte"], config["verbotene_standorte"])
         upsert_stelle({
             **s,
             "standort":            standort_wert,

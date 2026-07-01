@@ -25,7 +25,7 @@ import urllib.parse
 import json
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
-from utils import lade_config
+from utils import lade_config, berechne_standort, standort_ablehnungsgrund
 print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
@@ -653,6 +653,48 @@ def stelle_einfuegen():
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
     return jsonify({"ok": True})
+
+
+@app.route("/standort-setzen", methods=["POST"])
+def standort_setzen():
+    """
+    Trägt einen händisch eingegebenen Arbeitsort für eine Stelle ohne Standort nach.
+    Die Stelle wird danach über Whitelist/Blacklist bewertet wie jede andere Stelle.
+    Erwartet JSON: { url, arbeitsort }
+    """
+    data = request.get_json()
+    if not data or not data.get("url") or not data.get("arbeitsort"):
+        return jsonify({"ok": False, "fehler": "url und arbeitsort erforderlich"}), 400
+
+    url = data["url"]
+    arbeitsort = data["arbeitsort"].strip()
+
+    cfg = lade_config()
+    standort = berechne_standort(arbeitsort, cfg["erlaubte_standorte"], cfg["verbotene_standorte"])
+    grund = standort_ablehnungsgrund(arbeitsort, cfg["erlaubte_standorte"], cfg["verbotene_standorte"])
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.upsert_stelle({
+            "url": url,
+            "arbeitsort": arbeitsort,
+            "standort": standort,
+            "nicht_passend": standort == "verboten",
+            "nicht_passend_grund": grund if standort == "verboten" else "",
+        })
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    return jsonify({"ok": True, "standort": standort})
 
 
 @app.route("/stelle-einzeln-stream")

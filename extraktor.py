@@ -191,6 +191,7 @@ def main():
     print("=" * 60)
 
     config         = lade_config()
+    erlaubte_orte  = config["erlaubte_standorte"]
     verbotene_orte = config["verbotene_standorte"]
     if not config["api_key"]:
         print("❌ Kein API-Key in config.txt")
@@ -215,24 +216,7 @@ def main():
         and (args.url is None or s["url"] == args.url)
     ]
 
-    # Backfill: Stellen mit Stellentext aber ohne (sinnvollen) Arbeitsort nachträglich verarbeiten
-    _satz_re = re.compile(r'^(?:der|die|das|kein|keine|leider|es |im text|der text|der stellentext)', re.IGNORECASE)
-
-    def _kein_sinnvoller_ort(s: dict) -> bool:
-        ao = s.get("arbeitsort") or ""
-        return not ao or _satz_re.match(ao) or len(ao) >= 100
-
-    standort_backfill = [
-        (i, s) for i, s in enumerate(stellen)
-        if s.get("status") in (3, 4, 5)
-        and _kein_sinnvoller_ort(s)
-        and not s.get("nicht_passend")
-        and (s.get("stellentext") or s.get("rohtext"))
-        and (args.url is None or s["url"] == args.url)
-    ]
-
     print(f"  {len(zu_bearbeiten)} Stellen zu bearbeiten (Status 2)")
-    print(f"  {len(standort_backfill)} Stellen ohne Arbeitsort (Backfill)")
 
     extrahiert = 0
 
@@ -287,7 +271,9 @@ def main():
                 print(f"  💾 Struktur für '{dom}' gelernt")
 
         stellen[idx]["arbeitsort"] = arbeitsort or ""
-        stellen[idx]["standort"] = berechne_standort(arbeitsort, verbotene_orte)
+        stellen[idx]["standort"] = berechne_standort(arbeitsort, erlaubte_orte, verbotene_orte)
+        if not arbeitsort:
+            print(f"  ⚠️  Kein Standort erkannt – muss manuell nachgetragen werden: {firma} – {titel[:60]} ({url})")
 
         if stellentext and len(stellentext) > 100:
             stellen[idx]["stellentext"] = stellentext
@@ -317,55 +303,9 @@ def main():
         exportiere_bekannte_json(BEKANNTE_JSON)
         speichere_json(STRUKTUREN_JSON, strukturen)
 
-    # Arbeitsort-Backfill für bestehende Stellen ohne Arbeitsort
-    backfilled = 0
-    for idx, stelle in standort_backfill:
-        url  = stelle["url"]
-        dom  = domain(url)
-        print(f"\n  📍 Arbeitsort-Backfill: {stelle['firma']}: {stelle['titel'][:50]}")
-
-        # Stellentext zuerst — enthält aber selten den Ort (wurde beim Extrahieren weggeschnitten)
-        stellentext = stelle.get("stellentext") or ""
-        arbeitsort = ki_extrahiere_standort(stellentext, dom, client) if stellentext else ""
-
-        # Fallback auf rohtext — enthält oft "Standort: Böblingen" als Seiten-Header
-        if not arbeitsort and stelle.get("rohtext"):
-            arbeitsort = ki_extrahiere_standort(stelle["rohtext"], dom, client)
-
-        # Fallback: Dublette (gleicher Titel + Firma) mit bekanntem Arbeitsort übernehmen
-        if not arbeitsort:
-            for s2 in stellen:
-                if (s2.get("firma") == stelle["firma"]
-                        and s2.get("titel") == stelle["titel"]
-                        and s2.get("arbeitsort")
-                        and s2["url"] != url):
-                    arbeitsort = s2["arbeitsort"]
-                    break
-
-        # Fallback: Firmenadresse aus config.txt (letzte Spalte = Stadt)
-        if not arbeitsort:
-            adresse = config.get("firma_adressen", {}).get(stelle.get("firma", ""), "")
-            if adresse:
-                city = adresse.split()[-1]  # "Herrenberger Str. 130, 71034 Böblingen" → "Böblingen"
-                if len(city) > 2:
-                    arbeitsort = city
-
-        stellen[idx]["arbeitsort"] = arbeitsort or (stelle.get("arbeitsort") or "")
-        stellen[idx]["standort"]   = berechne_standort(stellen[idx]["arbeitsort"], verbotene_orte)
-        if arbeitsort:
-            print(f"     → {arbeitsort}")
-            backfilled += 1
-        else:
-            print(f"     → nicht erkannt")
-        upsert_stelle({"url": stelle["url"],
-                       "arbeitsort": stellen[idx]["arbeitsort"],
-                       "standort":   stellen[idx]["standort"]})
-        exportiere_stellen_json(STELLEN_JSON)
-
     print(f"\n{'='*60}")
     print(f"  FERTIG")
     print(f"  Texte extrahiert:       {extrahiert}")
-    print(f"  Standorte nachgefüllt:  {backfilled}")
     print(f"  Weiter mit:             python bewertung.py")
     print(f"{'='*60}\n")
 
