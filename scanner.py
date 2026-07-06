@@ -23,7 +23,6 @@ import base64
 import json
 import re
 import sys
-import platform
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -32,8 +31,12 @@ from urllib.parse import urlparse
 
 from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
-    berechne_standort, standort_ablehnungsgrund, text_matched, ist_ausgeschlossen,
-    klick_cookie_banner,
+    berechne_standort, standort_ablehnungsgrund, ablehnungsgrund,
+    text_matched, klick_cookie_banner,
+)
+from browser import (
+    USER_AGENT, MIN_ROHTEXT_LAENGE,
+    starte_browser, neuer_context, neue_seite,
 )
 
 try:
@@ -42,12 +45,6 @@ except ImportError:
     print("Playwright nicht installiert:")
     print("  pip install playwright && playwright install chromium")
     sys.exit(1)
-
-try:
-    from playwright_stealth import Stealth
-    STEALTH_OK = True
-except ImportError:
-    STEALTH_OK = False
 
 try:
     import anthropic as anthropic_lib
@@ -73,8 +70,7 @@ SCAN_STATUS: dict = {}
 def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
 
-MIN_ROHTEXT_LAENGE = 500   # API-Rohtext unter dieser Länge gilt als unvollständig
-MIN_TITEL_LAENGE   = 10
+MIN_TITEL_LAENGE = 10
 
 JOB_LINK_MUSTER = [
     "/job/", "/jobs/", "/job-", "/offer/", "/offer-redirect/",
@@ -92,18 +88,6 @@ _BUTTON_TEXTE = {
     "zurück", "zurück zur übersicht", "zur initiativbewerbung",
     "zum jobalert", "mehr erfahren", "details", "apply now", "print",
 }
-
-BROWSER_ARGS = [
-    "--no-sandbox",
-    "--disable-gpu",
-    "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
-]
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
 
 
 # =============================================================================
@@ -313,14 +297,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             treffer = text_matched(titel, config["suchbegriffe"])
 
             if treffer:
-                _np_grund = ""
-                if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
-                    for _b in config["ausschlussbegriffe"]:
-                        if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
-                            _np_grund = f"Ausschlussbegriff: '{_b}'"
-                            break
-                if not _np_grund:
-                    _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+                _np_grund = ablehnungsgrund(titel, standort, config)
                 if _np_grund:
                     ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                            "treffer": treffer, "nicht_passend_grund": _np_grund})
@@ -341,8 +318,6 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
 
                     if standort and rohtext:
                         rohtext = f"Standort: {standort}\n\n{rohtext}"
-                    elif standort and not rohtext:
-                        pass  # kein 35-Zeichen-Platzhalter mehr
 
                     stellen.append({
                         "firma": name,
@@ -444,14 +419,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
             if not treffer:
                 continue
 
-            _np_grund = ""
-            if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
-                for _b in config["ausschlussbegriffe"]:
-                    if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
-                        _np_grund = f"Ausschlussbegriff: '{_b}'"
-                        break
-            if not _np_grund:
-                _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+            _np_grund = ablehnungsgrund(titel, standort, config)
             if _np_grund:
                 ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                        "treffer": treffer, "nicht_passend_grund": _np_grund})
@@ -557,14 +525,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             treffer  = text_matched(titel, config["suchbegriffe"])
 
             if treffer:
-                _np_grund = ""
-                if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
-                    for _b in config["ausschlussbegriffe"]:
-                        if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
-                            _np_grund = f"Ausschlussbegriff: '{_b}'"
-                            break
-                if not _np_grund:
-                    _np_grund = standort_ablehnungsgrund(standort, config["erlaubte_standorte"], config["verbotene_standorte"])
+                _np_grund = ablehnungsgrund(titel, standort, config)
                 if _np_grund:
                     ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
                                            "treffer": treffer, "nicht_passend_grund": _np_grund})
@@ -790,14 +751,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         if not treffer:
             treffer = ["pdf"]
 
-        _np_grund = ""
-        if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
-            for _b in config["ausschlussbegriffe"]:
-                if (all(_t in titel.lower() for _t in _b.split("+")) if "+" in _b else _b in titel.lower()):
-                    _np_grund = f"Ausschlussbegriff: '{_b}'"
-                    break
-        if not _np_grund:
-            _np_grund = standort_ablehnungsgrund(standort_aus_text, config["erlaubte_standorte"], config["verbotene_standorte"])
+        _np_grund = ablehnungsgrund(titel, standort_aus_text, config)
 
         if _np_grund:
             ausgeschlossen.append({"firma": name, "titel": titel, "url": href,
@@ -913,7 +867,8 @@ def main():
     # Hilfsfunktionen für DB-Zustand
     # ------------------------------------------------------------------
 
-    def reaktiviere_oder_neu(t: dict, rohtext=None):
+    def reaktiviere_oder_neu(t: dict, rohtext=None) -> bool:
+        """Gibt True zurück wenn die Stelle neu angelegt wurde (für den Zähler)."""
         url = t["url"]
         gesehen_urls.add(url)
         idx = stellen_index.get(url)
@@ -922,7 +877,12 @@ def main():
             stellen[idx]["arbeitsort"] = t["arbeitsort"]
             stellen[idx]["standort"] = berechne_standort(t["arbeitsort"], config["erlaubte_standorte"], config["verbotene_standorte"])
 
-        if url in bekannte and bekannte[url]["status"] == 0:
+        if url in bekannte and bekannte[url]["status"] in (0, 9):
+            # Stelle wurde als vergeben markiert, ist aber wieder in der Börse
+            # gelistet (Wiederausschreibung) → reaktivieren. vergaben_bestaetigt
+            # zurücksetzen, sonst markiert die Reparatur-Regel in
+            # repariere_inkonsistente_status() sie sofort wieder als vergeben.
+            bekannte[url]["vergaben_bestaetigt"] = False
             if idx is not None and stellen[idx].get("bewertung"):
                 score = (stellen[idx]["bewertung"] or {}).get("score", 0)
                 bekannte[url]["status"] = 4 if score >= 70 else 5
@@ -970,6 +930,7 @@ def main():
             })
             stellen_index[url] = len(stellen) - 1
             print(f"  🆕 Neu: {t['titel'][:60]}")
+            return True
 
         elif idx is None:
             neuer_s = 2 if rohtext else 1
@@ -989,6 +950,7 @@ def main():
                 print(f"  📥 Rohtext ergänzt: {t['titel'][:60]}")
                 if bekannte[url]["status"] < 2:
                     bekannte[url]["status"] = 2
+        return False
 
     def markiere_nicht_passend(t: dict):
         url   = t["url"]
@@ -1049,44 +1011,15 @@ def main():
             if t["url"] in gesehen_urls:
                 continue
             rohtext = t.get("rohtext")
-            reaktiviere_oder_neu(t, rohtext)
-            if t.get("neu"):
+            if reaktiviere_oder_neu(t, rohtext):
                 gesamt_neu += 1
 
     # ------------------------------------------------------------------
     # Playwright-Firmen (nur Link-Entdeckung, KEIN Rohtext laden)
     # ------------------------------------------------------------------
     with sync_playwright() as p:
-        if platform.system() == "Linux":
-            browser = p.chromium.launch(
-                headless=True,
-                executable_path="/usr/bin/chromium-browser",
-                args=BROWSER_ARGS,
-            )
-        else:
-            browser = p.chromium.launch(
-                headless=True,
-                args=BROWSER_ARGS,
-            )
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            locale="de-DE",
-            user_agent=USER_AGENT,
-            extra_http_headers={
-                "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-            },
-        )
-        def neue_seite():
-            seite = context.new_page()
-            if STEALTH_OK:
-                try:
-                    Stealth().apply_stealth_sync(seite)
-                except Exception:
-                    pass
-            seite.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
-            return seite
+        browser = starte_browser(p)
+        context = neuer_context(browser)
 
         for firma in config["firmen"]:
             # Pro Firma eine frische Seite: eine fehlgeschlagene Navigation (z.B.
@@ -1094,7 +1027,7 @@ def main():
             # in dem jede weitere Navigation mit "interrupted by another
             # navigation" abbricht – das würde sonst den kompletten Rest der
             # Firmenliste mitreißen.
-            page = neue_seite()
+            page = neue_seite(context)
             try:
                 treffer_liste, ausgeschlossen_liste = scanne_boerse(page, firma, strukturen, config)
             except Exception as e:
@@ -1111,8 +1044,7 @@ def main():
             for t in treffer_liste:
                 if t["url"] in gesehen_urls:
                     continue
-                reaktiviere_oder_neu(t)
-                if t.get("neu"):
+                if reaktiviere_oder_neu(t):
                     gesamt_neu += 1
 
         browser.close()

@@ -307,12 +307,15 @@ def bewerbung_erstellen():
 
     txt_pfad = Path(ergebnis["pfad"])
 
-    # Dateinamen-Suffix aus Stellentitel ableiten
+    # Dateinamen-Suffix aus Stellentitel ableiten (Meta-Zeile "Stelle:" der TXT)
+    _titel = "Stelle"
     try:
-        from bewerbung_generator import parse_txt as _parse_txt
-        _titel = _parse_txt(txt_pfad).get("titel", "Stelle")
+        for _zeile in txt_pfad.read_text(encoding="utf-8").splitlines():
+            if _zeile.startswith("Stelle:"):
+                _titel = _zeile.split(":", 1)[1].strip() or "Stelle"
+                break
     except Exception:
-        _titel = "Stelle"
+        pass
     _titel_sauber = re.sub(r'[\\/:*?"<>|]', '', _titel).strip().replace(' ', '_') or "Stelle"
     datei_suffix  = f"Sascha_Rüttiger_{_titel_sauber}"
 
@@ -334,9 +337,10 @@ def bewerbung_erstellen():
     as_txt          = txt_pfad.parent / "Anschreiben.txt"
     as_pfad         = txt_pfad.parent / f"Anschreiben_{datei_suffix}.docx"
     anschreiben_url = None
+    anschreiben_fehler = ergebnis.get("anschreiben_fehler")
     try:
         if not as_txt.exists():
-            raise FileNotFoundError("Anschreiben.txt nicht gefunden – anpasser.py lief nicht durch?")
+            raise FileNotFoundError(anschreiben_fehler or "Anschreiben.txt nicht gefunden")
         vorlage_as_docx = BASIS_PFAD / "anschreiben_vorlage.docx"
         vorlage_as_txt  = BASIS_PFAD / "anschreiben_vorlage.txt"
         ok_as = erzeuge_docx_mit_changes(
@@ -347,8 +351,10 @@ def bewerbung_erstellen():
         )
         if not ok_as:
             raise RuntimeError("DOCX-Patch für Anschreiben fehlgeschlagen")
-        anschreiben_url = f"/download?pfad={urllib.parse.quote(str(as_pfad))}"
+        anschreiben_url    = f"/download?pfad={urllib.parse.quote(str(as_pfad))}"
+        anschreiben_fehler = None
     except Exception as e:
+        anschreiben_fehler = anschreiben_fehler or str(e)
         print(f"⚠️ Anschreiben-Fehler (nicht kritisch): {e}")
 
     # Schritt 4: Pfade in DB speichern damit report.py sie findet
@@ -370,10 +376,11 @@ def bewerbung_erstellen():
     )
 
     return jsonify({
-        "ok":             True,
-        "nachricht":      "Bewerbungsunterlagen erstellt",
-        "lebenslauf_url": f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
-        "anschreiben_url": anschreiben_url,
+        "ok":                 True,
+        "nachricht":          "Bewerbungsunterlagen erstellt",
+        "lebenslauf_url":     f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
+        "anschreiben_url":    anschreiben_url,
+        "anschreiben_fehler": anschreiben_fehler,
     })
 
 
@@ -387,12 +394,16 @@ def download():
     pfad = urllib.parse.unquote(request.args.get("pfad", ""))
     if not pfad:
         return "Kein Pfad angegeben", 400
-    p = Path(pfad)
+    # resolve() löst ".."-Segmente auf, sonst wäre der Ordner-Check per
+    # Path-Traversal (…/bewerbungen/../config.txt) umgehbar.
+    p = Path(pfad).resolve()
+    bewerbungen_dir = (BASIS_PFAD / "bewerbungen").resolve()
+    try:
+        p.relative_to(bewerbungen_dir)
+    except ValueError:
+        return "Zugriff verweigert", 403
     if not p.exists():
         return f"Datei nicht gefunden: {pfad}", 404
-    bewerbungen_dir = BASIS_PFAD / "bewerbungen"
-    if bewerbungen_dir not in p.parents:
-        return "Zugriff verweigert", 403
     return send_file(p, as_attachment=True)
 
 
@@ -443,25 +454,23 @@ def post_status():
                 db.upsert_stelle({"url": data["url"], "status": 8})
     elif data["feld"] == "kommentar":
         import db
-        con = db.verbindung()
-        con.execute("""
-            INSERT INTO bewerbungsstatus (url, kommentar)
-            VALUES (?, ?)
-            ON CONFLICT(url) DO UPDATE SET kommentar = excluded.kommentar
-        """, (data["url"], data["wert"]))
-        con.commit()
+        with db.verbindung() as con:
+            con.execute("""
+                INSERT INTO bewerbungsstatus (url, kommentar)
+                VALUES (?, ?)
+                ON CONFLICT(url) DO UPDATE SET kommentar = excluded.kommentar
+            """, (data["url"], data["wert"]))
     elif data["feld"] == "nicht_beworben":
         import db
         db.upsert_stelle({"url": data["url"], "status": 10})
     elif data["feld"] == "nicht_beworben_grund":
         import db
-        con = db.verbindung()
-        con.execute("""
-            INSERT INTO bewerbungsstatus (url, nicht_beworben_grund)
-            VALUES (?, ?)
-            ON CONFLICT(url) DO UPDATE SET nicht_beworben_grund = excluded.nicht_beworben_grund
-        """, (data["url"], data["wert"]))
-        con.commit()
+        with db.verbindung() as con:
+            con.execute("""
+                INSERT INTO bewerbungsstatus (url, nicht_beworben_grund)
+                VALUES (?, ?)
+                ON CONFLICT(url) DO UPDATE SET nicht_beworben_grund = excluded.nicht_beworben_grund
+            """, (data["url"], data["wert"]))
     return jsonify({"ok": True})
 
 
@@ -633,10 +642,8 @@ def stelle_einfuegen():
         rohtext = None
         if ist_pdf:
             try:
-                import requests, pdfplumber, io
-                r = requests.get(stellen_url, timeout=15)
-                with pdfplumber.open(io.BytesIO(r.content)) as pdf:
-                    rohtext = "\n".join(p.extract_text() or "" for p in pdf.pages)
+                from browser import lade_pdf_text
+                rohtext = lade_pdf_text(stellen_url)
             except Exception as e:
                 print(f"  ⚠️  PDF-Extraktion fehlgeschlagen: {e}")
 
@@ -719,17 +726,12 @@ def vergeben_setzen():
     try:
         sys.path.insert(0, str(BASIS_PFAD))
         import db as _db
+        from status_def import status_fuer_stufe
         with _db.verbindung() as con:
             row = con.execute(
                 "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (url,)
             ).fetchone()
-        stufe = row[0] if row else ""
-        if stufe in ("beworben", "kennenlernen", "einladung"):
-            neuer_status = 7
-        elif stufe in ("absage", "zusage"):
-            neuer_status = 8
-        else:
-            neuer_status = 9
+        neuer_status = status_fuer_stufe((row[0] if row else "") or "")
 
         _db.upsert_stelle({
             "url":                url,
@@ -933,24 +935,13 @@ def firmen_testen_stream():
 
     def stream_generator():
         try:
-            import platform
             from playwright.sync_api import sync_playwright
+            from browser import starte_browser
 
             yield f"data: ⏳ Öffne {test_url} ...\n\n"
 
             with sync_playwright() as pw:
-                if platform.system() == "Linux":
-                    browser = pw.chromium.launch(
-                        headless=True,
-                        executable_path="/usr/bin/chromium-browser",
-                        args=["--no-sandbox", "--disable-gpu"],
-                    )
-                else:
-                    browser = pw.chromium.launch(
-                        headless=True,
-                        args=["--no-sandbox", "--disable-gpu"],
-                    )
-
+                browser = starte_browser(pw)
                 page = browser.new_page(viewport={"width": 1920, "height": 1080})
                 page.goto(test_url, timeout=30000)
                 page.wait_for_timeout(3000)

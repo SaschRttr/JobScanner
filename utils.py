@@ -3,6 +3,7 @@ utils.py  –  Gemeinsame Hilfsfunktionen für den Job-Scanner
 """
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,13 @@ def normalisiere_url(url: str) -> str:
             break
         dekodiert = neu
     return dekodiert.rstrip("/")
+
+
+def sicherer_pfadname(text: str, max_len: int = 50) -> str:
+    """Macht aus einem Titel/Firmennamen einen dateisystem-sicheren Ordnernamen."""
+    bereinigt = re.sub(r'[^\w\s\-]', '', text).strip()
+    bereinigt = re.sub(r'\s+', '_', bereinigt)
+    return bereinigt[:max_len]
 
 
 # =============================================================================
@@ -127,6 +135,44 @@ def standort_ablehnungsgrund(arbeitsort: str, erlaubte: list, verbotene: list) -
     return ""
 
 
+def ablehnungsgrund(titel: str, arbeitsort: str, config: dict) -> str:
+    """Prüft Titel gegen Ausschlussbegriffe und Arbeitsort gegen White-/Blacklist.
+    Gibt den Grund als Text zurück, oder '' wenn die Stelle passt."""
+    if ist_ausgeschlossen(titel, config["ausschlussbegriffe"]):
+        for b in config["ausschlussbegriffe"]:
+            t = titel.lower()
+            if (all(teil in t for teil in b.split("+")) if "+" in b else b in t):
+                return f"Ausschlussbegriff: '{b}'"
+    return standort_ablehnungsgrund(arbeitsort, config["erlaubte_standorte"], config["verbotene_standorte"])
+
+
+# =============================================================================
+# MARKER-ABSCHNITTE (---NAME--- ... ---/NAME---)
+# =============================================================================
+
+def extrahiere_abschnitt(text: str, marker: str) -> str | None:
+    """Gibt den Inhalt zwischen ---MARKER--- und ---/MARKER--- zurück."""
+    start = text.find(f"---{marker}---")
+    ende  = text.find(f"---/{marker}---")
+    if start == -1 or ende == -1:
+        return None
+    inhalt_start = text.find("\n", start) + 1
+    return text[inhalt_start:ende].strip()
+
+
+def ersetze_abschnitt(text: str, marker: str, neuer_inhalt: str) -> str:
+    """Ersetzt den Inhalt zwischen ---MARKER--- und ---/MARKER---.
+    Marker nicht gefunden → Text unverändert zurück."""
+    start_marker = f"---{marker}---"
+    ende_marker  = f"---/{marker}---"
+    start = text.find(start_marker)
+    ende  = text.find(ende_marker)
+    if start == -1 or ende == -1:
+        return text
+    inhalt_start = text.find("\n", start) + 1
+    return text[:inhalt_start] + neuer_inhalt + "\n" + text[ende:]
+
+
 # =============================================================================
 # COOKIE-BANNER (Playwright)
 # =============================================================================
@@ -168,26 +214,27 @@ def lade_config() -> dict:
         sys.exit(1)
 
     result = {
-        "api_key":             "",
-        "llm_bewertung":       True,
-        "email_aktiv":         False,
-        "email_absender":      "",
-        "email_passwort":      "",
-        "email_empfaenger":    "",
-        "raspi_ip":            "",
-        "google_maps_key":     "",
-        "fahrzeit_startpunkt": "",
-        "suchbegriffe":        [],
-        "ausschlussbegriffe":  [],
-        "verbotene_standorte": [],
-        "erlaubte_standorte":  [],
-        "firmen":              [],
-        "firmen_reihenfolge":  [],
-        "api_firmen":          [],
-        "firma_adressen":      {},
-        "prompt":              "",
-        "steckbrief_prompt":   "",
-        "anschreiben_prompt":  "",
+        "api_key":                "",
+        "llm_bewertung":          True,
+        "email_aktiv":            False,
+        "email_absender":         "",
+        "email_passwort":         "",
+        "email_empfaenger":       "",
+        "google_maps_key":        "",
+        "fahrzeit_startpunkt":    "",
+        "suchbegriffe":           [],
+        "ausschlussbegriffe":     [],
+        "verbotene_standorte":    [],
+        "erlaubte_standorte":     [],
+        "firmen":                 [],
+        "api_firmen":             [],
+        "firma_adressen":         {},
+        "firma_anschreiben":      {},
+        "firma_domains":          {},
+        "prompt":                 "",
+        "steckbrief_prompt":      "",
+        "anschreiben_prompt":     "",
+        "anschreiben_prompt_en":  "",
     }
 
     zeilen = CONFIG_PFAD.read_text(encoding="utf-8").splitlines()
@@ -199,12 +246,8 @@ def lade_config() -> dict:
 
         if z.startswith("[\\") and z.endswith("]"):
             abschnitt = z[2:-1].lower()
-            if abschnitt == "prompt":
-                result["prompt"] = "\n".join(puffer).strip()
-            elif abschnitt == "steckbrief_prompt":
-                result["steckbrief_prompt"] = "\n".join(puffer).strip()
-            elif abschnitt == "anschreiben_prompt":
-                result["anschreiben_prompt"] = "\n".join(puffer).strip()
+            if abschnitt in ("prompt", "steckbrief_prompt", "anschreiben_prompt", "anschreiben_prompt_en"):
+                result[abschnitt] = "\n".join(puffer).strip()
             elif abschnitt == "api_firmen":
                 try:
                     result["api_firmen"] = json.loads("\n".join(puffer))
@@ -219,7 +262,8 @@ def lade_config() -> dict:
             puffer = []
             continue
 
-        if aktiver_abschnitt in ("prompt", "steckbrief_prompt", "anschreiben_prompt", "api_firmen"):
+        if aktiver_abschnitt in ("prompt", "steckbrief_prompt", "anschreiben_prompt",
+                                 "anschreiben_prompt_en", "api_firmen"):
             puffer.append(zeile)
             continue
 
@@ -239,8 +283,6 @@ def lade_config() -> dict:
                 result["email_passwort"] = z.split("=", 1)[1].strip()
             elif z.upper().startswith("EMAIL_EMPFAENGER"):
                 result["email_empfaenger"] = z.split("=", 1)[1].strip()
-            elif z.upper().startswith("RASPI_IP"):
-                result["raspi_ip"] = z.split("=", 1)[1].strip()
             elif z.upper().startswith("GOOGLE_MAPS_KEY"):
                 result["google_maps_key"] = z.split("=", 1)[1].strip()
             elif z.upper().startswith("FAHRZEIT_STARTPUNKT"):
@@ -258,12 +300,24 @@ def lade_config() -> dict:
                 url = teile[1].strip()
                 if name and url:
                     result["firmen"].append({"name": name, "url": url})
-                    result["firmen_reihenfolge"].append(name)
         elif aktiver_abschnitt == "firma_anschreiben":
             if "|" in z:
                 teile = [t.strip() for t in z.split("|")]
                 if len(teile) >= 6:
                     result["firma_adressen"][teile[0]] = f"{teile[3]}, {teile[4]} {teile[5]}"
+                    result["firma_anschreiben"][teile[0]] = {
+                        "firmenname":      teile[0],
+                        "abteilung":       teile[1],
+                        "ansprechpartner": teile[2],
+                        "strasse":         teile[3],
+                        "plz":             teile[4],
+                        "ort":             teile[5],
+                    }
+        elif aktiver_abschnitt == "firma_domains":
+            if "=" in z:
+                firma, _, dom = z.partition("=")
+                if firma.strip() and dom.strip():
+                    result["firma_domains"][firma.strip()] = dom.strip().lower()
 
     if WHITELIST_PFAD.exists():
         for zeile in WHITELIST_PFAD.read_text(encoding="utf-8").splitlines():

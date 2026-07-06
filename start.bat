@@ -1,5 +1,7 @@
-call C:\Users\sasch\anaconda3\Scripts\activate.bat
-cd C:\Users\sasch\Documents\Python\Jobsuche\Jobsuche_V2
+@echo off
+rem Job-Scanner Pipeline (Windows)
+cd /d %~dp0
+call .venv\Scripts\activate.bat
 python scanner.py
 python rohtext_holen.py
 python vergaben_check.py

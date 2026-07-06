@@ -28,7 +28,10 @@ if hasattr(sys.stdout, "reconfigure"):
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import lade_config, lade_json, ist_ausgeschlossen, text_matched, standort_ablehnungsgrund
+from utils import (lade_config, lade_json, ist_ausgeschlossen, text_matched,
+                   standort_ablehnungsgrund, sicherer_pfadname)
+from status_def import (STATUS_LABELS, STATUS_EMOJIS, INAKTIVE_STATUSWERTE,
+                        UNBEWERTETE_STATUSWERTE, FILTER_STATUS_VALS)
 
 
 # =============================================================================
@@ -124,31 +127,9 @@ def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None
     }
 
 
-def sicherer_pfadname(text: str, max_len: int = 50) -> str:
-    bereinigt = re.sub(r'[^\w\s\-]', '', text).strip()
-    bereinigt = re.sub(r'\s+', '_', bereinigt)
-    return bereinigt[:max_len]
-
-
 # =============================================================================
 # HTML-BAUSTEINE
 # =============================================================================
-
-_STATUS_LABELS = {
-    0: "vergeben",
-    1: "Link",
-    2: "Rohtext",
-    3: "Stellentext",
-    4: "bewerben",
-    5: "nicht bewerben",
-    6: "Beworben, aktiv",
-    7: "Beworben, Ghosting",
-    8: "Absage erhalten",
-    9: "Vergeben, nie beworben",
-    10: "nicht beworben",
-}
-_FILTER_STATUS_VALS = {4, 5, 6, 7, 8, 9, 10}
-
 
 def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False) -> str:
     import html as _html
@@ -167,7 +148,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
 
     if scanner_status is not None:
         # Scanner-Status ist die einzige Wahrheit
-        label = _STATUS_LABELS.get(scanner_status, str(scanner_status))
+        label = STATUS_LABELS.get(scanner_status, str(scanner_status))
         status_badge = f'<span class="scanner-status scanner-status-{scanner_status}" title="Status {scanner_status}">{label}</span>'
         geloescht_badge = ""
         if scanner_status in (0, 9):
@@ -332,8 +313,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
             {''.join(links)}
         </div>"""
-    elif score >= 70:
-        # Noch nicht erstellt → Checkbox anzeigen
+    else:
+        # Noch nicht erstellt → Checkbox anzeigen (für jede Stelle, unabhängig vom Score)
         lebenslauf_html = f"""
         <div style="margin-top:8px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             <label style="cursor:pointer;">
@@ -343,8 +324,6 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             </label>
             <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
         </div>"""
-    else:
-        lebenslauf_html = ""
     # Stellentext-Block (aufklappbar)
     stellentext = s.get("stellentext") or s.get("rohtext") or ""
     if stellentext:
@@ -399,11 +378,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
 
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
     _zw_attr = ' data-zu-weit="1"' if zu_weit else ''
+    _vm_attr = ' data-vorgemerkt="1"' if s.get("pruef_vormerken") else ''
     if zu_weit:
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_escaped}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr} data-scanner-status="{_scanner_status_attr}">
+    return f"""<div class="{css}" data-url="{url_escaped}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
@@ -422,1019 +402,11 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
 """
 
 
-CSS = """
-    body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        max-width: 960px; margin: 40px auto; padding: 0 20px;
-        background: #f5f5f5; color: #333;
-    }
-    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-    h2 { color: #2c3e50; margin-top: 30px; }
-    .firma-block {
-        background: white; border-radius: 8px; padding: 20px;
-        margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .stelle {
-        border-left: 4px solid #3498db; padding: 10px 15px;
-        margin: 10px 0; background: #f8f9fa; border-radius: 0 4px 4px 0;
-    }
-    .stelle a {
-        color: #2980b9; text-decoration: none; font-weight: bold; font-size: 1.05em;
-    }
-    .stelle a:hover { text-decoration: underline; }
-    .stelle-neu      { background: #f3e8fd; border-left-color: #8e44ad; }
-    .stelle-geloescht { background: #f0f0f0; border-left-color: #aaa; opacity: 0.7; }
-    .stelle.beworben      { background: #fff9c4; border-left-color: #f1c40f; }
-    .stelle.kennenlernen  { background: #ddeeff; border-left-color: #2980b9; }
-    .stelle.einladung     { background: #ddeeff; border-left-color: #2980b9; }
-    .stelle.zusage        { background: #d5f5e3; border-left-color: #27ae60; }
-    .stelle.absage        { background: #fde8e8; border-left-color: #e74c3c; }
-    .stelle-bewerbung { background: #d6eaf8; border-left-color: #2980b9; }
-    .stelle-zu-weit { background: #fef5e4; border-left-color: #e67e22; }
-    .stelle.mit-aktivitaet { background: #fefaf0; border-left-color: #e8c547; }
-    .tags { margin-top: 5px; }
-    .tag {
-        display: inline-block; background: #e8f4fd; color: #2980b9;
-        padding: 2px 8px; border-radius: 12px; font-size: 0.8em; margin: 2px;
-    }
-    .badge {
-        padding: 2px 8px; border-radius: 10px;
-        font-size: 0.8em; margin-left: 8px; color: white;
-    }
-    .badge-neu { background: #e74c3c; }
-    .badge-weg { background: #aaa; }
-    .badge-zu-weit { background: #e67e22; }
-    .firma-label { color: #999; font-size: 0.85em; }
-    .firma-label-auto { display: none; color: #999; font-size: 0.85em; }
-    #flat-ansicht .firma-label-auto { display: inline; }
-    .standort-label { color: #888; font-size: 0.82em; margin-left: 6px; }
-    .fahrzeit-info { font-size: 0.82em; color: #555; margin: 3px 0 2px 0; }
-    .fahrzeit-unbekannt { color: #aaa; font-style: italic; }
-    .fahrzeit-hinweis { color: #aaa; font-size: 0.9em; }
-    .fahrzeit-maps { text-decoration: none; margin-left: 4px; }
-    .np-grund-label {
-        font-size: 0.82em; color: #c0392b; margin: 3px 0 2px 0;
-        background: #fdecea; border-radius: 4px; padding: 2px 6px;
-        display: inline-block;
-    }
-    .bewertung {
-        margin-top: 10px; padding: 10px; background: #fff;
-        border-radius: 6px; font-size: 0.9em;
-    }
-    .bewertung details { margin-top: 8px; }
-    .stellentext-details { margin-top: 8px; }
-    .stellentext-details summary {
-        cursor: pointer; color: #555; font-size: 0.9em;
-        padding: 4px 0; user-select: none;
-    }
-    .stellentext-inhalt {
-        margin-top: 8px; padding: 12px; background: #fff;
-        border: 1px solid #ddd; border-radius: 4px;
-        font-size: 0.85em; line-height: 1.6; color: #333;
-        max-height: 400px; overflow-y: auto;
-        white-space: pre-wrap;
-    }
-    .begruendung { color: #555; }
-    .notizen { margin-top: 8px; }
-    .notizen summary { cursor: pointer; color: #888; font-size: 0.85em; }
-    .kommentar, .nicht-beworben-grund {
-        width: 100%; margin-top: 4px; font-size: 0.85em;
-        border: 1px solid #ddd; border-radius: 4px; padding: 4px;
-        box-sizing: border-box;
-    }
-    .summary-box {
-        background: #2c3e50; color: white; padding: 15px 20px;
-        border-radius: 8px; margin-bottom: 20px;
-    }
-    .summary-box strong { color: #3498db; }
-    .leer { color: #999; font-style: italic; }
-    .stufen-select {
-        font-size: 0.85em; padding: 3px 6px; border-radius: 4px;
-        border: 1px solid #ccc; cursor: pointer; margin-bottom: 6px;
-        background: white;
-    }
-    .stufen-ts {
-        font-size: 0.78em; color: #888; margin-left: 6px;
-    }
-    .steckbrief-details { margin-top: 8px; }
-    .steckbrief-details summary {
-        cursor: pointer; color: #555; font-size: 0.9em;
-        padding: 4px 0; user-select: none;
-    }
-    .steckbrief-inhalt {
-        margin-top: 8px; padding: 12px; background: #fff;
-        border: 1px solid #ddd; border-radius: 4px;
-        font-size: 0.85em; line-height: 1.6; color: #333;
-    }
-    .pruef-btn {
-        margin-top: 8px; background: none; border: 1px solid #aaa;
-        border-radius: 4px; padding: 3px 10px; cursor: pointer;
-        font-size: 0.82em; color: #555;
-    }
-    .pruef-btn:hover { background: #eee; }
-    .pruef-vormerken-badge {
-        display: inline-block; background: #fff3cd; color: #856404;
-        border: 1px solid #ffc107; border-radius: 4px;
-        padding: 2px 8px; font-size: 0.8em; margin-left: 6px;
-    }
-    .pruef-ergebnis {
-        display: inline-block; font-size: 0.82em; margin-left: 10px; font-weight: bold;
-    }
-    .steckbrief-btn {
-        margin-top: 8px; background: none; color: inherit;
-        border: none; padding: 0; font-size: 0.85em;
-        cursor: pointer; text-decoration: none;
-    }
-    .steckbrief-btn:disabled { color: #aaa; cursor: not-allowed; }
-    .scanner-status {
-        display: inline-block; font-size: 0.72em; font-weight: 600;
-        padding: 1px 6px; border-radius: 8px; margin-left: 6px;
-        vertical-align: middle; color: white; cursor: default;
-    }
-    .scanner-status-0 { background: #95a5a6; }
-    .scanner-status-1 { background: #bdc3c7; color: #555; }
-    .scanner-status-2 { background: #85c1e9; }
-    .scanner-status-3 { background: #5dade2; }
-    .scanner-status-4 { background: #27ae60; }
-    .scanner-status-5 { background: #e67e22; }
-    .scanner-status-6 { background: #f1c40f; color: #555; }
-    .scanner-status-7 { background: #e67e22; }
-    .scanner-status-8 { background: #e74c3c; }
-    .scanner-status-9  { background: #7f8c8d; }
-    .scanner-status-10 { background: #c0392b; }
-    .scan-box {
-        background: white; border-radius: 8px; padding: 20px;
-        margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-    .scan-btn {
-        background: #3498db; color: white; border: none;
-        padding: 12px 28px; border-radius: 6px; font-size: 1em;
-        cursor: pointer;
-    }
-    .scan-btn:hover  { background: #2980b9; }
-    .scan-btn:disabled { background: #aaa; cursor: not-allowed; }
-    #scan-output {
-        text-align: left; background: #1e1e1e; color: #d4d4d4;
-        border-radius: 6px; padding: 15px; margin-top: 15px;
-        font-size: 0.85em; max-height: 400px; overflow-y: auto;
-        display: none; white-space: pre-wrap;
-    }
-    #scan-status { margin-top: 10px; font-size: 0.95em; color: #555; }
-    .filter-bar {
-        background: white; border-radius: 8px; padding: 12px 20px;
-        margin: 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
-    }
-    .filter-gruppe { display: flex; gap: 6px; align-items: center; }
-    .filter-label { font-size: 0.85em; color: #666; font-weight: 600; margin-right: 2px; }
-    .filter-btn {
-        background: #f0f0f0; color: #555; border: 1px solid #ddd;
-        padding: 5px 14px; border-radius: 16px; font-size: 0.85em;
-        cursor: pointer; white-space: nowrap;
-    }
-    .filter-btn:hover { background: #e0e0e0; }
-    .filter-btn.aktiv { background: #3498db; color: white; border-color: #2980b9; }
-    #flat-ansicht {
-        background: white; border-radius: 8px; padding: 20px;
-        margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    #flat-ansicht-info {
-        font-size: 0.85em; color: #666; margin-bottom: 12px;
-        padding-bottom: 8px; border-bottom: 1px solid #eee; font-weight: 600;
-    }
-"""
-
-JS = """
-    const SERVER = window.location.origin;
-
-    const _STUFE_ZU_STATUS = { beworben: 6, absage: 8 };
-    const _STATUS_BADGE_LABELS = {4:'bewerben', 5:'nicht bewerben', 6:'Beworben, aktiv', 7:'Beworben, Ghosting', 8:'Absage erhalten', 10:'Nicht beworben'};
-
-    function aktualisiereStatusBadge(el, neuerStatus) {
-        const badge = el.querySelector('.scanner-status');
-        if (!badge) return;
-        for (let i = 0; i <= 10; i++) badge.classList.remove('scanner-status-' + i);
-        badge.classList.add('scanner-status-' + neuerStatus);
-        badge.title = 'Status ' + neuerStatus;
-        badge.textContent = _STATUS_BADGE_LABELS[neuerStatus] || String(neuerStatus);
-        el.dataset.scannerStatus = String(neuerStatus);
-        aktualisiereStatusCounts();
-    }
-
-    function aktualisiereStatusCounts() {
-        const counts = {};
-        const seenUrls = new Set();
-        document.querySelectorAll('.stelle[data-scanner-status][data-url]').forEach(el => {
-            const url = el.dataset.url;
-            if (url) {
-                if (seenUrls.has(url)) return;
-                seenUrls.add(url);
-            }
-            const s = el.dataset.scannerStatus;
-            if (s !== '') counts[s] = (counts[s] || 0) + 1;
-        });
-        [4, 5, 6, 7, 8, 9, 10].forEach(sv => {
-            const el = document.getElementById('stat-status-' + sv);
-            if (el) el.textContent = counts[sv] || 0;
-        });
-    }
-
-    async function speichern(url, feld, wert) {
-        const status = JSON.parse(localStorage.getItem('job_status') || '{}');
-        if (!status[url]) status[url] = {};
-
-        if (feld === 'stufe') {
-            const jetzt = new Date().toLocaleString('de-DE', {
-                day:'2-digit', month:'2-digit', year:'numeric',
-                hour:'2-digit', minute:'2-digit'
-            });
-            // Timestamp nur beim ersten Mal setzen
-            const tsKey = wert + '_am';
-            if (wert && !status[url][tsKey]) {
-                status[url][tsKey] = jetzt;
-            }
-            status[url]['stufe'] = wert;
-
-            // CSS-Klassen aktualisieren
-            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
-            if (el) {
-                ['beworben','kennenlernen','einladung','zusage','absage'].forEach(k => el.classList.remove(k));
-                if (wert) {
-                    el.classList.add(wert);
-                    el.classList.remove('mit-aktivitaet');
-                } else {
-                    // Status zurückgesetzt → ggf. wieder ockergelb wenn Aktivität vorhanden
-                    const hatAkt = el.dataset.hatLebenslauf === '1' || !!status[url]?.kommentar;
-                    if (hatAkt) el.classList.add('mit-aktivitaet');
-                }
-                if (wert && _STUFE_ZU_STATUS[wert]) {
-                    const _curSt2 = parseInt(el.dataset.scannerStatus);
-                    if (isNaN(_curSt2) || ![0, 7, 8, 9, 10].includes(_curSt2)) {
-                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[wert]);
-                    }
-                }
-            }
-            // Timestamp anzeigen
-            const tsEl = document.querySelector(`[data-url="${CSS.escape(url)}"] .stufen-ts`);
-            if (tsEl) {
-                tsEl.textContent = (wert && status[url][tsKey]) ? ('seit ' + status[url][tsKey]) : '';
-            }
-        } else {
-            status[url][feld] = wert;
-        }
-
-        localStorage.setItem('job_status', JSON.stringify(status));
-
-        if (SERVER) {
-            await fetch(SERVER + '/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, feld, wert })
-            });
-        }
-    }
-
-    async function ladeStatus() {
-        const localStatus = JSON.parse(localStorage.getItem('job_status') || '{}');
-        let status = localStatus;
-
-        if (SERVER) {
-            try {
-                const res = await fetch(SERVER + '/status');
-                const dbStatus = await res.json();
-
-                // Zusammenführen: DB gewinnt bei Konflikten, localStorage füllt Lücken
-                status = { ...localStatus };
-                for (const [url, dbInfo] of Object.entries(dbStatus)) {
-                    status[url] = { ...(localStatus[url] || {}), ...dbInfo };
-                }
-
-                // Fehlende localStorage-Einträge in DB nachsynchronisieren
-                const syncs = [];
-                for (const [url, info] of Object.entries(localStatus)) {
-                    const db = dbStatus[url] || {};
-                    if (info.stufe && !db.stufe) {
-                        syncs.push(fetch(SERVER + '/status', {
-                            method: 'POST', headers: {'Content-Type':'application/json'},
-                            body: JSON.stringify({url, feld:'stufe', wert:info.stufe})
-                        }));
-                    }
-                    if (info.kommentar && !db.kommentar) {
-                        syncs.push(fetch(SERVER + '/status', {
-                            method: 'POST', headers: {'Content-Type':'application/json'},
-                            body: JSON.stringify({url, feld:'kommentar', wert:info.kommentar})
-                        }));
-                    }
-                }
-                if (syncs.length > 0) {
-                    await Promise.all(syncs.map(p => p.catch(() => {})));
-                    console.log(syncs.length + ' Status-Einträge mit Datenbank synchronisiert');
-                }
-            } catch (e) {
-                console.warn('Statusserver nicht erreichbar, nutze localStorage', e);
-            }
-        }
-        document.querySelectorAll('.stelle[data-url]').forEach(el => {
-            const s = status[el.dataset.url];
-            if (!s) return;
-
-            // Stufe wiederherstellen
-            const stufe = s.stufe || '';
-            if (stufe) {
-                ['beworben','kennenlernen','einladung','zusage','absage'].forEach(k => el.classList.remove(k));
-                el.classList.add(stufe);
-                if (_STUFE_ZU_STATUS[stufe]) {
-                    const _curSt = parseInt(el.dataset.scannerStatus);
-                    if (isNaN(_curSt) || ![0, 7, 8, 9, 10].includes(_curSt)) {
-                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[stufe]);
-                    }
-                }
-            }
-            // Dropdown setzen
-            const sel = el.querySelector('.stufen-select');
-            if (sel && stufe) sel.value = stufe;
-
-            // Timestamp anzeigen
-            const tsEl = el.querySelector('.stufen-ts');
-            if (tsEl) {
-                const tsKey = stufe + '_am';
-                tsEl.textContent = (stufe && s[tsKey]) ? ('seit ' + s[tsKey]) : '';
-            }
-
-            // Kommentar wiederherstellen
-            const ta = el.querySelector('.kommentar');
-            if (s.kommentar && ta) ta.value = s.kommentar;
-
-            // Nicht-beworben-Grund wiederherstellen
-            const nbg = el.querySelector('.nicht-beworben-grund');
-            if (s.nicht_beworben_grund && nbg) nbg.value = s.nicht_beworben_grund;
-
-            // Scanner-Status aus DB anwenden (überschreibt eingebackenen HTML-Wert)
-            if (s.scanner_status !== undefined) {
-                aktualisiereStatusBadge(el, s.scanner_status);
-            }
-
-            // Ockergelb: Lebenslauf oder Notizen vorhanden, aber kein Status gesetzt
-            const hatAktivitaet = el.dataset.hatLebenslauf === '1' || !!s.kommentar;
-            if (hatAktivitaet && !stufe) {
-                el.classList.add('mit-aktivitaet');
-            } else {
-                el.classList.remove('mit-aktivitaet');
-            }
-        });
-        const statAbsagen = document.getElementById('stat-absagen');
-        if (statAbsagen) {
-            statAbsagen.textContent = document.querySelectorAll('.stelle.absage').length;
-        }
-        aktualisiereStatusCounts();
-    }
-
-    window.onload = function() { ladeStatus(); ladeFirmen(); };
-
-    async function ladeFirmen() {
-        try {
-            const r = await fetch('/firmen');
-            const namen = await r.json();
-            const sel = document.getElementById('firma-dropdown');
-            namen.forEach(n => {
-                const opt = document.createElement('option');
-                opt.value = opt.textContent = n;
-                sel.appendChild(opt);
-            });
-        } catch(e) {}
-    }
-
-    function firmaTest() {
-        const sel    = document.getElementById('firma-dropdown');
-        const status = document.getElementById('firma-status');
-        const output = document.getElementById('firma-output');
-        const firma  = sel.value;
-        if (!firma) { status.textContent = '⚠️ Bitte Firma wählen'; return; }
-
-        sel.disabled = true;
-        status.textContent = `⏳ Scanne ${firma}...`;
-        output.style.display = 'block';
-        output.textContent = '';
-
-        const quelle = new EventSource('/firma-testen?firma=' + encodeURIComponent(firma));
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                sel.disabled = false;
-                status.textContent = '✅ Fertig';
-                return;
-            }
-            output.textContent += e.data + '\\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            sel.disabled = false;
-            status.textContent = '❌ Verbindungsfehler';
-        };
-    }
-
-    function scanStarten() {
-        const btn     = document.getElementById('scan-start-btn');
-        const stopBtn = document.getElementById('scan-stop-btn');
-        const output  = document.getElementById('scan-output');
-        const status  = document.getElementById('scan-status');
-
-        btn.disabled = true;
-        btn.textContent = '⏳ Scan läuft...';
-        stopBtn.style.display = 'inline-block';
-        output.style.display = 'block';
-        output.textContent = '';
-        status.textContent = '';
-
-        const quelle = new EventSource('/starten');
-
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                stopBtn.style.display = 'none';
-                btn.disabled = false;
-                btn.textContent = '🔄 Scan jetzt starten';
-                status.textContent = '✅ Fertig – Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
-                return;
-            }
-            output.textContent += e.data + '\\n';
-            output.scrollTop = output.scrollHeight;
-        };
-
-        quelle.onerror = function() {
-            quelle.close();
-            stopBtn.style.display = 'none';
-            btn.disabled = false;
-            btn.textContent = '🔄 Scan jetzt starten';
-            status.textContent = '❌ Fehler: Flask-Server nicht erreichbar. Läuft webui.py?';
-            status.style.color = '#e74c3c';
-        };
-    }
-
-    async function scanStoppen() {
-        const stopBtn = document.getElementById('scan-stop-btn');
-        const status  = document.getElementById('scan-status');
-        stopBtn.disabled = true;
-        stopBtn.textContent = '⏳ Wird abgebrochen...';
-        try {
-            const r = await fetch('/stoppen');
-            const d = await r.json();
-            status.textContent = d.nachricht || 'Abbruch angefordert';
-        } catch(e) {
-            status.textContent = '❌ Fehler beim Abbrechen';
-        }
-    }
-
-    async function steckbriefGenerieren(btn, stellenUrl) {
-        btn.disabled = true;
-        btn.textContent = '⏳ Generiere...';
-        try {
-            const res = await fetch(SERVER + '/steckbrief-erstellen', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: stellenUrl })
-            });
-            const data = await res.json();
-            if (data.ok) {
-                location.reload();
-            } else {
-                btn.disabled = false;
-                btn.textContent = '🧠 Steckbrief generieren';
-                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-            }
-        } catch(e) {
-            btn.disabled = false;
-            btn.textContent = '🧠 Steckbrief generieren';
-            alert('Server nicht erreichbar');
-        }
-    }
-
-    async function bewertungStarten(btn, stellenUrl) {
-        btn.disabled = true;
-        btn.textContent = '⏳ Bewerte...';
-        try {
-            const res = await fetch(SERVER + '/bewertung-erstellen', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: stellenUrl })
-            });
-            const data = await res.json();
-            if (data.ok) {
-                location.reload();
-            } else {
-                btn.disabled = false;
-                btn.textContent = '⭐ Bewertung starten';
-                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-            }
-        } catch(e) {
-            btn.disabled = false;
-            btn.textContent = '⭐ Bewertung starten';
-            alert('Server nicht erreichbar');
-        }
-    }
-
-    function standortBearbeiten(el) {
-        const url = el.dataset.url;
-        const aktuell = el.textContent.replace('📍', '').replace('✏️', '').trim();
-        const vorbelegt = aktuell === 'kein Standort' ? '' : aktuell;
-
-        const wrapper = document.createElement('span');
-        wrapper.className = 'standort-label';
-
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = vorbelegt;
-        input.placeholder = 'Ort eingeben...';
-        input.style.cssText = 'padding:2px 4px; font-size:0.85em; border:1px solid #ccc; border-radius:3px; width:140px;';
-
-        const btn = document.createElement('button');
-        btn.textContent = '💾';
-        btn.className = 'scan-btn';
-        btn.style.cssText = 'padding:2px 8px; font-size:0.85em; margin-left:4px;';
-        btn.onclick = async () => {
-            const arbeitsort = input.value.trim();
-            if (!arbeitsort) return;
-            btn.disabled = true;
-            input.disabled = true;
-            try {
-                const res = await fetch(SERVER + '/standort-setzen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, arbeitsort })
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    location.reload();
-                } else {
-                    alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-                    btn.disabled = false;
-                    input.disabled = false;
-                }
-            } catch(e) {
-                alert('Server nicht erreichbar');
-                btn.disabled = false;
-                input.disabled = false;
-            }
-        };
-
-        wrapper.appendChild(input);
-        wrapper.appendChild(btn);
-        el.replaceWith(wrapper);
-        input.focus();
-    }
-
-    async function bewerbungErstellen(checkbox, stellenUrl, firma, titel) {
-        if (!checkbox.checked) return;
-
-        const statusEl = document.getElementById('bew-status-' + firma + '-' + titel);
-        checkbox.disabled = true;
-        // Label blau färben als visuelles Feedback
-        const label = checkbox.closest('label');
-        if (label) { label.style.color = '#2980b9'; label.style.fontWeight = 'bold'; }
-        statusEl.textContent = '⏳ Wird erstellt...';
-        statusEl.style.color = '#2980b9';
-
-        try {
-            const server = window.location.origin;
-
-            const res  = await fetch(server + '/bewerbung-erstellen?url=' + encodeURIComponent(stellenUrl));
-            const data = await res.json();
-
-            if (data.ok) {
-                const box = document.getElementById('bew-box-' + firma + '-' + titel);
-                box.innerHTML = `
-                    <div style="padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
-                        📄 <a href="${server + data.lebenslauf_url}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
-                        ✉️ <a href="${server + data.anschreiben_url}" style="color:#27ae60;">Anschreiben.docx</a>
-                    </div>`;
-            } else {
-                statusEl.textContent = '❌ ' + (data.fehler || 'Unbekannter Fehler');
-                statusEl.style.color = '#e74c3c';
-                checkbox.disabled = false;
-                checkbox.checked  = false;
-            }
-        } catch (e) {
-            statusEl.textContent = '❌ Server nicht erreichbar';
-            statusEl.style.color = '#e74c3c';
-            checkbox.disabled = false;
-            checkbox.checked  = false;
-        }
-    }
-    async function stelleEinfuegen() {
-       const url = document.getElementById('manuell-url').value.trim();
-        const firma = document.getElementById('manuell-firma').value.trim();
-        const titel = document.getElementById('manuell-titel').value.trim();
-        const statusEl = document.getElementById('manuell-status');
-        const output = document.getElementById('manuell-output');
-
-        if (!url) {
-            statusEl.textContent = 'Bitte eine URL eingeben.';
-            statusEl.style.color = '#e74c3c';
-            return;
-        }
-
-        statusEl.textContent = 'Stelle wird eingetragen...';
-        statusEl.style.color = '#2980b9';
-
-        const server = window.location.origin;
-
-        const res = await fetch(server + '/stelle-einfuegen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, firma, titel })
-        });
-        const data = await res.json();
-
-        if (!data.ok) {
-            statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
-            statusEl.style.color = '#e74c3c';
-            return;
-        }
-
-        statusEl.textContent = 'Eingetragen - Pipeline laeuft...';
-        statusEl.style.color = '#27ae60';
-        output.style.display = 'block';
-        output.textContent = '';
-
-        const quelle = new EventSource(server + '/manuell-stream');
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                statusEl.textContent = 'Fertig - Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
-                return;
-            }
-            output.textContent += e.data + '\\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            statusEl.textContent = 'Verbindungsfehler zum Server';
-            statusEl.style.color = '#e74c3c';
-        };
-    }
-
-    async function neuLadenUndBewerten(btn, stellenUrl) {
-        btn.disabled = true;
-        btn.textContent = '⏳ Vorbereitung...';
-        try {
-            const res = await fetch(SERVER + '/stelle-neu-laden', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: stellenUrl })
-            });
-            const data = await res.json();
-            if (!data.ok) {
-                btn.disabled = false;
-                btn.textContent = '🔄 Neu laden & bewerten';
-                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-                return;
-            }
-        } catch(e) {
-            btn.disabled = false;
-            btn.textContent = '🔄 Neu laden & bewerten';
-            alert('Server nicht erreichbar');
-            return;
-        }
-        const output = document.getElementById('scan-output');
-        const status = document.getElementById('scan-status');
-        output.style.display = 'block';
-        output.textContent = '';
-        status.textContent = '⏳ Pipeline läuft...';
-        output.scrollIntoView({ behavior: 'smooth' });
-        const quelle = new EventSource(SERVER + '/stelle-einzeln-stream?url=' + encodeURIComponent(stellenUrl));
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                status.textContent = '✅ Fertig – Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
-                return;
-            }
-            output.textContent += e.data + '\\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            btn.disabled = false;
-            btn.textContent = '🔄 Neu laden & bewerten';
-            status.textContent = '❌ Verbindungsfehler';
-        };
-    }
-
-    // ── Filter & Sortierung ──────────────────────────────────────────
-    let _aktiverFilter = null;
-    let _aktiveSortierung = null;
-    let _aktiverStatusFilter = null;
-    let _aktiverFirmaFilter = null;
-    let _nurNichtBewertet = false;
-    let _flatAktiv = false;
-    const _stellenUrsprung = [];
-
-    function toggleGeringerMatch(checked) {
-        const section = document.getElementById('geringer-match-section');
-        if (section) section.style.display = checked ? '' : 'none';
-        if (_flatAktiv) _aktualisiereFlach();
-    }
-    function toggleZuWeit(checked) {
-        const section = document.getElementById('zu-weit-section');
-        if (section) section.style.display = checked ? '' : 'none';
-        if (_flatAktiv) _aktualisiereFlach();
-    }
-    function toggleNichtBewertet(checked) {
-        _nurNichtBewertet = checked;
-        _aktualisiere();
-    }
-    function setzeFilter(filter) {
-        _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
-        _aktualisiere();
-    }
-    function setzeSortierung(sort) {
-        _aktiveSortierung = (_aktiveSortierung === sort && sort !== null) ? null : sort;
-        _aktualisiere();
-    }
-    function setzeStatusFilter(status) {
-        _aktiverStatusFilter = (_aktiverStatusFilter === status) ? null : status;
-        _aktualisiere();
-    }
-    function setzeFirmaFilter(firma) {
-        _aktiverFirmaFilter = firma || null;
-        _aktualisiere();
-    }
-    function _aktualisiere() {
-        _aktualisiereFilterBtns();
-        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null || _aktiverFirmaFilter !== null || _nurNichtBewertet;
-        if (brauchtFlach && !_flatAktiv) _aktiviereFlach();
-        else if (!brauchtFlach && _flatAktiv) _deaktiviereFlach();
-        else if (brauchtFlach && _flatAktiv) _aktualisiereFlach();
-    }
-    function _aktualisiereFilterBtns() {
-        const map = {
-            'btn-alle':          _aktiverFilter === null && _aktiverStatusFilter === null && _aktiverFirmaFilter === null,
-            'btn-beworben':      _aktiverStatusFilter === 6,
-            'btn-nicht-beworben': _aktiverStatusFilter === 10,
-            'btn-kennenlernen':  _aktiverFilter === 'kennenlernen',
-            'btn-einladung':     _aktiverFilter === 'einladung',
-            'btn-zusage':        _aktiverFilter === 'zusage',
-            'btn-absage':        _aktiverFilter === 'absage',
-            'btn-sort-std':      _aktiveSortierung === null,
-            'btn-sort-score':    _aktiveSortierung === 'score',
-            'btn-sort-auto':     _aktiveSortierung === 'auto',
-            'btn-sort-transit':  _aktiveSortierung === 'transit',
-        };
-        Object.entries(map).forEach(([id, aktiv]) => {
-            const btn = document.getElementById(id);
-            if (btn) btn.classList.toggle('aktiv', aktiv);
-        });
-        document.querySelectorAll('.btn-scanner-status').forEach(btn => {
-            btn.classList.toggle('aktiv', parseInt(btn.dataset.status) === _aktiverStatusFilter);
-        });
-        const btnStatusAlle = document.getElementById('btn-status-alle');
-        if (btnStatusAlle) btnStatusAlle.classList.toggle('aktiv', _aktiverStatusFilter === null);
-    }
-    function _aktiviereFlach() {
-        const ha = document.getElementById('hauptansicht');
-        const fa = document.getElementById('flat-ansicht');
-        _stellenUrsprung.length = 0;
-        const _seenUrls = new Set();
-        ha.querySelectorAll('.stelle[data-url]').forEach(el => {
-            const u = el.dataset.url;
-            if (u && _seenUrls.has(u)) return;
-            if (u) _seenUrls.add(u);
-            _stellenUrsprung.push({ el, parent: el.parentNode, nextSibling: el.nextSibling });
-        });
-        _flatAktiv = true;
-        _aktualisiereFlach();
-        ha.style.display = 'none';
-        fa.style.display = 'block';
-    }
-    function _deaktiviereFlach() {
-        const ha = document.getElementById('hauptansicht');
-        const fa = document.getElementById('flat-ansicht');
-        for (let i = _stellenUrsprung.length - 1; i >= 0; i--) {
-            const {el, parent, nextSibling} = _stellenUrsprung[i];
-            if (nextSibling) parent.insertBefore(el, nextSibling);
-            else parent.appendChild(el);
-        }
-        _stellenUrsprung.length = 0;
-        _flatAktiv = false;
-        fa.style.display = 'none';
-        fa.innerHTML = '<div id="flat-ansicht-info"></div>';
-        ha.style.display = '';
-    }
-    function _aktualisiereFlach() {
-        const fa = document.getElementById('flat-ansicht');
-        _stellenUrsprung.forEach(({el}) => {
-            if (el.parentNode === fa) fa.removeChild(el);
-        });
-        let gefiltert = _stellenUrsprung.map(o => o.el);
-        if (_aktiverFirmaFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
-        }
-        if (_aktiverFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
-            // Vergabene/gelöschte Stellen aus Stufen-Filtern ausschließen (Status 0, 7, 8, 9)
-            const _inaktiveStatus = new Set([0, 7, 8, 9, 10]);
-            gefiltert = gefiltert.filter(el => {
-                const s = parseInt(el.dataset.scannerStatus);
-                return isNaN(s) || !_inaktiveStatus.has(s);
-            });
-        }
-        if (_aktiverStatusFilter !== null) {
-            gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
-        }
-        // Bei gesetztem Firmen-Filter sollen alle Stellen der Firma sichtbar sein –
-        // Geringer-Match/Zu-weit nur ausblenden, wenn keine Firma gewählt ist.
-        const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null;
-        if (!zeigeGM) {
-            gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
-        }
-        const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null;
-        if (!zeigeZW) {
-            gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
-        }
-        if (_nurNichtBewertet) {
-            const _unbewerteterStatus = new Set([1, 2, 3]);
-            gefiltert = gefiltert.filter(el => _unbewerteterStatus.has(parseInt(el.dataset.scannerStatus)));
-        }
-        if (_aktiveSortierung === 'score') {
-            gefiltert = gefiltert
-                .filter(el => !el.classList.contains('stelle-geloescht'))
-                .slice().sort((a, b) =>
-                    parseInt(b.dataset.score || '0') - parseInt(a.dataset.score || '0'));
-        } else if (_aktiveSortierung === 'auto') {
-            gefiltert = gefiltert
-                .filter(el => !el.classList.contains('stelle-geloescht'))
-                .slice().sort((a, b) =>
-                    (parseInt(a.dataset.autoMin) || 9999) - (parseInt(b.dataset.autoMin) || 9999));
-        } else if (_aktiveSortierung === 'transit') {
-            gefiltert = gefiltert
-                .filter(el => !el.classList.contains('stelle-geloescht'))
-                .slice().sort((a, b) =>
-                    (parseInt(a.dataset.transitMin) || 9999) - (parseInt(b.dataset.transitMin) || 9999));
-        }
-        const info = document.createElement('div');
-        info.id = 'flat-ansicht-info';
-        const filterText = {
-            beworben:     '✅ Beworben',
-            kennenlernen: '📞 Kennenlernen',
-            einladung:    '📅 Einladung',
-            zusage:       '🎉 Zusage',
-            absage:       '❌ Absage',
-        }[_aktiverFilter] || '';
-        const _stLabels = {4:'bewerben',5:'nicht bewerben',6:'Beworben, aktiv',7:'Beworben, Ghosting',8:'Absage erhalten',9:'Vergeben, nie beworben',10:'Nicht beworben'};
-        const statusText = _aktiverStatusFilter !== null ? ('Status: ' + (_stLabels[_aktiverStatusFilter] || _aktiverStatusFilter)) : '';
-        const firmaText = _aktiverFirmaFilter !== null ? ('🏢 ' + _aktiverFirmaFilter) : '';
-        const sortText = {
-            score:   '⭐ Nach Passung',
-            auto:    '🚗 Nach Entfernung (Auto)',
-            transit: '🚌 Nach Entfernung (ÖPNV)',
-        }[_aktiveSortierung] || '';
-        const nichtBewertetText = _nurNichtBewertet ? '❓ Nicht bewertet' : '';
-        info.textContent = [firmaText, filterText, statusText, sortText, nichtBewertetText].filter(Boolean).join(' · ')
-            + ` — ${gefiltert.length} Stelle${gefiltert.length !== 1 ? 'n' : ''}`;
-        fa.innerHTML = '';
-        fa.appendChild(info);
-        if (gefiltert.length === 0) {
-            const p = document.createElement('p');
-            p.className = 'leer';
-            p.textContent = 'Keine Stellen gefunden.';
-            fa.appendChild(p);
-        } else {
-            gefiltert.forEach(el => fa.appendChild(el));
-        }
-    }
-
-    async function stellePruefen(btn, url) {
-        const ergebnisEl = btn.nextElementSibling;
-        btn.disabled = true;
-        btn.textContent = '⏳ Prüfe...';
-        try {
-            const res = await fetch('/api/pruefe-stelle', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url})
-            });
-            const data = await res.json();
-            if (data.ergebnis === 'aktiv') {
-                ergebnisEl.textContent = '✅ Erreichbar';
-                ergebnisEl.style.color = '#27ae60';
-            } else if (data.ergebnis === 'vergaben') {
-                ergebnisEl.textContent = `❌ Nicht erreichbar (HTTP ${data.code})`;
-                ergebnisEl.style.color = '#e74c3c';
-            } else {
-                ergebnisEl.textContent = `❓ Unklar (HTTP ${data.code ?? '–'})`;
-                ergebnisEl.style.color = '#888';
-            }
-        } catch(e) {
-            ergebnisEl.textContent = '⚠️ Fehler';
-            ergebnisEl.style.color = '#e74c3c';
-        }
-        btn.disabled = false;
-        btn.textContent = '🔍 Neu prüfen';
-    }
-
-    async function nichtBeworben(btn, url) {
-        if (!confirm('Stelle als "Nicht beworben" markieren?')) return;
-        btn.disabled = true;
-        btn.textContent = '⏳...';
-        try {
-            await fetch(SERVER + '/status', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url, feld: 'nicht_beworben', wert: '1'})
-            });
-            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
-            if (el) aktualisiereStatusBadge(el, 10);
-            btn.textContent = '🚫 Nicht beworben';
-            btn.style.opacity = '0.5';
-        } catch(e) {
-            btn.disabled = false;
-            btn.textContent = '🚫 Nicht beworben';
-        }
-    }
-
-    async function vergebenMarkieren(btn, url) {
-        if (!confirm('Stelle manuell als "Vergeben" markieren? (z.B. weil die automatische Prüfung sie nicht erkennen kann)')) return;
-        btn.disabled = true;
-        btn.textContent = '⏳...';
-        try {
-            const res = await fetch(SERVER + '/vergeben-setzen', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url})
-            });
-            const data = await res.json();
-            if (!data.ok) {
-                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-                btn.disabled = false;
-                btn.textContent = '🗑️ Als vergeben markieren';
-                return;
-            }
-            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
-            if (el) aktualisiereStatusBadge(el, data.status);
-            btn.textContent = '🗑️ Vergeben markiert';
-            btn.style.opacity = '0.5';
-        } catch(e) {
-            alert('Server nicht erreichbar');
-            btn.disabled = false;
-            btn.textContent = '🗑️ Als vergeben markieren';
-        }
-    }
-
-    async function neueFirmaTesten() {
-        const url      = document.getElementById('firma-test-url').value.trim();
-        const name     = document.getElementById('firma-test-name').value.trim();
-        const checkbox = document.getElementById('firma-config-cb');
-        const output   = document.getElementById('scan-output');
-        const status   = document.getElementById('scan-status');
-
-        if (!url || !name) {
-            status.textContent = '⚠️ Karriere-URL und Firmenname sind Pflichtfelder';
-            return;
-        }
-
-        output.style.display = 'block';
-        output.textContent   = '';
-        status.textContent   = '⏳ Teste ' + name + '...';
-
-        let letzteZeile = '';
-
-        const params = new URLSearchParams({url, firmenname: name});
-        const quelle = new EventSource('/firmen-testen-stream?' + params.toString());
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                status.textContent = '✅ Test abgeschlossen';
-                if (checkbox.checked && letzteZeile.includes('✅')) {
-                    fetch('/firmen-config-hinzufuegen', {
-                        method:  'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body:    JSON.stringify({firmenname: name, url})
-                    }).then(r => r.json()).then(d => {
-                        output.textContent += d.ok
-                            ? '\\n✅ ' + name + ' zur config.txt hinzugefügt'
-                            : '\\n❌ config.txt Fehler: ' + (d.fehler || '');
-                        output.scrollTop = output.scrollHeight;
-                    }).catch(() => {
-                        output.textContent += '\\n❌ Netzwerkfehler beim Speichern in config.txt';
-                        output.scrollTop = output.scrollHeight;
-                    });
-                }
-                return;
-            }
-            letzteZeile = e.data;
-            output.textContent += e.data + '\\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            status.textContent = '❌ Verbindungsfehler zum Server';
-        };
-    }
-"""
+# CSS/JS liegen als eigene Dateien in report_assets/ (Syntax-Highlighting,
+# kleinere report.py). Status-Konstanten injiziert erstelle_report() ins HTML.
+ASSETS_DIR = BASIS_PFAD / "report_assets"
+CSS = (ASSETS_DIR / "report.css").read_text(encoding="utf-8")
+JS  = (ASSETS_DIR / "report.js").read_text(encoding="utf-8")
 
 
 # =============================================================================
@@ -1562,13 +534,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             status_counts[sv] = status_counts.get(sv, 0) + 1
 
     _dashboard_status = [
-        (4, "📋 bewerben"),
-        (5, "👎 nicht bewerben"),
-        (6, "✅ Beworben, aktiv"),
-        (7, "👻 Beworben, Ghosting"),
-        (8, "❌ Absage erhalten"),
-        (9, "🗑️ Vergeben, nie beworben"),
-        (10, "🚫 Nicht beworben"),
+        (sv, f"{STATUS_EMOJIS.get(sv, '')} {STATUS_LABELS[sv]}") for sv in FILTER_STATUS_VALS
     ]
     status_zeilen = " &nbsp;|&nbsp;\n        ".join(
         f'<strong id="stat-status-{sv}" style="cursor:pointer;text-decoration:underline dotted;" '
@@ -1577,12 +543,32 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         for sv, lbl in _dashboard_status
     )
 
+    # Vorgemerkte Stellen (1. fehlgeschlagener Erreichbarkeits-Check, werden beim
+    # nächsten vergaben_check-Lauf endgültig als vergeben markiert)
+    vorgemerkt_count = sum(1 for s in stellen if s.get("pruef_vormerken") and not s.get("geloescht_am"))
+    if vorgemerkt_count:
+        status_zeilen += (
+            ' &nbsp;|&nbsp;\n        '
+            f'<strong style="cursor:pointer;text-decoration:underline dotted;color:#ffc107;" '
+            f'title="Klick: nur Stellen mit unsicherer Verfügbarkeit anzeigen" '
+            f'onclick="document.getElementById(\'cb-vorgemerkt\').click()">{vorgemerkt_count}</strong> ⏳ Verfügbarkeit unsicher'
+        )
+
+    # Status-Konstanten aus status_def.py fürs JS bereitstellen (eine Quelle)
+    status_js_konstanten = (
+        f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
+        f"const INAKTIVE_STATUS = {json.dumps(list(INAKTIVE_STATUSWERTE))};\n"
+        f"const UNBEWERTETE_STATUS = {json.dumps(list(UNBEWERTETE_STATUSWERTE))};\n"
+        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};"
+    )
+
     html = f"""<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <title>Job-Scanner Report – {datum}</title>
     <style>{CSS}</style>
+    <script>{status_js_konstanten}</script>
     <script>{JS}</script>
 </head>
 <body>
@@ -1669,14 +655,14 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         )
 
     # Status-Filter-Buttons dynamisch aus vorhandenen Werten erzeugen
-    vorhandene_status_vals = sorted(set(v for v in bekannte_status.values() if v in _FILTER_STATUS_VALS))
+    vorhandene_status_vals = sorted(set(v for v in bekannte_status.values() if v in FILTER_STATUS_VALS))
     status_filter_gruppe = ""
     if vorhandene_status_vals:
         status_filter_gruppe = '<div class="filter-gruppe">\n'
         status_filter_gruppe += '            <span class="filter-label">Scanner-Status:</span>\n'
         status_filter_gruppe += '            <button id="btn-status-alle" class="filter-btn aktiv" onclick="setzeStatusFilter(null)">Alle</button>\n'
         for _sv in vorhandene_status_vals:
-            _lbl = _STATUS_LABELS.get(_sv, str(_sv))
+            _lbl = STATUS_LABELS.get(_sv, str(_sv))
             status_filter_gruppe += f'            <button class="filter-btn btn-scanner-status" data-status="{_sv}" onclick="setzeStatusFilter({_sv})">{_lbl}</button>\n'
         status_filter_gruppe += '        </div>\n'
 
@@ -1711,6 +697,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-nicht-bewertet" onchange="toggleNichtBewertet(this.checked)">
                 ❓ Nur nicht bewertet
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-vorgemerkt" onchange="toggleVorgemerkt(this.checked)">
+                ⏳ Nur Verfügbarkeit unsicher
             </label>
         </div>
         <div class="filter-gruppe">
@@ -2041,8 +1033,6 @@ def main():
     print("  REPORT  –  Schritt 4: HTML erstellen & Mail senden")
     print("=" * 60)
     config  = lade_config()
-    global RASPI_IP
-    RASPI_IP = config["raspi_ip"]
     from db import lade_alle_stellen, lade_bekannte_dict, upsert_stelle, exportiere_stellen_json, exportiere_bekannte_json, erstelle_schema as _erstelle_schema
     _erstelle_schema()
     stellen = lade_alle_stellen()
@@ -2051,13 +1041,16 @@ def main():
         print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
-    # Datenreparatur: geloescht_am löschen wenn Stelle laut DB noch aktiv ist
+    # Datenreparatur: geloescht_am löschen wenn Stelle laut DB noch aktiv ist.
+    # Inaktive Status (0,7,8,9,10) und 6 (beworben) sind ausgenommen – genau
+    # hier fehlte bis Juli 2026 die 9, wodurch vergebene Stellen bei jedem
+    # Report-Lauf ihr geloescht_am verloren und wieder "aktiv" wurden.
     bekannte = lade_bekannte_dict()
     repariert = 0
     for s in stellen:
         if s.get("geloescht_am") and not s.get("nicht_passend"):
             eintrag = bekannte.get(s["url"], {})
-            if eintrag.get("status", 0) not in (0, 6, 7, 8, 9):
+            if eintrag.get("status", 0) not in (6, *INAKTIVE_STATUSWERTE):
                 s["geloescht_am"] = None
                 repariert += 1
                 upsert_stelle({"url": s["url"], "geloescht_am": None})

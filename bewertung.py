@@ -23,7 +23,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config
+from utils import lade_config, standort_verboten
 
 
 # =============================================================================
@@ -126,10 +126,11 @@ def main():
     verbotene = config["verbotene_standorte"]
 
     def standort_ok(s: dict) -> bool:
-        arbeitsort = (s.get("arbeitsort") or "").lower()
+        arbeitsort = s.get("arbeitsort") or ""
         if not arbeitsort:
             return True
-        return not any(v in arbeitsort for v in verbotene)
+        # standort_verboten normalisiert Umlaute (München == Muenchen)
+        return not standort_verboten(arbeitsort, verbotene)
 
     # Stellen mit verbotenem Standort explizit als nicht_passend markieren
     zu_markieren = [
@@ -164,6 +165,7 @@ def main():
         and standort_ok(s)
         and not s.get("nicht_passend")
         and (args.url is None or s["url"] == args.url)
+        and (args.firma is None or s.get("firma") == args.firma)
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bewerten (Status 3)")
@@ -209,7 +211,8 @@ def main():
         else:
             print(f"  ⚠️  Bewertung fehlgeschlagen")
 
-        # Zwischenspeichern nach jeder Stelle
+    # JSON-Spiegel einmal am Ende aktualisieren (DB ist pro Stelle schon aktuell)
+    if zu_bearbeiten:
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
 

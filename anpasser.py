@@ -30,6 +30,10 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
+sys.path.insert(0, str(Path(__file__).parent))
+from utils import (lade_config, lade_json, sicherer_pfadname,
+                   extrahiere_abschnitt, ersetze_abschnitt)
+
 
 # =============================================================================
 # PFADE
@@ -40,91 +44,25 @@ STELLEN_JSON         = BASIS_PFAD / "stellen.json"
 VORLAGE_PFAD         = BASIS_PFAD / "lebenslauf_vorlage.txt"
 ANSCHREIBEN_VORLAGE  = BASIS_PFAD / "anschreiben_vorlage.txt"
 BEWERBUNGEN_DIR      = BASIS_PFAD / "bewerbungen"
-CONFIG_PFAD          = Path(__file__).parent / "config.txt"
 
-KI_MODELL  = "claude-sonnet-4-20250514"
+# claude-sonnet-4-20250514 wurde am 15.06.2026 abgeschaltet (HTTP 404) –
+# dadurch schlugen Anschreiben-Generierung und Lebenslauf-Anpassung still fehl.
+KI_MODELL  = "claude-sonnet-5"
 MIN_SCORE  = 70
-
-
-# =============================================================================
-# CONFIG
-# =============================================================================
-
-def _lese_config_block(inhalt: str, name: str) -> str:
-    """Extrahiert den Inhalt zwischen [name] und [\\name] aus config.txt."""
-    start_tag = f"[{name}]"
-    end_tag   = f"[\\{name}]"
-    start = inhalt.find(start_tag)
-    ende  = inhalt.find(end_tag)
-    if start == -1 or ende == -1:
-        return ""
-    return inhalt[start + len(start_tag):ende].strip()
-
-
-def lade_config() -> dict:
-    if not CONFIG_PFAD.exists():
-        print(f"❌ config.txt nicht gefunden: {CONFIG_PFAD}")
-        sys.exit(1)
-    inhalt = CONFIG_PFAD.read_text(encoding="utf-8")
-    result = {"api_key": "", "anschreiben_prompt": ""}
-    for zeile in inhalt.splitlines():
-        z = zeile.strip()
-        if z.upper().startswith("API_KEY"):
-            result["api_key"] = z.split("=", 1)[1].strip()
-    result["anschreiben_prompt"]    = _lese_config_block(inhalt, "anschreiben_prompt")
-    result["anschreiben_prompt_en"] = _lese_config_block(inhalt, "anschreiben_prompt_en")
-    return result
 
 
 # =============================================================================
 # HILFSFUNKTIONEN
 # =============================================================================
 
-def lade_json(pfad: Path, standard):
-    if pfad.exists():
-        try:
-            return json.loads(pfad.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return standard
-
-
-def sicherer_pfadname(text: str, max_len: int = 50) -> str:
-    bereinigt = re.sub(r'[^\w\s\-]', '', text).strip()
-    bereinigt = re.sub(r'\s+', '_', bereinigt)
-    return bereinigt[:max_len]
-
-
 def get_score(s: dict) -> int:
     b = s.get("bewertung") or {}
     return b.get("score_aktuell", b.get("score", 0))
 
 
-# =============================================================================
-# MARKER-LOGIK
-# =============================================================================
-
-def extrahiere_abschnitt(vorlage: str, marker: str) -> str | None:
-    """Gibt den Inhalt zwischen ---MARKER--- und ---/MARKER--- zurück."""
-    start = vorlage.find(f"---{marker}---")
-    ende  = vorlage.find(f"---/{marker}---")
-    if start == -1 or ende == -1:
-        return None
-    # Inhalt nach der öffnenden Marker-Zeile
-    inhalt_start = vorlage.find("\n", start) + 1
-    return vorlage[inhalt_start:ende].strip()
-
-
-def ersetze_abschnitt(vorlage: str, marker: str, neuer_inhalt: str) -> str:
-    """Ersetzt den Inhalt zwischen ---MARKER--- und ---/MARKER---."""
-    start_marker = f"---{marker}---"
-    ende_marker  = f"---/{marker}---"
-    start = vorlage.find(start_marker)
-    ende  = vorlage.find(ende_marker)
-    if start == -1 or ende == -1:
-        return vorlage  # Marker nicht gefunden → unverändert zurück
-    inhalt_start = vorlage.find("\n", start) + 1
-    return vorlage[:inhalt_start] + neuer_inhalt + "\n" + vorlage[ende:]
+def _antwort_text(antwort) -> str:
+    """Extrahiert den Text-Block aus einer API-Antwort (überspringt thinking-Blöcke)."""
+    return next((b.text for b in antwort.content if b.type == "text"), "").strip()
 
 
 def bestimme_relevante_marker(anpassungen: list) -> list:
@@ -198,9 +136,10 @@ Regeln:
         antwort = client.messages.create(
             model=KI_MODELL,
             max_tokens=2048,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
         )
-        return antwort.content[0].text.strip()
+        return _antwort_text(antwort) or None
     except Exception as e:
         print(f"  ❌ API-Fehler bei Abschnitt {abschnitt_name}: {e}")
         return None
@@ -232,41 +171,17 @@ _DUMMY_FIRMA = {
 }
 
 
-def lade_firma_anschreiben(firma_name: str) -> dict:
+def lade_firma_anschreiben(firma_name: str, config: dict) -> dict:
     """
-    Liest [firma_anschreiben] aus config.txt.
-    Findet den Eintrag per Teilstring-Match (case-insensitive).
+    Sucht die Adressdaten aus config["firma_anschreiben"] (Abschnitt
+    [firma_anschreiben] der config.txt) per Teilstring-Match (case-insensitive).
     Gibt Dummy-Werte zurück wenn kein Eintrag passt.
     """
-    if not CONFIG_PFAD.exists():
-        return _DUMMY_FIRMA.copy()
-
-    inhalt = CONFIG_PFAD.read_text(encoding="utf-8")
-    start  = inhalt.find("[firma_anschreiben]")
-    ende   = inhalt.find("[\\firma_anschreiben]")
-    if start == -1 or ende == -1:
-        return _DUMMY_FIRMA.copy()
-
-    sektion     = inhalt[start + len("[firma_anschreiben]"):ende]
     firma_lower = firma_name.lower()
-
-    for zeile in sektion.splitlines():
-        z = zeile.strip()
-        if not z or z.startswith("#"):
-            continue
-        teile = [t.strip() for t in z.split("|")]
-        if len(teile) != 6:
-            continue
-        eintrag_lower = teile[0].lower()
+    for name, daten in config.get("firma_anschreiben", {}).items():
+        eintrag_lower = name.lower()
         if eintrag_lower in firma_lower or firma_lower in eintrag_lower:
-            return {
-                "firmenname":      teile[0],
-                "abteilung":       teile[1],
-                "ansprechpartner": teile[2],
-                "strasse":         teile[3],
-                "plz":             teile[4],
-                "ort":             teile[5],
-            }
+            return daten
     return _DUMMY_FIRMA.copy()
 
 
@@ -317,13 +232,13 @@ def generiere_anschreiben(
     client,
     ordner: Path,
     sprache: str = "de",
-) -> bool:
+) -> str | None:
     """
     Erzeugt Anschreiben.txt im Zielordner.
     - EMPFAENGER, DATUM, BETREFF werden direkt befüllt (kein KI)
     - Alle Absätze in einem einzigen KI-Aufruf via config["anschreiben_prompt"]
     - Marker-Zeilen werden aus der gespeicherten Datei entfernt
-    Gibt True zurück wenn erfolgreich, False bei Fehler.
+    Gibt None zurück wenn erfolgreich, sonst eine Fehlermeldung.
     """
     prompt_key = "anschreiben_prompt_en" if sprache == "en" else "anschreiben_prompt"
     if not config.get(prompt_key):
@@ -331,9 +246,9 @@ def generiere_anschreiben(
         prompt_key = "anschreiben_prompt"
     if not config.get(prompt_key):
         print(f"  ⚠️  Kein [anschreiben_prompt] in config.txt – Anschreiben übersprungen")
-        return False
+        return "Kein [anschreiben_prompt] in config.txt"
 
-    firma_d = lade_firma_anschreiben(stelle.get("firma", ""))
+    firma_d = lade_firma_anschreiben(stelle.get("firma", ""), config)
 
     # --- EMPFAENGER direkt befüllen ---
     empfaenger = (
@@ -358,7 +273,7 @@ def generiere_anschreiben(
     aufgaben_pool = extrahiere_aufgaben_pool(lebenslauf_vorlage)
     if not aufgaben_pool:
         print(f"  ⚠️  Kein Aufgaben-Pool in lebenslauf_vorlage – Anschreiben übersprungen")
-        return False
+        return "Kein Aufgaben-Pool in der Lebenslauf-Vorlage gefunden"
 
     # --- KI-Prompt aus config befüllen ---
     b = stelle.get("bewertung") or {}
@@ -372,18 +287,33 @@ def generiere_anschreiben(
     prompt = prompt.replace("{score_begruendung}", score_begruendung or "(keine Angaben)")
     prompt = prompt.replace("{aufgaben_pool}",     aufgaben_pool)
 
-    # --- Einmaliger KI-Aufruf ---
-    try:
-        antwort = client.messages.create(
-            model=KI_MODELL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text   = re.sub(r"```json|```", "", antwort.content[0].text.strip()).strip()
-        inhalt = json.loads(text)
-    except Exception as e:
-        print(f"  ❌ API-Fehler Anschreiben: {e}")
-        return False
+    # --- KI-Aufruf (1 Retry bei kaputtem JSON) ---
+    inhalt = None
+    letzter_fehler = ""
+    for versuch in (1, 2):
+        try:
+            antwort = client.messages.create(
+                model=KI_MODELL,
+                max_tokens=2048,
+                thinking={"type": "disabled"},
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = re.sub(r"```json|```", "", _antwort_text(antwort)).strip()
+            # Nur das JSON-Objekt parsen, falls die KI Text drumherum schreibt
+            start, ende = text.find("{"), text.rfind("}") + 1
+            if start != -1 and ende > start:
+                text = text[start:ende]
+            inhalt = json.loads(text)
+            break
+        except json.JSONDecodeError as e:
+            letzter_fehler = f"KI-Antwort war kein gültiges JSON: {e}"
+            print(f"  ⚠️  {letzter_fehler} (Versuch {versuch}/2)")
+        except Exception as e:
+            letzter_fehler = f"API-Fehler: {e}"
+            print(f"  ❌ API-Fehler Anschreiben: {e}")
+            break
+    if inhalt is None:
+        return letzter_fehler or "Anschreiben-Generierung fehlgeschlagen"
 
     # --- Vorlage befüllen ---
     # ABSENDER, GRUSS, ANLAGEN bleiben unverändert aus der Vorlage
@@ -401,7 +331,7 @@ def generiere_anschreiben(
     ziel = ordner / "Anschreiben.txt"
     ziel.write_text(angepasst, encoding="utf-8")
     print(f"  ✅ Anschreiben.txt gespeichert")
-    return True
+    return None
 
 
 # =============================================================================
@@ -477,6 +407,7 @@ def passe_stelle_an(url: str) -> dict:
 
     # Anschreiben-Vorlage je nach Sprache wählen
     as_ziel = ordner / "Anschreiben.txt"
+    anschreiben_fehler = None
     if not as_ziel.exists():
         if sprache == "en":
             as_vorlage_pfad = BASIS_PFAD / "anschreiben_vorlage_en.txt"
@@ -487,11 +418,13 @@ def passe_stelle_an(url: str) -> dict:
 
         if not as_vorlage_pfad.exists():
             print(f"  ⚠️  anschreiben_vorlage.txt nicht gefunden – Anschreiben übersprungen")
+            anschreiben_fehler = "anschreiben_vorlage.txt nicht gefunden"
         else:
             as_vorlage = as_vorlage_pfad.read_text(encoding="utf-8")
-            generiere_anschreiben(stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
+            anschreiben_fehler = generiere_anschreiben(
+                stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
 
-    return {"ok": True, "pfad": str(ziel)}
+    return {"ok": True, "pfad": str(ziel), "anschreiben_fehler": anschreiben_fehler}
 
 
 # =============================================================================

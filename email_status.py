@@ -22,15 +22,14 @@ import email.message
 import re
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import db
+from utils import lade_config as _lade_zentrale_config
 
 # =============================================================================
 # KONFIGURATION
 # =============================================================================
 
-CONFIG_PFAD  = Path(__file__).parent / "config.txt"
 IMAP_HOST    = "imap.mail.me.com"
 IMAP_PORT    = 993
 TAGE_ZURUECK = 10   # Wie viele Tage zurück gesucht wird
@@ -83,47 +82,17 @@ def lade_config() -> tuple[dict, dict]:
     Gibt zurück:
       - basis: dict mit email_absender, email_passwort
       - firma_domains: dict  Firmenname -> Domain  (aus [firma_domains])
+    Nutzt den zentralen Config-Parser aus utils.py.
     """
-    if not CONFIG_PFAD.exists():
-        print(f"Fehler: config.txt nicht gefunden: {CONFIG_PFAD}")
-        sys.exit(1)
-
-    basis = {"email_absender": "", "email_passwort": ""}
-    firma_domains: dict[str, str] = {}
-    in_abschnitt = False
-
-    for zeile in CONFIG_PFAD.read_text(encoding="utf-8").splitlines():
-        z = zeile.strip()
-        if not z or z.startswith("#"):
-            continue
-
-        if z.lower() == "[firma_domains]":
-            in_abschnitt = True
-            continue
-        if z.lower() == r"[\firma_domains]":
-            in_abschnitt = False
-            continue
-
-        if in_abschnitt:
-            if "=" in z:
-                firma, _, domain = z.partition("=")
-                firma_domains[firma.strip()] = domain.strip().lower()
-            continue
-
-        if "=" in z:
-            key, _, val = z.partition("=")
-            key = key.strip().upper()
-            val = val.strip()
-            if key == "EMAIL_ABSENDER":
-                basis["email_absender"] = val
-            elif key == "EMAIL_PASSWORT":
-                basis["email_passwort"] = val
-
+    config = _lade_zentrale_config()
+    basis = {
+        "email_absender": config["email_absender"],
+        "email_passwort": config["email_passwort"],
+    }
     if not basis["email_absender"] or not basis["email_passwort"]:
         print("Fehler: E-Mail-Zugangsdaten fehlen in config.txt")
         sys.exit(1)
-
-    return basis, firma_domains
+    return basis, config["firma_domains"]
 
 
 # =============================================================================

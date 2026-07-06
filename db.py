@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import normalisiere_url
+from status_def import INAKTIVE_STATUSWERTE, status_fuer_stufe
 
 
 DB_PFAD = Path(__file__).parent / "jobscanner.db"
@@ -59,11 +60,13 @@ def erstelle_schema():
             CREATE TABLE IF NOT EXISTS bewertungen (
                 url                    TEXT PRIMARY KEY,
                 score                  INTEGER,
+                score_nach_anpassung   INTEGER,
                 empfehlung             TEXT,
                 score_begruendung      TEXT,
                 staerken               TEXT,
                 luecken                TEXT,
                 lebenslauf_anpassungen TEXT,
+                sprache                TEXT,
                 bewertet_am            TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
             );
@@ -118,6 +121,8 @@ def _migriere_schema():
         "ALTER TABLE bewerbungsstatus ADD COLUMN kommentar TEXT",
         "ALTER TABLE stellen ADD COLUMN pruef_vormerken TEXT",
         "ALTER TABLE bewerbungsstatus ADD COLUMN nicht_beworben_grund TEXT",
+        "ALTER TABLE bewertungen ADD COLUMN score_nach_anpassung INTEGER",
+        "ALTER TABLE bewertungen ADD COLUMN sprache TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -272,25 +277,29 @@ def upsert_bewertung(url: str, b: dict):
     with verbindung() as con:
         con.execute("""
             INSERT INTO bewertungen
-                (url, score, empfehlung, score_begruendung,
-                 staerken, luecken, lebenslauf_anpassungen, bewertet_am)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (url, score, score_nach_anpassung, empfehlung, score_begruendung,
+                 staerken, luecken, lebenslauf_anpassungen, sprache, bewertet_am)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 score                  = excluded.score,
+                score_nach_anpassung   = excluded.score_nach_anpassung,
                 empfehlung             = excluded.empfehlung,
                 score_begruendung      = excluded.score_begruendung,
                 staerken               = excluded.staerken,
                 luecken                = excluded.luecken,
                 lebenslauf_anpassungen = excluded.lebenslauf_anpassungen,
+                sprache                = excluded.sprache,
                 bewertet_am            = excluded.bewertet_am
         """, (
             url,
             b.get("score", 0),
+            b.get("score_nach_anpassung"),
             b.get("empfehlung", ""),
             b.get("score_begruendung", ""),
             json.dumps(b.get("staerken", []),               ensure_ascii=False),
             json.dumps(b.get("luecken", []),                ensure_ascii=False),
             json.dumps(b.get("lebenslauf_anpassungen", []), ensure_ascii=False),
+            b.get("sprache") or "de",
             datetime.now().strftime("%Y-%m-%d %H:%M"),
         ))
 
@@ -312,36 +321,13 @@ def reset_stelle_fuer_neuverarbeitung(url: str):
         """, (url,))
 
 
-def _status_bei_vergabe(url: str, con) -> int:
+def status_bei_vergabe(url: str, con) -> int:
     """Bestimmt den korrekten Vergabe-Status anhand der Bewerbungsstufe."""
     row = con.execute(
         "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (url,)
     ).fetchone()
     stufe = (row["stufe"] if row else "") or ""
-    if stufe in ("beworben", "kennenlernen", "einladung"):
-        return 7
-    if stufe in ("absage", "zusage"):
-        return 8
-    return 9
-
-
-def stelle_als_geloescht_markieren(url: str, zeitstempel: str):
-    with verbindung() as con:
-        alter_status = con.execute(
-            "SELECT status FROM stellen WHERE url = ?", (url,)
-        ).fetchone()
-        neuer_status = _status_bei_vergabe(url, con)
-        if alter_status:
-            con.execute("""
-                INSERT INTO status_historie
-                    (url, status_alt, status_neu, geaendert_am)
-                VALUES (?, ?, ?, ?)
-            """, (url, alter_status["status"], neuer_status, zeitstempel))
-        con.execute("""
-            UPDATE stellen
-            SET status = ?, geloescht_am = ?, neu = 0
-            WHERE url = ?
-        """, (neuer_status, zeitstempel, url))
+    return status_fuer_stufe(stufe)
 
 
 _STATUS_PRIO = {6: 10, 5: 8, 4: 7, 7: 6, 8: 5, 9: 4, 10: 3, 3: 3, 2: 2, 1: 1, 0: 0}
@@ -352,6 +338,7 @@ def repariere_inkonsistente_status():
     Läuft bei jedem vergaben_check-Start. Behebt:
     1. status=0 + aktive Bewerbung → status=7/8 (Ghosting/Absage)
     2. status in (1-5) + stufe='beworben' + nicht gelöscht → status=6
+    2b. vergaben_bestaetigt=1 + wieder aktiv → zurück auf Vergabe-Status
     3. URL-Duplikate (trailing slash) → beste Version behalten
     4. Titel+Firma-Duplikate → beste Version behalten, Bewerbungsstatus migrieren
     """
@@ -379,6 +366,28 @@ def repariere_inkonsistente_status():
             WHERE status IN (1,2,3,4,5) AND geloescht_am IS NULL
               AND url IN (SELECT url FROM bewerbungsstatus WHERE stufe = 'beworben')
         """)
+
+        # 2b. Bestätigt vergebene Stellen, die fälschlich wieder aktiv sind
+        #     (vergaben_bestaetigt=1 setzt nur der Vergaben-Check nach doppelter
+        #     Bestätigung bzw. eine manuelle Markierung; eine reguläre
+        #     Reaktivierung durch scanner.py setzt das Flag zurück). Solche
+        #     Zombie-Stellen entstehen z.B. durch Alt-Skripte, die Status/
+        #     geloescht_am ohne Historie überschrieben haben.
+        betroffene = con.execute("""
+            SELECT url, status FROM stellen
+            WHERE vergaben_bestaetigt = 1 AND geloescht_am IS NULL
+              AND status IN (1,2,3,4,5)
+        """).fetchall()
+        for r in betroffene:
+            neu_st = status_bei_vergabe(r["url"], con)
+            con.execute(
+                "UPDATE stellen SET status = ?, geloescht_am = ?, pruef_vormerken = NULL WHERE url = ?",
+                (neu_st, ts, r["url"]))
+            con.execute("""
+                INSERT INTO status_historie (url, status_alt, status_neu, geaendert_am)
+                VALUES (?, ?, ?, ?)
+            """, (r["url"], r["status"], neu_st, ts))
+            print(f"  🧹 Bestätigt vergebene Stelle war wieder aktiv → Status {neu_st}: {r['url'][:80]}")
 
         # 3+4. Duplikate bereinigen (trailing slash + gleicher Titel+Firma)
         alle = con.execute("""
@@ -561,8 +570,8 @@ def lade_alle_stellen() -> list[dict]:
                 s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
                 s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken,
-                b.score, b.empfehlung, b.score_begruendung,
-                b.staerken, b.luecken, b.lebenslauf_anpassungen,
+                b.score, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
+                b.staerken, b.luecken, b.lebenslauf_anpassungen, b.sprache,
                 b.bewertet_am
             FROM stellen s
             LEFT JOIN bewertungen b ON s.url = b.url
@@ -575,11 +584,13 @@ def lade_alle_stellen() -> list[dict]:
         if r["score"] is not None:
             bewertung = {
                 "score":                  r["score"],
+                "score_nach_anpassung":   r["score_nach_anpassung"],
                 "empfehlung":             r["empfehlung"],
                 "score_begruendung":      r["score_begruendung"],
                 "staerken":               json.loads(r["staerken"] or "[]"),
                 "luecken":                json.loads(r["luecken"] or "[]"),
                 "lebenslauf_anpassungen": json.loads(r["lebenslauf_anpassungen"] or "[]"),
+                "sprache":                r["sprache"] or "de",
             }
         steckbrief = None
         if r["steckbrief"]:
@@ -635,31 +646,12 @@ def lade_bekannte_dict() -> dict:
     }
 
 
-def url_bekannt(url: str) -> bool:
-    with verbindung() as con:
-        r = con.execute(
-            "SELECT 1 FROM stellen WHERE url = ?", (url,)
-        ).fetchone()
-    return r is not None
-
-
 def status_von(url: str) -> int | None:
     with verbindung() as con:
         r = con.execute(
             "SELECT status FROM stellen WHERE url = ?", (url,)
         ).fetchone()
     return r["status"] if r else None
-
-
-INAKTIVE_STATUSWERTE = (0, 7, 8, 9, 10)
-
-def alle_aktiven_urls() -> set:
-    with verbindung() as con:
-        rows = con.execute(
-            f"SELECT url FROM stellen WHERE status NOT IN ({','.join('?'*len(INAKTIVE_STATUSWERTE))})",
-            INAKTIVE_STATUSWERTE
-        ).fetchall()
-    return {r["url"] for r in rows}
 
 
 # =============================================================================
@@ -737,27 +729,28 @@ def _status_aus_dict(s: dict) -> int:
 # =============================================================================
 
 def statistik() -> dict:
+    inaktiv_sql = ",".join(str(s) for s in INAKTIVE_STATUSWERTE)
     with verbindung() as con:
         gesamt   = con.execute("SELECT COUNT(*) FROM stellen").fetchone()[0]
-        aktiv    = con.execute("SELECT COUNT(*) FROM stellen WHERE status NOT IN (0,7,8,9)").fetchone()[0]
-        vergeben = con.execute("SELECT COUNT(*) FROM stellen WHERE status IN (0,7,8,9)").fetchone()[0]
+        aktiv    = con.execute(f"SELECT COUNT(*) FROM stellen WHERE status NOT IN ({inaktiv_sql})").fetchone()[0]
+        vergeben = con.execute(f"SELECT COUNT(*) FROM stellen WHERE status IN ({inaktiv_sql})").fetchone()[0]
         bewertet = con.execute("SELECT COUNT(*) FROM bewertungen").fetchone()[0]
         beworben = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 6").fetchone()[0]
         verg_bew = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 7").fetchone()[0]
         absagen  = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 8").fetchone()[0]
         verg_nie = con.execute("SELECT COUNT(*) FROM stellen WHERE status = 9").fetchone()[0]
-        top      = con.execute("""
+        top      = con.execute(f"""
             SELECT s.firma, s.titel, s.url, b.score, b.empfehlung
             FROM stellen s
             JOIN bewertungen b ON s.url = b.url
-            WHERE s.status NOT IN (0,7,8,9)
+            WHERE s.status NOT IN ({inaktiv_sql})
             ORDER BY b.score DESC
             LIMIT 10
         """).fetchall()
-        pro_firma = con.execute("""
+        pro_firma = con.execute(f"""
             SELECT firma, COUNT(*) as anzahl
             FROM stellen
-            WHERE status NOT IN (0,7,8,9)
+            WHERE status NOT IN ({inaktiv_sql})
             GROUP BY firma
             ORDER BY anzahl DESC
         """).fetchall()

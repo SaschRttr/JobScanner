@@ -302,10 +302,13 @@ def main():
             stellen[idx]["status"] = 1
             upsert_stelle({"url": url, "rohtext": None, "status": 1})
 
-        # Zwischenspeichern nach jeder Stelle
+        # Gelernte Struktur sofort sichern (kleine Datei, wertvoller Lernfortschritt);
+        # die großen JSON-Spiegel erst am Ende – die DB ist pro Stelle schon aktuell.
+        speichere_json(STRUKTUREN_JSON, strukturen)
+
+    if zu_bearbeiten:
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
-        speichere_json(STRUKTUREN_JSON, strukturen)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

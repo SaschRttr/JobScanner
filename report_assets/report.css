@@ -1,0 +1,181 @@
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        max-width: 960px; margin: 40px auto; padding: 0 20px;
+        background: #f5f5f5; color: #333;
+    }
+    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #2c3e50; margin-top: 30px; }
+    .firma-block {
+        background: white; border-radius: 8px; padding: 20px;
+        margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stelle {
+        border-left: 4px solid #3498db; padding: 10px 15px;
+        margin: 10px 0; background: #f8f9fa; border-radius: 0 4px 4px 0;
+    }
+    .stelle a {
+        color: #2980b9; text-decoration: none; font-weight: bold; font-size: 1.05em;
+    }
+    .stelle a:hover { text-decoration: underline; }
+    .stelle-neu      { background: #f3e8fd; border-left-color: #8e44ad; }
+    .stelle-geloescht { background: #f0f0f0; border-left-color: #aaa; opacity: 0.7; }
+    .stelle.beworben      { background: #fff9c4; border-left-color: #f1c40f; }
+    .stelle.kennenlernen  { background: #ddeeff; border-left-color: #2980b9; }
+    .stelle.einladung     { background: #ddeeff; border-left-color: #2980b9; }
+    .stelle.zusage        { background: #d5f5e3; border-left-color: #27ae60; }
+    .stelle.absage        { background: #fde8e8; border-left-color: #e74c3c; }
+    .stelle-bewerbung { background: #d6eaf8; border-left-color: #2980b9; }
+    .stelle-zu-weit { background: #fef5e4; border-left-color: #e67e22; }
+    .stelle.mit-aktivitaet { background: #fefaf0; border-left-color: #e8c547; }
+    .tags { margin-top: 5px; }
+    .tag {
+        display: inline-block; background: #e8f4fd; color: #2980b9;
+        padding: 2px 8px; border-radius: 12px; font-size: 0.8em; margin: 2px;
+    }
+    .badge {
+        padding: 2px 8px; border-radius: 10px;
+        font-size: 0.8em; margin-left: 8px; color: white;
+    }
+    .badge-neu { background: #e74c3c; }
+    .badge-weg { background: #aaa; }
+    .badge-zu-weit { background: #e67e22; }
+    .firma-label { color: #999; font-size: 0.85em; }
+    .firma-label-auto { display: none; color: #999; font-size: 0.85em; }
+    #flat-ansicht .firma-label-auto { display: inline; }
+    .standort-label { color: #888; font-size: 0.82em; margin-left: 6px; }
+    .fahrzeit-info { font-size: 0.82em; color: #555; margin: 3px 0 2px 0; }
+    .fahrzeit-unbekannt { color: #aaa; font-style: italic; }
+    .fahrzeit-hinweis { color: #aaa; font-size: 0.9em; }
+    .fahrzeit-maps { text-decoration: none; margin-left: 4px; }
+    .np-grund-label {
+        font-size: 0.82em; color: #c0392b; margin: 3px 0 2px 0;
+        background: #fdecea; border-radius: 4px; padding: 2px 6px;
+        display: inline-block;
+    }
+    .bewertung {
+        margin-top: 10px; padding: 10px; background: #fff;
+        border-radius: 6px; font-size: 0.9em;
+    }
+    .bewertung details { margin-top: 8px; }
+    .stellentext-details { margin-top: 8px; }
+    .stellentext-details summary {
+        cursor: pointer; color: #555; font-size: 0.9em;
+        padding: 4px 0; user-select: none;
+    }
+    .stellentext-inhalt {
+        margin-top: 8px; padding: 12px; background: #fff;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 0.85em; line-height: 1.6; color: #333;
+        max-height: 400px; overflow-y: auto;
+        white-space: pre-wrap;
+    }
+    .begruendung { color: #555; }
+    .notizen { margin-top: 8px; }
+    .notizen summary { cursor: pointer; color: #888; font-size: 0.85em; }
+    .kommentar, .nicht-beworben-grund {
+        width: 100%; margin-top: 4px; font-size: 0.85em;
+        border: 1px solid #ddd; border-radius: 4px; padding: 4px;
+        box-sizing: border-box;
+    }
+    .summary-box {
+        background: #2c3e50; color: white; padding: 15px 20px;
+        border-radius: 8px; margin-bottom: 20px;
+    }
+    .summary-box strong { color: #3498db; }
+    .leer { color: #999; font-style: italic; }
+    .stufen-select {
+        font-size: 0.85em; padding: 3px 6px; border-radius: 4px;
+        border: 1px solid #ccc; cursor: pointer; margin-bottom: 6px;
+        background: white;
+    }
+    .stufen-ts {
+        font-size: 0.78em; color: #888; margin-left: 6px;
+    }
+    .steckbrief-details { margin-top: 8px; }
+    .steckbrief-details summary {
+        cursor: pointer; color: #555; font-size: 0.9em;
+        padding: 4px 0; user-select: none;
+    }
+    .steckbrief-inhalt {
+        margin-top: 8px; padding: 12px; background: #fff;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 0.85em; line-height: 1.6; color: #333;
+    }
+    .pruef-btn {
+        margin-top: 8px; background: none; border: 1px solid #aaa;
+        border-radius: 4px; padding: 3px 10px; cursor: pointer;
+        font-size: 0.82em; color: #555;
+    }
+    .pruef-btn:hover { background: #eee; }
+    .pruef-vormerken-badge {
+        display: inline-block; background: #fff3cd; color: #856404;
+        border: 1px solid #ffc107; border-radius: 4px;
+        padding: 2px 8px; font-size: 0.8em; margin-left: 6px;
+    }
+    .pruef-ergebnis {
+        display: inline-block; font-size: 0.82em; margin-left: 10px; font-weight: bold;
+    }
+    .steckbrief-btn {
+        margin-top: 8px; background: none; color: inherit;
+        border: none; padding: 0; font-size: 0.85em;
+        cursor: pointer; text-decoration: none;
+    }
+    .steckbrief-btn:disabled { color: #aaa; cursor: not-allowed; }
+    .scanner-status {
+        display: inline-block; font-size: 0.72em; font-weight: 600;
+        padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+        vertical-align: middle; color: white; cursor: default;
+    }
+    .scanner-status-0 { background: #95a5a6; }
+    .scanner-status-1 { background: #bdc3c7; color: #555; }
+    .scanner-status-2 { background: #85c1e9; }
+    .scanner-status-3 { background: #5dade2; }
+    .scanner-status-4 { background: #27ae60; }
+    .scanner-status-5 { background: #e67e22; }
+    .scanner-status-6 { background: #f1c40f; color: #555; }
+    .scanner-status-7 { background: #e67e22; }
+    .scanner-status-8 { background: #e74c3c; }
+    .scanner-status-9  { background: #7f8c8d; }
+    .scanner-status-10 { background: #c0392b; }
+    .scan-box {
+        background: white; border-radius: 8px; padding: 20px;
+        margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    .scan-btn {
+        background: #3498db; color: white; border: none;
+        padding: 12px 28px; border-radius: 6px; font-size: 1em;
+        cursor: pointer;
+    }
+    .scan-btn:hover  { background: #2980b9; }
+    .scan-btn:disabled { background: #aaa; cursor: not-allowed; }
+    #scan-output {
+        text-align: left; background: #1e1e1e; color: #d4d4d4;
+        border-radius: 6px; padding: 15px; margin-top: 15px;
+        font-size: 0.85em; max-height: 400px; overflow-y: auto;
+        display: none; white-space: pre-wrap;
+    }
+    #scan-status { margin-top: 10px; font-size: 0.95em; color: #555; }
+    .filter-bar {
+        background: white; border-radius: 8px; padding: 12px 20px;
+        margin: 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+    }
+    .filter-gruppe { display: flex; gap: 6px; align-items: center; }
+    .filter-label { font-size: 0.85em; color: #666; font-weight: 600; margin-right: 2px; }
+    .filter-btn {
+        background: #f0f0f0; color: #555; border: 1px solid #ddd;
+        padding: 5px 14px; border-radius: 16px; font-size: 0.85em;
+        cursor: pointer; white-space: nowrap;
+    }
+    .filter-btn:hover { background: #e0e0e0; }
+    .filter-btn.aktiv { background: #3498db; color: white; border-color: #2980b9; }
+    #flat-ansicht {
+        background: white; border-radius: 8px; padding: 20px;
+        margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #flat-ansicht-info {
+        font-size: 0.85em; color: #666; margin-bottom: 12px;
+        padding-bottom: 8px; border-bottom: 1px solid #eee; font-weight: 600;
+    }

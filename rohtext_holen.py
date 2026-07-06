@@ -21,17 +21,12 @@ Status-Übergänge:
 """
 
 import argparse
-import platform
 import sys
-import urllib.request
-import io
 from pathlib import Path
 
 BASIS_PFAD   = Path(__file__).parent
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
 BEKANNTE_JSON = BASIS_PFAD / "bekannte_stellen.json"
-
-MIN_ROHTEXT_LAENGE = 500   # alles kürzer gilt als unvollständig
 
 try:
     from playwright.sync_api import sync_playwright
@@ -39,36 +34,16 @@ except ImportError:
     print("playwright nicht installiert: pip install playwright && playwright install chromium")
     sys.exit(1)
 
-try:
-    from playwright_stealth import Stealth
-    STEALTH_OK = True
-except ImportError:
-    STEALTH_OK = False
-
-try:
-    import pypdf
-    PYPDF_OK = True
-except ImportError:
-    PYPDF_OK = False
-
-from utils import klick_cookie_banner, jetzt
+from utils import klick_cookie_banner
+from browser import (
+    MIN_ROHTEXT_LAENGE, lade_pdf_text,
+    starte_browser, neuer_context, neue_seite,
+)
 
 
 # =============================================================================
 # ROHTEXT LADEN
 # =============================================================================
-
-BROWSER_ARGS = [
-    "--no-sandbox",
-    "--disable-gpu",
-    "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
-]
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
 
 # Domain-spezifische Wartezeiten (ms) für SPAs die lange zum Rendern brauchen
 _WARTE_MS: dict[str, int] = {
@@ -85,22 +60,6 @@ def _warte_fuer(url: str) -> int:
         if domain_teil in url:
             return ms
     return _WARTE_MS_DEFAULT
-
-
-def _lade_pdf(url: str) -> str | None:
-    if not PYPDF_OK:
-        print(f"  ⚠️  pypdf nicht installiert – PDF übersprungen")
-        return None
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = resp.read()
-        reader = pypdf.PdfReader(io.BytesIO(data))
-        text = "\n".join(p.extract_text() or "" for p in reader.pages)
-        return text or None
-    except Exception as e:
-        print(f"  ❌ PDF-Fehler: {e}")
-        return None
 
 
 def _url_anpassen(url: str) -> str:
@@ -155,7 +114,7 @@ def lade_rohtext_playwright(page, url: str) -> str | None:
     Gibt None zurück wenn die Seite nicht geladen werden konnte.
     """
     if url.lower().endswith(".pdf"):
-        return _lade_pdf(url)
+        return lade_pdf_text(url)
 
     lade_url = _url_anpassen(url)
     warte_ms  = _warte_fuer(lade_url)
@@ -259,41 +218,16 @@ def main():
     fehler     = 0
 
     with sync_playwright() as p:
-        if platform.system() == "Linux":
-            browser = p.chromium.launch(
-                headless=True,
-                executable_path="/usr/bin/chromium-browser",
-                args=BROWSER_ARGS,
-            )
-        else:
-            browser = p.chromium.launch(
-                headless=True,
-                args=BROWSER_ARGS,
-            )
-
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            locale="de-DE",
-            user_agent=USER_AGENT,
-            extra_http_headers={
-                "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-User": "?1",
-                "Sec-Fetch-Dest": "document",
-                "Upgrade-Insecure-Requests": "1",
-            },
-        )
-        page = context.new_page()
-        if STEALTH_OK:
-            try:
-                Stealth().apply_stealth_sync(page)
-            except Exception:
-                pass
-        page.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
+        browser = starte_browser(p)
+        context = neuer_context(browser, extra_headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Upgrade-Insecure-Requests": "1",
+        })
+        page = neue_seite(context)
 
         for idx, stelle in zu_laden:
             url    = stelle["url"]
@@ -328,8 +262,6 @@ def main():
                     "titel":  stellen[idx]["titel"],
                     "status": neuer_status,
                 })
-                exportiere_stellen_json(STELLEN_JSON)
-                exportiere_bekannte_json(BEKANNTE_JSON)
 
             elif rohtext:
                 # Geladen aber zu kurz (z.B. Login-Wall, leere SPA)
@@ -345,6 +277,12 @@ def main():
                     upsert_stelle({"url": url, "nicht_ladbar": True})
 
         browser.close()
+
+    # JSON-Spiegel einmal am Ende aktualisieren (die DB ist pro Stelle schon
+    # aktuell; der Export der großen stellen.json nach jeder Stelle war unnötig
+    # teuer, v.a. auf SD-Karte).
+    exportiere_stellen_json(STELLEN_JSON)
+    exportiere_bekannte_json(BEKANNTE_JSON)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

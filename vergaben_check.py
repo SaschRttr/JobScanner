@@ -4,9 +4,8 @@ vergaben_check.py  –  Schritt 1c: Erreichbarkeits-Prüfung
 Prüft per HTTP ob bekannte aktive Stellen noch aufrufbar sind.
 
 Geprüfte Jobs:
-  • status in (1, 2, 3, 4, 5, 6) AND geloescht_am IS NULL
-  • nur wenn Domain auch in diesem Lauf gescannt wurde (Schutz gegen Fehlmarkierung)
-  • aktive Bewerbungen (status=6) werden immer geprüft
+  • status in (1, 2, 3, 4, 5, 6) AND geloescht_am IS NULL AND nicht nicht_passend
+  • --alle prüft zusätzlich alle nicht gelöschten Stellen unabhängig vom Status
 
 Ergebnis pro URL:
   HTTP 200 + kein Closed-Marker  → kein Urteil (Stelle aktiv)
@@ -36,6 +35,11 @@ from urllib.parse import urlparse
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
+sys.path.insert(0, str(Path(__file__).parent))
+from utils import jetzt
+from browser import USER_AGENT
+from status_def import status_fuer_stufe
 
 BASIS_PFAD          = Path(__file__).parent
 STELLEN_JSON        = BASIS_PFAD / "stellen.json"
@@ -93,12 +97,6 @@ _NOTFOUND_URL_MARKERS = ["notfound", "not-found", "job-not-found"]
 # wird trotzdem ein großer Puffer gelesen, nur eben nicht für die generischen
 # Marker oben ausgewertet.
 _MAX_BODY_BYTES = 2_000_000
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
 
 
 # =============================================================================
@@ -260,17 +258,10 @@ def main():
     except Exception:
         bewerb_stufen_map = {}
 
-    _aktive_stufen = {"beworben", "kennenlernen", "einladung"}
-
     def status_bei_vergabe(url: str) -> int:
-        stufe = bewerb_stufen_map.get(url, "")
-        if stufe in _aktive_stufen:
-            return 7
-        if stufe in ("absage", "zusage"):
-            return 8
-        return 9
+        return status_fuer_stufe(bewerb_stufen_map.get(url, ""))
 
-    ts = __import__("utils").jetzt()
+    ts = jetzt()
 
     # Manuelle Overrides (manuell_vergeben.txt) sofort verarbeiten - hier hat
     # ein Mensch schon geprüft, daher ohne die übliche Zwei-Läufe-Bestätigung.
@@ -304,7 +295,7 @@ def main():
     if args.url:
         kandidaten = [args.url] if args.url in bekannte else []
         if not kandidaten:
-            print(f"  ⚠️  URL nicht in bekannte_stellen.json gefunden")
+            print(f"  ⚠️  URL nicht in der Datenbank gefunden")
             return
     elif args.alle:
         kandidaten = [
