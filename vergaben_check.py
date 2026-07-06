@@ -13,9 +13,9 @@ Ergebnis pro URL:
   HTTP 200 + Closed-Marker       → status=9 / vergaben
   HTTP 200 + Domain-Wechsel      → status=9 / vergaben
   HTTP 200 + Redirect auf Root   → status=9 / vergaben
-  HTTP 404 / 410 / 0             → status=9 / vergaben
+  HTTP 404 / 410 / 0             → status=9 / vergaben (nach 2 Bestätigungen)
   HTTP 403 / 429                 → einmal retry nach 8s
-  Verbindungsfehler              → kein Urteil
+  Verbindungsfehler / Timeout    → status=9 / vergaben (nach 2 Bestätigungen, wie 404/410)
 
 Nutzung:
   python vergaben_check.py                # Standard
@@ -224,13 +224,16 @@ def main():
     parser = argparse.ArgumentParser(description="Vergaben-Check per HTTP")
     parser.add_argument("--alle", action="store_true",
                         help="Auch Stellen aus nicht-gescannten Domains prüfen")
-    parser.add_argument("--url",  default=None, help="Nur diese URL prüfen")
+    parser.add_argument("--url",   default=None, help="Nur diese URL prüfen")
+    parser.add_argument("--firma", default=None, help="Nur diese Firma prüfen")
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
     print("  VERGABEN CHECK  –  Schritt 1c: Erreichbarkeit prüfen")
     if args.url:
         print(f"  Filter: nur {args.url[:60]}")
+    if args.firma:
+        print(f"  Filter: nur Firma '{args.firma}'")
     if args.alle:
         print("  Modus: ALLE Domains")
     print("=" * 60)
@@ -316,6 +319,12 @@ def main():
             and not eintrag.get("nicht_passend")
         ]
 
+    if args.firma:
+        def _firma_von(url: str) -> str:
+            idx = stellen_index.get(url)
+            return stellen[idx].get("firma", "") if idx is not None else ""
+        kandidaten = [url for url in kandidaten if _firma_von(url) == args.firma]
+
     if not kandidaten:
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
@@ -340,14 +349,18 @@ def main():
 
         code = pruefe_url(url)
 
-        if code in (404, 410, 0):
+        if code in (404, 410, 0) or code is None:
+            # Timeouts/Verbindungsfehler werden wie 404/410 behandelt: bleiben sie
+            # über zwei aufeinanderfolgende Läufe bestehen, ist die Seite mit
+            # ziemlicher Sicherheit dauerhaft weg (nicht nur ein kurzer Netzwerk-Hänger).
+            code_label = "Timeout/Verbindungsfehler" if code is None else f"HTTP {code}"
             bereits_vorgemerkt = bekannte[url].get("pruef_vormerken")
             if not bereits_vorgemerkt:
                 # Erster fehlgeschlagener Check → nur vormerken, noch nicht endgültig markieren
                 upsert_stelle({"url": url, "pruef_vormerken": ts})
                 bekannte[url]["pruef_vormerken"] = ts
                 vorgemerkt += 1
-                print(f"  ⏳ Vorgemerkt (1. fehlgeschlagener Check, HTTP {code}) – Bestätigung beim nächsten Lauf")
+                print(f"  ⏳ Vorgemerkt (1. fehlgeschlagener Check, {code_label}) – Bestätigung beim nächsten Lauf")
             else:
                 # Zweiter fehlgeschlagener Check → jetzt endgültig als vergaben markieren
                 neuer_status = status_bei_vergabe(url)
@@ -366,7 +379,7 @@ def main():
                 })
                 vergaben += 1
                 label = {7: "📭 Vergaben (Bewerbung lief)", 8: "❌ Vergaben (Absage)", 9: "🗑️  Vergaben"}
-                print(f"  {label.get(neuer_status, '🗑️  Vergaben')} (HTTP {code}, 2. Bestätigung)")
+                print(f"  {label.get(neuer_status, '🗑️  Vergaben')} ({code_label}, 2. Bestätigung)")
 
         elif code == 200:
             # Erreichbar → ggf. Vormerken zurücksetzen
@@ -378,9 +391,6 @@ def main():
                 print(f"  ✅ Noch aktiv (HTTP 200)")
             noch_aktiv += 1
 
-        elif code is None:
-            print(f"  ⏱️  Verbindungsfehler / Timeout – kein Urteil")
-            unklar += 1
         else:
             print(f"  ❓ HTTP {code} – kein Urteil")
             unklar += 1

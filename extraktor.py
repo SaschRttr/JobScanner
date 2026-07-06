@@ -182,12 +182,15 @@ Antworte NUR als JSON ohne Markdown:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default=None, help="Nur diese URL verarbeiten")
+    parser.add_argument("--firma", default=None, help="Nur diese Firma verarbeiten")
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
     print("  EXTRAKTOR  –  Schritt 2: Stellentext extrahieren")
     if args.url:
         print(f"  Filter: nur {args.url[:60]}")
+    if args.firma:
+        print(f"  Filter: nur Firma '{args.firma}'")
     print("=" * 60)
 
     config         = lade_config()
@@ -214,6 +217,7 @@ def main():
         and s.get("rohtext")
         and not s.get("nicht_passend")
         and (args.url is None or s["url"] == args.url)
+        and (args.firma is None or s.get("firma") == args.firma)
     ]
 
     print(f"  {len(zu_bearbeiten)} Stellen zu bearbeiten (Status 2)")

@@ -22,6 +22,7 @@ scan.log
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # Node
 node_modules/

@@ -25,7 +25,7 @@ import urllib.parse
 import json
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
-from utils import lade_config, berechne_standort, standort_ablehnungsgrund
+from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt
 print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
@@ -42,10 +42,11 @@ scan_laeuft   = False
 scan_stoppen  = False       # Signal: Scan soll abgebrochen werden
 laufender_prozess = None    # Aktuell laufender Subprozess
 
-# Reihenfolge der Scripts – identisch zu start.bat
+# Reihenfolge der Scripts – identisch zu start.bat / start.sh
 PIPELINE = [
     "scanner.py",
     "rohtext_holen.py",
+    "vergaben_check.py",
     "extraktor.py",
     "bewertung.py",
     "report.py",
@@ -246,8 +247,10 @@ def firma_testen():
         import subprocess, os
         pipeline = [
             [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "extraktor.py")],
-            [sys.executable, str(BASIS_PFAD / "bewertung.py")],
+            [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--firma", firma],
+            [sys.executable, str(BASIS_PFAD / "vergaben_check.py"), "--firma", firma],
+            [sys.executable, str(BASIS_PFAD / "extraktor.py"), "--firma", firma],
+            [sys.executable, str(BASIS_PFAD / "bewertung.py"), "--firma", firma],
             [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         ]
         for cmd in pipeline:
@@ -695,6 +698,58 @@ def standort_setzen():
     )
 
     return jsonify({"ok": True, "standort": standort})
+
+
+@app.route("/vergeben-setzen", methods=["POST"])
+def vergeben_setzen():
+    """
+    Markiert eine Stelle manuell als vergeben - für Fälle, in denen
+    vergaben_check.py das nicht automatisch erkennen kann (z.B. rein
+    clientseitig gerenderte Portale, deren HTML bei aktiven und vergebenen
+    Stellen identisch aussieht).
+    Erwartet JSON: { url }
+    """
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "url erforderlich"}), 400
+
+    url = data["url"]
+    ts  = jetzt()
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        with _db.verbindung() as con:
+            row = con.execute(
+                "SELECT stufe FROM bewerbungsstatus WHERE url = ?", (url,)
+            ).fetchone()
+        stufe = row[0] if row else ""
+        if stufe in ("beworben", "kennenlernen", "einladung"):
+            neuer_status = 7
+        elif stufe in ("absage", "zusage"):
+            neuer_status = 8
+        else:
+            neuer_status = 9
+
+        _db.upsert_stelle({
+            "url":                url,
+            "status":             neuer_status,
+            "geloescht_am":       ts,
+            "vergaben_bestaetigt": True,
+            "pruef_vormerken":    None,
+        })
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    return jsonify({"ok": True, "status": neuer_status})
 
 
 @app.route("/stelle-einzeln-stream")

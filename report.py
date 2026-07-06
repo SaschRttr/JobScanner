@@ -23,9 +23,12 @@ from pathlib import Path
 import urllib.parse
 import urllib.request
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils import lade_config, ist_ausgeschlossen, text_matched, standort_ablehnungsgrund
+from utils import lade_config, lade_json, ist_ausgeschlossen, text_matched, standort_ablehnungsgrund
 
 
 # =============================================================================
@@ -38,6 +41,38 @@ BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 REPORT_PFAD     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
 STATUS_JSON     = BASIS_PFAD / "status.json"
+SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
+
+
+def _scan_status_html() -> str:
+    """Zeigt ganz oben im Report, ob beim letzten scanner.py-Lauf alle Firmen
+    erfolgreich gescannt wurden – sonst welche Firma mit welchem Fehler
+    hängengeblieben ist. Spart das Durchsuchen des Logfiles."""
+    status = lade_json(SCAN_STATUS_JSON, {})
+    if not status:
+        return ""
+
+    fehler = {name: info for name, info in status.items() if not info.get("ok")}
+    letzter_stand = max((info.get("zeitpunkt", "") for info in status.values()), default="")
+
+    if not fehler:
+        return (
+            f'<div class="summary-box" style="background:#eafaf1; border-left:4px solid #27ae60; color:#1e3a2f;">'
+            f'✅ Alle {len(status)} Firmen beim letzten Scan erreichbar (Stand: {letzter_stand})'
+            f'</div>\n'
+        )
+
+    zeilen = "".join(
+        f'<li><b>{name}</b> – {info.get("fehler", "unbekannter Fehler")} '
+        f'<span style="color:#666; font-size:0.85em;">({info.get("zeitpunkt", "")})</span></li>\n'
+        for name, info in sorted(fehler.items())
+    )
+    return (
+        f'<div class="summary-box" style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17;">'
+        f'⚠️ {len(fehler)} von {len(status)} Firmen beim letzten Scan mit Problem (Stand: {letzter_stand}):'
+        f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
+        f'</div>\n'
+    )
 
 
 
@@ -158,6 +193,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         else:
             geloescht_badge = ""
     url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
+    firma_escaped  = _html.escape(s.get("firma") or "", quote=True)
     arbeitsort = s.get("arbeitsort") or ""
     _ort_text  = _html.escape(arbeitsort) if arbeitsort else "kein Standort"
     _ort_farbe = "#888" if arbeitsort else "#e67e22"
@@ -166,8 +202,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         f'title="Klicken zum Bearbeiten" onclick="standortBearbeiten(this)">📍 {_ort_text} ✏️</span>'
     )
     firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {s["firma"]}</span>'
-    gefunden_am    = s.get("gefunden_am", "")[:10]
-    geloescht_am   = s.get("geloescht_am", "")
+    gefunden_am    = (s.get("gefunden_am") or "")[:10]
+    geloescht_am   = s.get("geloescht_am") or ""
     datum_label    = f'<span style="color:#aaa; font-size:0.8em; margin-left:8px;">📅 gefunden: {gefunden_am}'
     if geloescht_am:
         if vergabe_st == 6:
@@ -277,20 +313,28 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         treffer = sorted(stelle_dir.glob("Anschreiben*.docx")) if stelle_dir.exists() else []
         as_docx = treffer[-1] if treffer else None
 
-    if score >= 70:
-        if lv_docx and as_docx:
-            # Beide DOCX vorhanden → Download-Links anzeigen
-            css += " stelle-bewerbung"
-            lv_dl  = f"/download?pfad={urllib.parse.quote(str(lv_docx))}"
-            as_dl  = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
-            lebenslauf_html = f"""
+    if lv_docx or as_docx:
+        # Mindestens eine DOCX vorhanden → Download-Link(s) immer anzeigen,
+        # unabhängig vom aktuellen Score (der kann sich durch Neubewertung
+        # später ändern, bereits erstellte Unterlagen sollen deswegen nicht
+        # verschwinden) und unabhängig davon, ob beide Dateien existieren
+        # (Anschreiben-Generierung kann fehlschlagen, ohne den Lebenslauf-
+        # Link zu blockieren).
+        css += " stelle-bewerbung"
+        links = []
+        if lv_docx:
+            lv_dl = f"/download?pfad={urllib.parse.quote(str(lv_docx))}"
+            links.append(f'📄 <a href="{lv_dl}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>')
+        if as_docx:
+            as_dl = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
+            links.append(f'✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>')
+        lebenslauf_html = f"""
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
-            📄 <a href="{lv_dl}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
-            ✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>
+            {''.join(links)}
         </div>"""
-        else:
-            # Noch nicht erstellt oder gelöscht → Checkbox anzeigen
-            lebenslauf_html = f"""
+    elif score >= 70:
+        # Noch nicht erstellt → Checkbox anzeigen
+        lebenslauf_html = f"""
         <div style="margin-top:8px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             <label style="cursor:pointer;">
                 <input type="checkbox"
@@ -342,6 +386,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
     pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
     nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_escaped}\')">🚫 Nicht beworben</button>'
+    vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_escaped}\')">🗑️ Als vergeben markieren</button>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
     _auto_min_attr = ""
@@ -358,7 +403,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr} data-scanner-status="{_scanner_status_attr}">
+    return f"""<div class="{css}" data-url="{url_escaped}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
@@ -370,6 +415,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     {neu_laden_btn}
     {pruef_btn}
     {nicht_beworben_btn}
+    {vergeben_btn}
     {notizen_html}
     {lebenslauf_html}
 </div>
@@ -1082,6 +1128,8 @@ JS = """
     let _aktiverFilter = null;
     let _aktiveSortierung = null;
     let _aktiverStatusFilter = null;
+    let _aktiverFirmaFilter = null;
+    let _nurNichtBewertet = false;
     let _flatAktiv = false;
     const _stellenUrsprung = [];
 
@@ -1095,6 +1143,10 @@ JS = """
         if (section) section.style.display = checked ? '' : 'none';
         if (_flatAktiv) _aktualisiereFlach();
     }
+    function toggleNichtBewertet(checked) {
+        _nurNichtBewertet = checked;
+        _aktualisiere();
+    }
     function setzeFilter(filter) {
         _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
         _aktualisiere();
@@ -1107,16 +1159,20 @@ JS = """
         _aktiverStatusFilter = (_aktiverStatusFilter === status) ? null : status;
         _aktualisiere();
     }
+    function setzeFirmaFilter(firma) {
+        _aktiverFirmaFilter = firma || null;
+        _aktualisiere();
+    }
     function _aktualisiere() {
         _aktualisiereFilterBtns();
-        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null;
+        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null || _aktiverFirmaFilter !== null || _nurNichtBewertet;
         if (brauchtFlach && !_flatAktiv) _aktiviereFlach();
         else if (!brauchtFlach && _flatAktiv) _deaktiviereFlach();
         else if (brauchtFlach && _flatAktiv) _aktualisiereFlach();
     }
     function _aktualisiereFilterBtns() {
         const map = {
-            'btn-alle':          _aktiverFilter === null && _aktiverStatusFilter === null,
+            'btn-alle':          _aktiverFilter === null && _aktiverStatusFilter === null && _aktiverFirmaFilter === null,
             'btn-beworben':      _aktiverStatusFilter === 6,
             'btn-nicht-beworben': _aktiverStatusFilter === 10,
             'btn-kennenlernen':  _aktiverFilter === 'kennenlernen',
@@ -1174,6 +1230,9 @@ JS = """
             if (el.parentNode === fa) fa.removeChild(el);
         });
         let gefiltert = _stellenUrsprung.map(o => o.el);
+        if (_aktiverFirmaFilter !== null) {
+            gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
+        }
         if (_aktiverFilter !== null) {
             gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
             // Vergabene/gelöschte Stellen aus Stufen-Filtern ausschließen (Status 0, 7, 8, 9)
@@ -1186,13 +1245,19 @@ JS = """
         if (_aktiverStatusFilter !== null) {
             gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
         }
-        const zeigeGM = document.getElementById('cb-geringer-match')?.checked;
+        // Bei gesetztem Firmen-Filter sollen alle Stellen der Firma sichtbar sein –
+        // Geringer-Match/Zu-weit nur ausblenden, wenn keine Firma gewählt ist.
+        const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null;
         if (!zeigeGM) {
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
         }
-        const zeigeZW = document.getElementById('cb-zu-weit')?.checked;
+        const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null;
         if (!zeigeZW) {
             gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
+        }
+        if (_nurNichtBewertet) {
+            const _unbewerteterStatus = new Set([1, 2, 3]);
+            gefiltert = gefiltert.filter(el => _unbewerteterStatus.has(parseInt(el.dataset.scannerStatus)));
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
@@ -1221,12 +1286,14 @@ JS = """
         }[_aktiverFilter] || '';
         const _stLabels = {4:'bewerben',5:'nicht bewerben',6:'Beworben, aktiv',7:'Beworben, Ghosting',8:'Absage erhalten',9:'Vergeben, nie beworben',10:'Nicht beworben'};
         const statusText = _aktiverStatusFilter !== null ? ('Status: ' + (_stLabels[_aktiverStatusFilter] || _aktiverStatusFilter)) : '';
+        const firmaText = _aktiverFirmaFilter !== null ? ('🏢 ' + _aktiverFirmaFilter) : '';
         const sortText = {
             score:   '⭐ Nach Passung',
             auto:    '🚗 Nach Entfernung (Auto)',
             transit: '🚌 Nach Entfernung (ÖPNV)',
         }[_aktiveSortierung] || '';
-        info.textContent = [filterText, statusText, sortText].filter(Boolean).join(' · ')
+        const nichtBewertetText = _nurNichtBewertet ? '❓ Nicht bewertet' : '';
+        info.textContent = [firmaText, filterText, statusText, sortText, nichtBewertetText].filter(Boolean).join(' · ')
             + ` — ${gefiltert.length} Stelle${gefiltert.length !== 1 ? 'n' : ''}`;
         fa.innerHTML = '';
         fa.appendChild(info);
@@ -1286,6 +1353,34 @@ JS = """
         } catch(e) {
             btn.disabled = false;
             btn.textContent = '🚫 Nicht beworben';
+        }
+    }
+
+    async function vergebenMarkieren(btn, url) {
+        if (!confirm('Stelle manuell als "Vergeben" markieren? (z.B. weil die automatische Prüfung sie nicht erkennen kann)')) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/vergeben-setzen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                btn.disabled = false;
+                btn.textContent = '🗑️ Als vergeben markieren';
+                return;
+            }
+            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
+            if (el) aktualisiereStatusBadge(el, data.status);
+            btn.textContent = '🗑️ Vergeben markiert';
+            btn.style.opacity = '0.5';
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            btn.disabled = false;
+            btn.textContent = '🗑️ Als vergeben markieren';
         }
     }
 
@@ -1417,7 +1512,10 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             if daten:
                 fahrzeit_daten[url] = eintrag
 
-    zu_weit_urls = {
+    # Fahrzeit-Filter nur anwenden wenn keine Whitelist aktiv ist: ein Ort auf der
+    # Whitelist ist explizit gewollt (z.B. Apple München trotz >60min), die
+    # Whitelist soll den Fahrzeit-Filter nicht nur ergänzen, sondern übersteuern.
+    zu_weit_urls = set() if (config or {}).get("erlaubte_standorte") else {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
     }
@@ -1489,6 +1587,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 </head>
 <body>
     <h1>🔍 Job-Scanner Report</h1>
+    {_scan_status_html()}
     <div class="summary-box">
         {status_zeilen} &nbsp;|&nbsp;
         Stand: {datum}
@@ -1549,6 +1648,26 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         </div>
     """
 
+    # Firma-Filter-Dropdown: alle jemals gefundenen Firmen (unabhängig von Status)
+    import html as _html_top
+    alle_firmennamen = sorted({s["firma"] for s in stellen if s.get("firma")})
+    firma_filter_gruppe = ""
+    if alle_firmennamen:
+        firma_optionen = "".join(
+            f'            <option value="{_html_top.escape(f, quote=True)}">{_html_top.escape(f)}</option>\n'
+            for f in alle_firmennamen
+        )
+        firma_filter_gruppe = (
+            '<div class="filter-gruppe">\n'
+            '            <span class="filter-label">Firma:</span>\n'
+            '            <select id="firma-filter-dropdown" onchange="setzeFirmaFilter(this.value)"\n'
+            '                style="padding:5px 10px; border-radius:16px; border:1px solid #ddd; font-size:0.85em; cursor:pointer; background:#f0f0f0; color:#555;">\n'
+            '                <option value="">Alle Firmen</option>\n'
+            f'{firma_optionen}'
+            '            </select>\n'
+            '        </div>\n'
+        )
+
     # Status-Filter-Buttons dynamisch aus vorhandenen Werten erzeugen
     vorhandene_status_vals = sorted(set(v for v in bekannte_status.values() if v in _FILTER_STATUS_VALS))
     status_filter_gruppe = ""
@@ -1565,7 +1684,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     <div class="filter-bar" id="filter-bar">
         <div class="filter-gruppe">
             <span class="filter-label">Filter:</span>
-            <button id="btn-alle" class="filter-btn aktiv" onclick="setzeFilter(null); setzeStatusFilter(null);">Alle</button>
+            <button id="btn-alle" class="filter-btn aktiv" onclick="setzeFilter(null); setzeStatusFilter(null); document.getElementById('firma-filter-dropdown').value=''; setzeFirmaFilter(null);">Alle</button>
             <button id="btn-beworben" class="filter-btn" onclick="setzeStatusFilter(6)">✅ Beworben aktiv</button>
             <button id="btn-nicht-beworben" class="filter-btn" onclick="setzeStatusFilter(10)">🚫 Nicht beworben</button>
             <button id="btn-kennenlernen" class="filter-btn" onclick="setzeFilter('kennenlernen')">📞 Kennenlernen</button>
@@ -1574,6 +1693,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <button id="btn-absage" class="filter-btn" onclick="setzeFilter('absage')">❌ Absage</button>
         </div>
         """
+    html += firma_filter_gruppe
     html += status_filter_gruppe
     html += """        <div class="filter-gruppe">
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
@@ -1585,6 +1705,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-zu-weit" onchange="toggleZuWeit(this.checked)">
                 🚗 Zu weit einblenden (&gt;60 min)
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-nicht-bewertet" onchange="toggleNichtBewertet(this.checked)">
+                ❓ Nur nicht bewertet
             </label>
         </div>
         <div class="filter-gruppe">
@@ -1931,7 +2057,7 @@ def main():
     for s in stellen:
         if s.get("geloescht_am") and not s.get("nicht_passend"):
             eintrag = bekannte.get(s["url"], {})
-            if eintrag.get("status", 0) not in (0, 6, 7, 8):
+            if eintrag.get("status", 0) not in (0, 6, 7, 8, 9):
                 s["geloescht_am"] = None
                 repariert += 1
                 upsert_stelle({"url": s["url"], "geloescht_am": None})

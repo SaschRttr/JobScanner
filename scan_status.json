@@ -1,0 +1,202 @@
+{
+  "Rohde & Schwarz": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:16"
+  },
+  "Thales": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:41"
+  },
+  "TE Connectivity": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Trumpf": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Hitachi Rail": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 13:41"
+  },
+  "eta plus": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Knorr-Bremse": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:40"
+  },
+  "Keysight": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Airbus": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "EnBW": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Woodward": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:37"
+  },
+  "Leuze Electronic": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:10"
+  },
+  "Neura Robotics": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:11"
+  },
+  "Star Cooperation": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:11"
+  },
+  "GlobeFuelCell": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:12"
+  },
+  "Hensoldt": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:12"
+  },
+  "Siemens Energy": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:13"
+  },
+  "Helmut Fischer GmbH": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:13"
+  },
+  "Apple Nabern": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:14"
+  },
+  "Apple München": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:14"
+  },
+  "Philips": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:15"
+  },
+  "Advantest Hardware": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:16"
+  },
+  "Advantest Production": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:17"
+  },
+  "Advantest Software": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:17"
+  },
+  "Festo": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:18"
+  },
+  "Daimler Truck": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:19"
+  },
+  "ZSW": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:19"
+  },
+  "ads-tec Energy": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:19"
+  },
+  "SMART TESTSOLUTIONS": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:20"
+  },
+  "Infineon": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:21"
+  },
+  "Sereact": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:21"
+  },
+  "eta plus electronic": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:22"
+  },
+  "Eberspaecher": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:22"
+  },
+  "Pilz GmbH": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:23"
+  },
+  "Dekra": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:23"
+  },
+  "Festool": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:24"
+  },
+  "Balluff": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:24"
+  },
+  "TK Elevator": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:25"
+  },
+  "AP Sensing": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:25"
+  },
+  "Nokia": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-03 10:26"
+  }
+}

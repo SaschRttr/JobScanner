@@ -7,8 +7,12 @@ werden nur noch als lesbare Spiegel exportiert.
 
 import json
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from utils import normalisiere_url
 
 
 DB_PFAD = Path(__file__).parent / "jobscanner.db"
@@ -396,6 +400,28 @@ def repariere_inkonsistente_status():
                 con.execute("DELETE FROM bewerbungsstatus WHERE url = ?", (loeschen,))
                 con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (loeschen,))
                 url_set.discard(loeschen)
+
+        # URL-Encoding-Duplikate (z.B. %28 vs %2528)
+        alle = con.execute("SELECT url, status, geloescht_am, gefunden_am FROM stellen").fetchall()
+        norm_gruppen: dict = {}
+        for r in alle:
+            norm = normalisiere_url(r["url"])
+            norm_gruppen.setdefault(norm, []).append(r)
+        for norm, gruppe in norm_gruppen.items():
+            if len(gruppe) < 2:
+                continue
+            def _prio(r):
+                live = 1 if not r["geloescht_am"] else 0
+                return (live, _STATUS_PRIO.get(r["status"], 0), r["gefunden_am"] or "")
+            behalten = max(gruppe, key=_prio)
+            for r in gruppe:
+                if r["url"] == behalten["url"]:
+                    continue
+                con.execute("DELETE FROM stellen WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM bewertungen WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM bewerbungsstatus WHERE url = ?", (r["url"],))
+                con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (r["url"],))
+                print(f"  🧹 URL-Encoding-Duplikat entfernt: {r['url'][:80]}")
 
         # Titel+Firma-Duplikate
         groups = con.execute("""

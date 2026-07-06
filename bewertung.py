@@ -87,12 +87,15 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default=None, help="Nur diese URL bewerten")
+    parser.add_argument("--firma", default=None, help="Nur diese Firma bewerten")
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
     print("  BEWERTUNG  –  Schritt 3: KI-Bewertung")
     if args.url:
         print(f"  Filter: nur {args.url[:60]}")
+    if args.firma:
+        print(f"  Filter: nur Firma '{args.firma}'")
     print("=" * 60)
 
     config = lade_config()
@@ -135,6 +138,7 @@ def main():
         and s.get("stellentext")
         and not standort_ok(s)
         and not s.get("nicht_passend")
+        and (args.firma is None or s.get("firma") == args.firma)
     ]
     if zu_markieren:
         print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
@@ -147,20 +151,11 @@ def main():
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
 
-    # Status-3 Stellen die bereits nicht_passend=True sind → Status 9 (nie beworben)
-    # verhindert dauerhaftes Feststecken bei Status 3
-    zu_bereinigen = [
-        (i, s) for i, s in enumerate(stellen)
-        if s.get("status") == 3 and s.get("nicht_passend")
-    ]
-    if zu_bereinigen:
-        print(f"  {len(zu_bereinigen)} nicht_passend-Stellen (Status 3) → Status 9:")
-        for idx, stelle in zu_bereinigen:
-            stellen[idx]["status"] = 9
-            upsert_stelle({"url": stelle["url"], "status": 9})
-            print(f"    🗑️  {stelle['firma']}: {stelle['titel'][:60]}")
-        exportiere_stellen_json(STELLEN_JSON)
-        exportiere_bekannte_json(BEKANNTE_JSON)
+    # Status-3 Stellen bleiben bei nicht_passend=True einfach auf Status 3 stehen
+    # (Status 9 ist für per HTTP bestätigte Vergaben reserviert – siehe vergaben_check.py).
+    # nicht_passend hält sie schon aus allen aktiven Report-Listen raus; sobald
+    # nicht_passend wieder False wird (z.B. nach Whitelist-Änderung), landen sie
+    # automatisch wieder in zu_bearbeiten unten und werden neu bewertet.
 
     zu_bearbeiten = [
         (i, s) for i, s in enumerate(stellen)
