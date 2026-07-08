@@ -108,13 +108,15 @@ def _extrahiere_titel(page) -> str | None:
     return None
 
 
-def lade_rohtext_playwright(page, url: str) -> str | None:
+def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
     """
-    Lädt eine einzelne Stellenseite via Playwright und gibt den Rohtext zurück.
-    Gibt None zurück wenn die Seite nicht geladen werden konnte.
+    Lädt eine einzelne Stellenseite via Playwright.
+    Gibt (rohtext, http_status) zurück; rohtext ist None wenn die Seite
+    nicht geladen werden konnte. Der Status erlaubt dem Aufrufer, bei
+    403/429 (WAF-Session-Sperre) mit frischem Context neu zu versuchen.
     """
     if url.lower().endswith(".pdf"):
-        return lade_pdf_text(url)
+        return lade_pdf_text(url), None
 
     lade_url = _url_anpassen(url)
     warte_ms  = _warte_fuer(lade_url)
@@ -127,9 +129,11 @@ def lade_rohtext_playwright(page, url: str) -> str | None:
             antwort = page.goto(lade_url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(4000)
 
-        if antwort and antwort.status in (403, 404, 410):
-            print(f"  ❌ HTTP {antwort.status} – nicht erreichbar")
-            return None
+        status = antwort.status if antwort else None
+
+        if status in (403, 404, 410, 429):
+            print(f"  ❌ HTTP {status} – nicht erreichbar")
+            return None, status
 
         page.wait_for_timeout(warte_ms)
         klick_cookie_banner(page)
@@ -143,13 +147,13 @@ def lade_rohtext_playwright(page, url: str) -> str | None:
             rohtext = page.inner_text("body")
 
         if not rohtext or len(rohtext.strip()) < 100:
-            return None
+            return None, status
 
-        return _bereinige_rohtext(rohtext)
+        return _bereinige_rohtext(rohtext), status
 
     except Exception as e:
         print(f"  ❌ Playwright-Fehler: {e}")
-        return None
+        return None, None
 
 
 # =============================================================================
@@ -217,16 +221,18 @@ def main():
     zu_kurz    = 0
     fehler     = 0
 
+    _EXTRA_HEADERS = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Dest": "document",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
     with sync_playwright() as p:
         browser = starte_browser(p)
-        context = neuer_context(browser, extra_headers={
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-User": "?1",
-            "Sec-Fetch-Dest": "document",
-            "Upgrade-Insecure-Requests": "1",
-        })
+        context = neuer_context(browser, extra_headers=_EXTRA_HEADERS)
         page = neue_seite(context)
 
         for idx, stelle in zu_laden:
@@ -240,7 +246,19 @@ def main():
             print(f"  {firma}: {titel[:55]}")
             print(f"  Status {status} | Aktuell: {len(alter_rohtext)} Z. | {url[:60]}")
 
-            rohtext = lade_rohtext_playwright(page, url)
+            rohtext, http_status = lade_rohtext_playwright(page, url)
+
+            if rohtext is None and http_status in (403, 429):
+                # WAF-Session-Sperre (z.B. jobs.advantest-career.de): dieselben
+                # Cookies bleiben gesperrt, eine frische Session kommt sofort
+                # wieder rein (wie ein neues Inkognito-Fenster) → Context
+                # wegwerfen und einmal mit neuen Cookies nachfassen.
+                print(f"  🔄 HTTP {http_status} – frische Session, zweiter Versuch...")
+                page.close()
+                context.close()
+                context = neuer_context(browser, extra_headers=_EXTRA_HEADERS)
+                page = neue_seite(context)
+                rohtext, http_status = lade_rohtext_playwright(page, url)
 
             if rohtext and len(rohtext.strip()) >= MIN_ROHTEXT_LAENGE:
                 # Jobtitel direkt von der Seite lesen (genauer als Link-Text)

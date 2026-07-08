@@ -107,12 +107,12 @@
   "Advantest Hardware": {
     "ok": true,
     "fehler": null,
-    "zeitpunkt": "2026-07-06 13:28"
+    "zeitpunkt": "2026-07-08 14:22"
   },
   "Advantest Production": {
     "ok": true,
     "fehler": null,
-    "zeitpunkt": "2026-07-06 13:29"
+    "zeitpunkt": "2026-07-08 14:23"
   },
   "Advantest Software": {
     "ok": true,
@@ -198,5 +198,10 @@
     "ok": true,
     "fehler": null,
     "zeitpunkt": "2026-07-06 13:39"
+  },
+  "Advantest Application": {
+    "ok": true,
+    "fehler": null,
+    "zeitpunkt": "2026-07-08 14:23"
   }
 }

@@ -70,6 +70,15 @@ SCAN_STATUS: dict = {}
 def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
 
+
+class SessionGesperrtFehler(Exception):
+    """HTTP 403/429 auf der Börsen-Seite – die WAF hat die Session geflaggt.
+    Eine frische Session (neuer Context = neue Cookies, wie ein Inkognito-
+    Fenster) wird i.d.R. sofort wieder durchgelassen."""
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"HTTP {status} – Session vom Server gesperrt")
+
 MIN_TITEL_LAENGE = 10
 
 JOB_LINK_MUSTER = [
@@ -144,6 +153,29 @@ def standort_aus_linktext(zeilen_roh: list, titel: str, config: dict) -> str:
         if any(v in t for v in config["verbotene_standorte"]):
             return z
     return ""
+
+
+# Domains, deren gelistete Job-Links nur Weiterleitungen sind: der Server
+# antwortet mit HTTP 301 auf die echte /offer/<slug>/<uuid>-URL. Die echte URL
+# speichern, damit bestehende DB-Einträge wiedererkannt statt dupliziert werden
+# (und Report/Bewerbung den dauerhaften Link bekommen).
+_REDIRECT_AUFLOESEN_DOMAINS = {"jobs.advantest-career.de"}
+
+
+def loese_offer_redirect_auf(href: str, cache: dict) -> str:
+    if href in cache:
+        return cache[href]
+    ergebnis = href
+    try:
+        req = urllib.request.Request(href, headers={"User-Agent": USER_AGENT}, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            final = resp.url
+        if "/offer-redirect/" not in final:
+            ergebnis = final.split("?")[0]
+    except Exception:
+        pass  # Auflösung fehlgeschlagen → Original-Link behalten
+    cache[href] = ergebnis
+    return ergebnis
 
 
 def titel_aus_slug(href: str) -> str:
@@ -596,11 +628,14 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     print(f"{'='*60}")
 
     try:
-        page.goto(url_boerse, wait_until="domcontentloaded", timeout=45000)
+        antwort = page.goto(url_boerse, wait_until="domcontentloaded", timeout=45000)
     except Exception as e:
         print(f"  ❌ Seite nicht erreichbar: {e}")
         status_merken(name, False, f"Seite nicht erreichbar: {e}")
         return [], []
+
+    if antwort and antwort.status in (403, 429):
+        raise SessionGesperrtFehler(antwort.status)
 
     page.wait_for_timeout(3000)
     klick_cookie_banner(page)
@@ -739,6 +774,15 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 kandidaten.append({"href": l["href"], "text": titel, "is_pdf": True})
         if kandidaten:
             print(f"  📄 PDF-Fallback: {len(kandidaten)} PDF-Stelle(n) gefunden")
+
+    if dom in _REDIRECT_AUFLOESEN_DOMAINS:
+        _redirect_cache: dict = {}
+        for l in kandidaten:
+            if "/offer-redirect/" in l["href"]:
+                l["href"] = loese_offer_redirect_auf(l["href"], _redirect_cache)
+        aufgeloest = sum(1 for v in _redirect_cache.values() if "/offer-redirect/" not in v)
+        if _redirect_cache:
+            print(f"  ↪️  {aufgeloest}/{len(_redirect_cache)} Redirect-Links auf echte Job-URLs aufgelöst")
 
     print(f"  📋 {len(kandidaten)} Kandidaten")
     for _href in sorted({l["href"] for l in kandidaten}):
@@ -1057,21 +1101,38 @@ def main():
         browser = starte_browser(p)
         context = neuer_context(browser)
 
+        def scanne_mit_session_retry(firma: dict) -> tuple[list, list]:
+            # WAF-Sperren (HTTP 403/429, z.B. jobs.advantest-career.de) hängen an
+            # der Session: dieselben Cookies bleiben gesperrt, eine frische Session
+            # kommt sofort wieder rein (wie ein neues Inkognito-Fenster). Daher bei
+            # SessionGesperrtFehler den kompletten Context wegwerfen und einmal
+            # mit neuen Cookies nachfassen.
+            nonlocal context
+            page = neue_seite(context)
+            try:
+                return scanne_boerse(page, firma, strukturen, config)
+            except SessionGesperrtFehler as e:
+                print(f"  🔄 HTTP {e.status} – frische Session, zweiter Versuch...")
+                page.close()
+                context.close()
+                context = neuer_context(browser)
+                page = neue_seite(context)
+                return scanne_boerse(page, firma, strukturen, config)
+            finally:
+                page.close()
+
         for firma in config["firmen"]:
             # Pro Firma eine frische Seite: eine fehlgeschlagene Navigation (z.B.
             # ERR_CONNECTION_RESET) kann die Seite in einem Zustand hängen lassen,
             # in dem jede weitere Navigation mit "interrupted by another
             # navigation" abbricht – das würde sonst den kompletten Rest der
             # Firmenliste mitreißen.
-            page = neue_seite(context)
             try:
-                treffer_liste, ausgeschlossen_liste = scanne_boerse(page, firma, strukturen, config)
+                treffer_liste, ausgeschlossen_liste = scanne_mit_session_retry(firma)
             except Exception as e:
                 print(f"\n❌ Fehler bei {firma['name']}: {e}")
                 status_merken(firma["name"], False, str(e))
                 continue
-            finally:
-                page.close()
 
             for t in ausgeschlossen_liste:
                 if t["url"] not in gesehen_urls:
