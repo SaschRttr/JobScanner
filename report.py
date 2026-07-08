@@ -12,6 +12,7 @@ E-Mail wird nur gesendet wenn:
   - Es neue oder weggefallene Stellen gibt
 """
 # -*- coding: utf-8 -*-
+import html as _html
 import json
 import re
 import smtplib
@@ -173,16 +174,20 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             geloescht_badge = '<span class="badge badge-weg">VERGEBEN</span>'
         else:
             geloescht_badge = ""
-    url_escaped    = s["url"].replace('"', "&quot;").replace("'", "\\'")
+    # url_attr: für HTML-Attribute (href, data-url). url_js: für JS-String-
+    # Literale in onclick/onchange/onblur. Beide escapen die gescrapte URL,
+    # damit Titel/URL von Fremdseiten keinen HTML/JS-Ausbruch (XSS) erlauben.
+    url_attr       = _html.escape(s["url"], quote=True)
+    url_js         = _html.escape(s["url"].replace("\\", "\\\\").replace("'", "\\'"), quote=True)
     firma_escaped  = _html.escape(s.get("firma") or "", quote=True)
     arbeitsort = s.get("arbeitsort") or ""
     _ort_text  = _html.escape(arbeitsort) if arbeitsort else "kein Standort"
     _ort_farbe = "#888" if arbeitsort else "#e67e22"
     standort_label = (
-        f' <span class="standort-label" data-url="{url_escaped}" style="cursor:pointer; color:{_ort_farbe};" '
+        f' <span class="standort-label" data-url="{url_attr}" style="cursor:pointer; color:{_ort_farbe};" '
         f'title="Klicken zum Bearbeiten" onclick="standortBearbeiten(this)">📍 {_ort_text} ✏️</span>'
     )
-    firma_label    = f'<span class="firma-label"> — {s["firma"]}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {s["firma"]}</span>'
+    firma_label    = f'<span class="firma-label"> — {firma_escaped}</span>' if zeige_firma else f'<span class="firma-label-auto"> — {firma_escaped}</span>'
     gefunden_am    = (s.get("gefunden_am") or "")[:10]
     geloescht_am   = s.get("geloescht_am") or ""
     datum_label    = f'<span style="color:#aaa; font-size:0.8em; margin-left:8px;">📅 gefunden: {gefunden_am}'
@@ -259,7 +264,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             <div style="margin-top:6px;">
                 <div style="margin-bottom:6px;">
                     <select class="stufen-select"
-                        onchange="speichern('{url_escaped}', 'stufe', this.value)">
+                        onchange="speichern('{url_js}', 'stufe', this.value)">
                         <option value="">— kein Status —</option>
                         <option value="beworben">✅ Beworben</option>
                         <option value="kennenlernen">📞 Kennenlerngespräch</option>
@@ -271,10 +276,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
                 </div>
                 <textarea class="kommentar" rows="2"
                     placeholder="Notizen..."
-                    onblur="speichern('{url_escaped}', 'kommentar', this.value)"></textarea>
+                    onblur="speichern('{url_js}', 'kommentar', this.value)"></textarea>
                 <textarea class="nicht-beworben-grund" rows="2"
                     placeholder="Nicht beworben weil..."
-                    onblur="speichern('{url_escaped}', 'nicht_beworben_grund', this.value)"></textarea>
+                    onblur="speichern('{url_js}', 'nicht_beworben_grund', this.value)"></textarea>
             </div>
         </details>"""
 
@@ -319,7 +324,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         <div style="margin-top:8px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             <label style="cursor:pointer;">
                 <input type="checkbox"
-                    onchange="bewerbungErstellen(this, '{url_escaped}', '{firma_safe}', '{titel_safe}')">
+                    onchange="bewerbungErstellen(this, '{url_js}', '{firma_safe}', '{titel_safe}')">
                 &nbsp;📋 Lebenslauf &amp; Anschreiben erstellen
             </label>
             <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
@@ -359,19 +364,19 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     else:
         steckbrief_html = ""
 
-    steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_escaped}\')">🧠 Steckbrief generieren</button>'
-    bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_escaped}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
-    neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_escaped}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
+    steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_js}\')">🧠 Steckbrief generieren</button>'
+    bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_js}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
+    neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_js}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
-    pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
-    nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_escaped}\')">🚫 Nicht beworben</button>'
+    pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_js}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
+    nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_js}\')">🚫 Nicht beworben</button>'
     if scanner_status == 4:
-        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_escaped}\', false)">👎 Nicht passend</button>'
+        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_js}\', false)">👎 Nicht passend</button>'
     elif scanner_status == 5:
-        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_escaped}\', true)">📋 Passend – bewerben</button>'
+        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_js}\', true)">📋 Passend – bewerben</button>'
     else:
         passend_btn = ""
-    vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_escaped}\')">🗑️ Als vergeben markieren</button>'
+    vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_js}\')">🗑️ Als vergeben markieren</button>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
     _auto_min_attr = ""
@@ -389,8 +394,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_escaped}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr} data-scanner-status="{_scanner_status_attr}">
-    <a href="{s['url']}" target="_blank">{s['titel']}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
+    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr} data-scanner-status="{_scanner_status_attr}">
+    <a href="{url_attr}" target="_blank">{_html.escape(s['titel'])}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
     {bewertung_html}
@@ -916,10 +921,10 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         return "#e74c3c"
 
     def stelle_zeile(s: dict) -> str:
-        titel    = s.get("titel", "–")
-        firma    = s.get("firma", "")
-        url      = s.get("url", "#")
-        arbeitsort = s.get("arbeitsort") or ""
+        titel    = _html.escape(s.get("titel", "–"))
+        firma    = _html.escape(s.get("firma", ""))
+        url      = _html.escape(s.get("url", "#"), quote=True)
+        arbeitsort = _html.escape(s.get("arbeitsort") or "")
         standort_text = f" · {arbeitsort}" if arbeitsort else ""
         score    = (s.get("bewertung") or {}).get("score")
         score_na = (s.get("bewertung") or {}).get("score_nach_anpassung")
