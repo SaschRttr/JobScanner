@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
     berechne_standort, standort_ablehnungsgrund, ablehnungsgrund,
-    text_matched, klick_cookie_banner,
+    text_matched, klick_cookie_banner, normalisiere_ort,
 )
 from browser import (
     USER_AGENT, MIN_ROHTEXT_LAENGE,
@@ -124,6 +124,26 @@ def hat_stabile_offer_id(href: str) -> bool:
     except Exception:
         return False
     return bool(_UUID_MUSTER.match(dekodiert))
+
+
+def standort_aus_linktext(zeilen_roh: list, titel: str, config: dict) -> str:
+    """Sucht in den Link-Text-Zeilen diejenige, die ein bekannter Ort ist
+    (Treffer in White- oder Blacklist). Die frühere Heuristik 'letzte Zeile
+    >= MIN_TITEL_LAENGE' hat kurze Ortsnamen wie 'Metzingen' (9 Zeichen)
+    verworfen und stattdessen den Firmennamen als Standort geliefert, was
+    Stellen fälschlich als 'Außerhalb Umkreis' aussortiert hat.
+    Kein Ortstreffer -> '' (Standort wird später aus dem Rohtext bestimmt)."""
+    for z in zeilen_roh:
+        if z == titel or len(z) < 3:
+            continue
+        t = normalisiere_ort(z)
+        # Rückwärts-Containment (t in o) nur ab 5 Zeichen, sonst matchen
+        # Kürzel wie 'AI' auf Whitelist-Orte wie 'W_ai_blingen'.
+        if any(o == t or o in t or (len(t) >= 5 and t in o) for o in config["erlaubte_standorte"]):
+            return z
+        if any(v in t for v in config["verbotene_standorte"]):
+            return z
+    return ""
 
 
 def titel_aus_slug(href: str) -> str:
@@ -592,10 +612,25 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         except Exception:
             pass
 
+    # Bis zum Seitenende scrollen statt fixer Schrittzahl: Infinite-Scroll-
+    # Listen (z.B. Neura Robotics, ~100 Stellen alphabetisch) laden sonst nur
+    # die ersten ~30 Einträge und alles ab "H" wird nie gesehen. Abbruch, wenn
+    # die Link-Anzahl mehrere Runden stabil bleibt.
     print("  📜 Scrolle...")
-    for _ in range(8):
-        page.evaluate("window.scrollBy(0, 1200)")
-        page.wait_for_timeout(2500)
+    MAX_SCROLL_RUNDEN = 40
+    letzte_anzahl = -1
+    stabil = 0
+    for _ in range(MAX_SCROLL_RUNDEN):
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(2000)
+        anzahl = page.evaluate("document.querySelectorAll('a[href]').length")
+        if anzahl == letzte_anzahl:
+            stabil += 1
+            if stabil >= 3:
+                break
+        else:
+            stabil = 0
+            letzte_anzahl = anzahl
     page.evaluate("window.scrollTo(0, 0)")
     page.wait_for_timeout(2000)
 
@@ -725,7 +760,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
         ist_pdf_link = link.get("is_pdf") or href.lower().endswith(".pdf")
 
-        zeilen = [z.strip() for z in titel_roh.split("\n") if len(z.strip()) >= MIN_TITEL_LAENGE]
+        zeilen_roh = [z.strip() for z in titel_roh.split("\n") if z.strip()]
+        zeilen = [z for z in zeilen_roh if len(z) >= MIN_TITEL_LAENGE]
         titel  = zeilen[0] if zeilen else titel_roh.strip()
 
         if ist_pdf_link:
@@ -742,7 +778,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         gesehen_urls.add(href)
         gesehen_titel.add(titel)
 
-        standort_aus_text = zeilen[-1] if len(zeilen) >= 2 and zeilen[-1] != titel else ""
+        standort_aus_text = standort_aus_linktext(zeilen_roh, titel, config)
 
         treffer = text_matched(titel, config["suchbegriffe"])
 

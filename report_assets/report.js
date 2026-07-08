@@ -762,6 +762,48 @@
         }
     }
 
+    // Richtet den Passend-Umschalter passend zum aktuellen Status aus:
+    // Status 4 (bewerben) → Button bietet "Nicht passend" an, Status 5 umgekehrt.
+    function _setzePassendBtn(b, url, istPassend) {
+        if (istPassend) {
+            b.textContent = '👎 Nicht passend';
+            b.style.background = '#f9ebea'; b.style.borderColor = '#c0392b'; b.style.color = '#c0392b';
+            b.onclick = () => passendSetzen(b, url, false);
+        } else {
+            b.textContent = '📋 Passend – bewerben';
+            b.style.background = '#eafaf1'; b.style.borderColor = '#27ae60'; b.style.color = '#27ae60';
+            b.onclick = () => passendSetzen(b, url, true);
+        }
+        b.disabled = false;
+    }
+
+    async function passendSetzen(btn, url, passend) {
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/passend-setzen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url, passend})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                _setzePassendBtn(btn, url, !passend);
+                return;
+            }
+            // Stelle kann mehrfach im Report stehen (Neue Stellen, Top 10, pro Firma)
+            document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el => {
+                aktualisiereStatusBadge(el, data.status);
+                const b = el.querySelector('.passend-toggle');
+                if (b) _setzePassendBtn(b, url, passend);
+            });
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            _setzePassendBtn(btn, url, !passend);
+        }
+    }
+
     async function vergebenMarkieren(btn, url) {
         if (!confirm('Stelle manuell als "Vergeben" markieren? (z.B. weil die automatische Prüfung sie nicht erkennen kann)')) return;
         btn.disabled = true;

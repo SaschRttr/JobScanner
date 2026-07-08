@@ -707,6 +707,39 @@ def standort_setzen():
     return jsonify({"ok": True, "standort": standort})
 
 
+@app.route("/passend-setzen", methods=["POST"])
+def passend_setzen():
+    """
+    Schaltet eine KI-bewertete Stelle manuell zwischen Status 4 (bewerben)
+    und Status 5 (nicht bewerben) um - für Fälle, in denen man die
+    KI-Empfehlung übersteuern will.
+    Erwartet JSON: { url, passend: true|false }
+    """
+    data = request.get_json()
+    if not data or not data.get("url") or "passend" not in data:
+        return jsonify({"ok": False, "fehler": "url und passend erforderlich"}), 400
+
+    url          = data["url"]
+    neuer_status = 4 if data["passend"] else 5
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        aktueller = _db.status_von(url)
+        if aktueller is None:
+            return jsonify({"ok": False, "fehler": "Stelle nicht gefunden"}), 404
+        if aktueller not in (4, 5):
+            return jsonify({"ok": False, "fehler": f"Nur bewertete Stellen (Status 4/5) umschaltbar, aktuell: {aktueller}"}), 409
+
+        _db.upsert_stelle({"url": url, "status": neuer_status})
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    return jsonify({"ok": True, "status": neuer_status})
+
+
 @app.route("/vergeben-setzen", methods=["POST"])
 def vergeben_setzen():
     """

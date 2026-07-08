@@ -55,12 +55,34 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
     prompt = prompt_vorlage.replace("{stellentext}", stellentext[:5000])
     prompt = prompt.replace("{lebenslauf}", lebenslauf)
 
+    # Anweisungsteil als System-Prompt, Stellenanzeige (+ Antwortformat) als User-Message
+    marker = "=== STELLENANZEIGE ==="
+    if marker in prompt:
+        system_teil, _, rest = prompt.partition(marker)
+        system_teil = system_teil.strip()
+        user_teil   = marker + rest
+    else:
+        system_teil = ""
+        user_teil   = prompt
+
+    # System-Teil ist über alle Stellen identisch → Prompt-Caching
+    # (greift erst ab 4096 Tokens Prefix bei Haiku 4.5, darunter wirkungslos)
+    if system_teil:
+        system_param = [{
+            "type": "text",
+            "text": system_teil,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    else:
+        system_param = anthropic_lib.NOT_GIVEN
+
     for versuch in range(1, 4):
         try:
             antwort = client.messages.create(
                 model=KI_MODELL,
                 max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}],
+                system=system_param,
+                messages=[{"role": "user", "content": user_teil}],
             )
             text = antwort.content[0].text.strip()
             ergebnis = _parse_json_antwort(text)

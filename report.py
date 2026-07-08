@@ -365,6 +365,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
     pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_escaped}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
     nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_escaped}\')">🚫 Nicht beworben</button>'
+    if scanner_status == 4:
+        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_escaped}\', false)">👎 Nicht passend</button>'
+    elif scanner_status == 5:
+        passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_escaped}\', true)">📋 Passend – bewerben</button>'
+    else:
+        passend_btn = ""
     vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_escaped}\')">🗑️ Als vergeben markieren</button>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
@@ -394,6 +400,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     {bewertung_btn}
     {neu_laden_btn}
     {pruef_btn}
+    {passend_btn}
     {nicht_beworben_btn}
     {vergeben_btn}
     {notizen_html}
