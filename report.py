@@ -240,18 +240,36 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         luecken     = "".join(f"<li>{p}</li>" for p in b.get("luecken", []))
         anpassungen = "".join(f"<li>{p}</li>" for p in b.get("lebenslauf_anpassungen", []))
         begruendung = b.get("score_begruendung", "")
-        score_na_html = (
-            f' → <strong style="color:{farbe_na};">{score_na}%</strong>'
-            f'<span style="color:#999;font-size:0.85em;"> nach Anpassung</span>'
-        ) if score_na and score_na > score else ""
+        # Profil-Hinweise: warum weicht der Profil-Score vom Lebenslauf-Score ab
+        _ph = b.get("profil_hinweise", [])
+        profil_hinweise_html = (
+            "<p><strong>Profil-Auf-/Abwertungen:</strong></p><ul>"
+            + "".join(
+                f'<li style="color:{"#27ae60" if str(p).strip().startswith("+") else "#c0392b" if str(p).strip().startswith("-") else "#444"};">{p}</li>'
+                for p in _ph
+            )
+            + "</ul>"
+        ) if _ph else ""
+        # Zwei Perspektiven: Lebenslauf-Score (Recruiter-Sicht) vs. Profil-Score
+        # ("lohnt sich die Bewerbung?"). Bei identischen Werten nur ein Score.
+        if score_na is not None and score_na != score:
+            score_html = (
+                f'<span style="color:#999;font-size:0.85em;">Lebenslauf:</span> '
+                f'<strong style="color:{farbe};">{score}%</strong>'
+                f' → <span style="color:#999;font-size:0.85em;">Profil:</span> '
+                f'<strong style="color:{farbe_na};">{score_na}%</strong>'
+            )
+        else:
+            score_html = f'<strong style="color:{farbe};">Score: {score}%</strong>'
         bewertung_html = f"""
         <div class="bewertung">
-            <strong style="color:{farbe};">Score: {score}%</strong>{score_na_html}
+            {score_html}
             &nbsp;|&nbsp;
             <strong style="color:{empf_farbe};">{empf.upper()}</strong>
             <details><summary>Details anzeigen</summary>
                 <p><strong>Stärken:</strong></p><ul>{staerken}</ul>
                 <p><strong>Lücken:</strong></p><ul>{luecken}</ul>
+                {profil_hinweise_html}
                 <p><strong>Lebenslauf-Anpassungen:</strong></p><ul>{anpassungen}</ul>
                 <p class="begruendung">📊 {begruendung}</p>
             </details>
@@ -774,7 +792,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 
     for firma_name in alle_firmen:
         firma_stellen = firmen_dict.get(firma_name, [])
-        hoch = [s for s in firma_stellen if (s.get("bewertung") or {}).get("score", 0) >= 70]
+        # Profil-Score entscheidet über "Hoch" (Fallback Lebenslauf-Score bei Alt-Bewertungen)
+        def _entscheidungs_score(s):
+            b = s.get("bewertung") or {}
+            sn = b.get("score_nach_anpassung")
+            return sn if isinstance(sn, (int, float)) else b.get("score", 0)
+        hoch = [s for s in firma_stellen if _entscheidungs_score(s) >= 70]
         rest = [s for s in firma_stellen if s not in hoch]
 
         html += '<div class="firma-block">\n'

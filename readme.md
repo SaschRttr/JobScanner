@@ -11,10 +11,12 @@ Das System läuft auf einem Raspberry Pi und ist über den Browser erreichbar.
 ## Architektur
 
 ```
-scanner.py → extraktor.py → bewertung.py → report.py → anpasser.py
+scanner.py → rohtext_holen.py → vergaben_check.py → extraktor.py → bewertung.py → report.py
 ```
 
-Jedes Script ist ein eigenständiger Schritt. Sie können einzeln oder als komplette Pipeline über die WebUI gestartet werden.
+(`anpasser.py` läuft separat, nur on-demand über die WebUI.) Jedes Script ist ein
+eigenständiger Schritt. Sie können einzeln oder als komplette Pipeline über die WebUI
+gestartet werden (siehe `PIPELINE`-Liste in `webui.py`).
 
 ---
 
@@ -22,18 +24,27 @@ Jedes Script ist ein eigenständiger Schritt. Sie können einzeln oder als kompl
 
 | Datei / Ordner | Beschreibung |
 |---|---|
-| `config.txt` | Zentrale Konfiguration (API-Key, Firmen, Suchbegriffe, Prompt) |
-| `scanner.py` | Schritt 1: Stellenanzeigen finden und Rohtext laden |
+| `config.txt` | Zentrale Konfiguration (API-Key, Firmen, Suchbegriffe, Prompt) – **nicht in Git**, enthält Secrets |
+| `scanner.py` | Schritt 1: Stellenanzeigen finden (Playwright/API) |
+| `rohtext_holen.py` | Schritt 1b: Vollständigen Seitentext für einzelne Stellen laden |
+| `vergaben_check.py` | Schritt 1c: Erreichbarkeit bekannter Stellen per HTTP prüfen |
 | `extraktor.py` | Schritt 2: Stellentext aus Rohtext extrahieren |
 | `bewertung.py` | Schritt 3: KI-Bewertung der Stelle |
 | `report.py` | Schritt 4: HTML-Report erstellen, optional Mail senden |
-| `anpasser.py` | Schritt 5: Lebenslauf an Stelle anpassen (nur bei Score ≥ 70) |
+| `anpasser.py` | Schritt 5: Lebenslauf an Stelle anpassen (nur bei Profil-Score ≥ 70), on-demand |
+| `docx_patcher.py` | Erzeugt Lebenslauf/Anschreiben `.docx` mit Tracked Changes aus der `.txt`-Vorlage |
 | `webui.py` | Flask-Webserver (Port 5000), steuert die Pipeline |
+| `dashboard.py` | Streamlit-Dashboard zur Pipeline-Visualisierung (separater Service) |
 | `db.py` | SQLite-Datenbankmodul |
-| `jobscanner.db` | SQLite-Datenbank |
-| `stellen.json` | Alle gefundenen Stellen (Haupt-Datenspeicher) |
-| `bekannte_stellen.json` | Status pro URL (welche Pipeline-Stufe erreicht) |
+| `status_def.py` | Zentrale Status-Definitionen (Labels, Farben, Emojis) |
+| `browser.py` | Gemeinsame Playwright-Browser-Konstanten für Scanner/Rohtext/Vergaben-Check |
+| `email_status.py` | E-Mail-basierte Bewerbungsstatus-Erkennung (Absender-Domain-Abgleich) |
+| `uebersetzer.py` | Einmalige KI-Übersetzung der Lebenslauf-Vorlage ins Englische |
+| `jobscanner.db` | SQLite-Datenbank (einzige Quelle der Wahrheit) |
+| `stellen.json` | Export aus der DB – alle gefundenen Stellen |
+| `bekannte_stellen.json` | Export aus der DB – Status pro URL (welche Pipeline-Stufe erreicht) |
 | `strukturen.json` | Gelernte Seitenstrukturen für schnellere Extraktion |
+| `whitelist_standorte.txt` | Erlaubte Standorte (Whitelist), ein Ort pro Zeile |
 | `lebenslauf_vorlage.txt` | Lebenslauf-Vorlage mit Markern für den Anpasser |
 | `lebenslauf_vorlage_en.txt` | Englische Übersetzung (generiert via `uebersetzer.py`) |
 | `lebenslauf.txt` | Aktueller Lebenslauf (Basis für Bewertungs-Prompt) |
@@ -66,10 +77,17 @@ EMAIL_EMPFAENGER = ...
 |---|---|
 | `[suchbegriffe]` | Begriffe die in Stellentiteln gesucht werden |
 | `[ausschlussbegriffe]` | Begriffe die Stellen ausschließen. Mit `+` AND-Verknüpfung |
-| `[verbotene_standorte]` | Städte die gefiltert werden |
-| `[firmen]` | Firmenname und URL der Karriereseite |
-| `[prompt]` | KI-Bewertungsprompt mit `{stellentext}` und `{lebenslauf}` Platzhaltern |
+| `[verbotene_standorte]` | Städte die gefiltert werden (Blacklist) |
+| `[firmen]` | Firmenname und URL der Karriereseite (Playwright) |
+| `[api_firmen]` | Firmen mit direkter API-Abfrage (JSON-Konfiguration) |
+| `[prompt]` | KI-Bewertungsprompt. Aufbau: Bewertungsregeln → AUSGABEFORMAT (JSON-Schema) → `{lebenslauf}` → `{stellentext}`. Der Teil vor `=== STELLENANZEIGE ===` wird als System-Prompt gesendet (Prompt-Caching) |
 | `[firma_domains]` | Domain-Zuordnung für E-Mail-Filterung |
+| `[firma_anschreiben]` | Ansprechpartner/Adresse pro Firma fürs Anschreiben |
+| `[anschreiben_prompt]` / `[anschreiben_prompt_en]` | KI-Prompt für Anschreiben-Generierung (DE/EN) |
+| `[steckbrief_prompt]` | KI-Prompt für den Firmen-Steckbrief |
+
+Erlaubte Standorte (Whitelist) stehen **nicht** in `config.txt`, sondern in
+`whitelist_standorte.txt` (ein Ort pro Zeile).
 
 ---
 
@@ -81,11 +99,24 @@ EMAIL_EMPFAENGER = ...
 - Unterstützt zwei Methoden:
   - **Playwright**: JavaScript-gerenderte Seiten (Standard für `[firmen]`)
   - **API**: Direkte API-Abfragen für bestimmte Firmen (hardcodiert in `API_FIRMEN`)
-- Lädt den Rohtext jeder gefundenen Stellenanzeige
-- Speichert neue Stellen in `stellen.json` und `bekannte_stellen.json`
+- Speichert neue Stellen in der DB (Export nach `stellen.json` / `bekannte_stellen.json`)
 - Markiert nicht mehr gefundene Stellen als vergeben (Status 0)
 
-**Status nach diesem Schritt:** 1 (URL bekannt) oder 2 (Rohtext vorhanden)
+**Status nach diesem Schritt:** 1 (URL bekannt) oder 2 (Rohtext vorhanden, je nach Quelle)
+
+### Schritt 1b: `rohtext_holen.py`
+
+- Lädt den vollständigen Seitentext (Rohtext) per Playwright nach, für Stellen mit
+  keinem oder zu kurzem Rohtext (API-Quellen liefern oft nur Platzhalter)
+- `--url URL` für eine einzelne Stelle, `--force` erzwingt Neuladen auch bei Status 3+
+
+**Status nach diesem Schritt:** 2 (Rohtext vorhanden)
+
+### Schritt 1c: `vergaben_check.py`
+
+- Prüft per HTTP, ob bekannte aktive Stellen (Status 1–6, nicht gelöscht) noch erreichbar sind
+- Erkennt vergebene Stellen anhand des HTTP-Status, ohne Playwright zu benötigen
+- `--alle` prüft zusätzlich alle nicht gelöschten Stellen unabhängig vom Status
 
 ### Schritt 2: `extraktor.py`
 
@@ -100,21 +131,56 @@ EMAIL_EMPFAENGER = ...
 
 - Verarbeitet alle Stellen mit Status 3
 - Sendet Stellentext + Lebenslauf an die KI (Claude Haiku)
-- Gibt zurück: Score (0–100), Empfehlung, Stärken, Lücken, Lebenslauf-Anpassungshinweise
-- Stellen mit Score ≥ 70 erhalten die Empfehlung „bewerben"
+- Gibt zurück: zwei Scores (siehe unten), Empfehlung, Stärken, Lücken, Punkteabzüge, Lebenslauf-Anpassungshinweise
+- Stellen mit **Profil-Score ≥ 70** erhalten die Empfehlung „bewerben" (Status 4, sonst 5)
 
-**Status nach diesem Schritt:** 4 (bewertet)
+#### Das Zwei-Score-System
+
+Jede Bewertung liefert zwei Scores, die **verschiedene Fragen** beantworten – kein Vorher/Nachher:
+
+| Score | Frage | Sichtweise |
+|---|---|---|
+| **Lebenslauf-Score** (`score`) | Komme ich durchs CV-Screening? | Recruiter, der **nur den Lebenslauf-Text** liest – ohne das Profilwissen aus dem Prompt |
+| **Profil-Score** (`score_nach_anpassung`) | Lohnt sich die Bewerbung? | Volles Profil (Stärken, Arbeitstyp explorativ statt Serie) – das, was der Recruiter erst im Gespräch erfährt |
+
+Der **Profil-Score entscheidet** über Empfehlung und Status – „lohnt es sich?" ist eine
+Profil-Frage, keine Screening-Frage. Der Profil-Score ist zugleich die **Obergrenze**, an die
+man den Lebenslauf-Score durch Anpassen des Lebenslaufs annähern kann.
+
+Die Differenz der beiden Scores ist die eigentliche Information:
+
+| Konstellation | Bedeutung | Konsequenz |
+|---|---|---|
+| Lebenslauf **<** Profil (z.B. 62 → 68) | **Sichtbarkeits-Lücke:** Der Lebenslauf verkauft vorhandene Erfahrung unter Wert | Anpassen lohnt sich – `lebenslauf_anpassungen` sagt konkret, was sichtbar gemacht werden soll |
+| Lebenslauf **>** Profil (z.B. 78 → 58) | Käme durchs Screening, aber die Stelle passt nicht zum Arbeitstyp (z.B. Serienbetreuung statt explorativer Arbeit) | Nicht bewerben – das Problem ist nicht das Dokument, sondern die Stelle |
+| Lebenslauf **=** Profil, beide niedrig | **Echte Kompetenz-Lücken** (z.B. nie benutzte Spezialsoftware) drücken beide Scores | Kein Umformulieren der Welt ändert daran etwas |
+
+Optimierung per Lebenslauf-Anpassung ist also nur bei **Sichtbarkeits-Lücken** möglich, nie bei
+echten Kompetenz-Lücken – der Prompt rechnet nur Abzüge zurück, die durch Sichtbarmachen
+tatsächlich entfallen.
+
+Weichen die Scores voneinander ab, liefert die KI zusätzlich **`profil_hinweise`** – eine
+Liste der Auf- (+) und Abwertungen (−) mit Bezug auf das konkrete Signal in der Stellenanzeige
+und den passenden bzw. widersprechenden Punkt der Profilbeschreibung. Im Report erscheinen sie
+unter „Details anzeigen" als **Profil-Auf-/Abwertungen** (grün/rot eingefärbt).
+
+**Hinweis:** Bewertungen von vor der Umstellung (Juli 2026) folgen noch der alten
+„Score vorher/nachher Anpassung"-Logik; die neue Lesart gilt erst nach einer Neubewertung
+(Button „🔁 Neu bewerten" im Report oder nächster Scan).
+
+**Status nach diesem Schritt:** 4 (Profil-Score ≥ 70) oder 5 (darunter)
 
 ### Schritt 4: `report.py`
 
 - Erstellt `report.html` aus allen Stellen in `stellen.json`
-- Zeigt Top-10 nach Score, danach alle Firmen
+- Zeigt Top-10 nach dem höheren der beiden Scores, danach alle Firmen
+- Score-Anzeige pro Stelle: `Lebenslauf: 62% → Profil: 68%` (bei identischen Werten nur „Score: X%")
 - Sendet bei Änderungen (neue / vergebene Stellen) eine E-Mail
 - Setzt das `neu`-Flag zurück nach Report-Erstellung
 
 ### Schritt 5: `anpasser.py`
 
-- Verarbeitet alle Stellen mit Score ≥ 70 und Anpassungshinweisen
+- Verarbeitet alle Stellen mit **Profil-Score** ≥ 70 und Anpassungshinweisen
 - Passt gezielt nur relevante Abschnitte der `lebenslauf_vorlage.txt` an
 - Speichert das Ergebnis als `bewerbungen/Firma/Titel/Lebenslauf.txt`
 - Wird **nicht automatisch** ausgeführt – nur on-demand über die WebUI (Checkbox)
@@ -156,48 +222,82 @@ Erreichbar unter `http://192.168.x.x:5000`
 |---|---|
 | **Scan starten** | Startet die komplette Pipeline im Hintergrund, zeigt Live-Log |
 | **Stelle manuell einfügen** | URL, Firmenname und Jobtitel eingeben → startet Teil-Pipeline |
-| **Lebenslauf & Anschreiben erstellen** | Checkbox bei Stelle mit Score ≥ 70 → generiert `.txt` und `.docx` |
+| **Lebenslauf & Anschreiben erstellen** | Checkbox bei jeder Stelle (unabhängig vom Score) → generiert `.txt` und `.docx` |
+| **Bewertung starten / 🔁 Neu bewerten** | Button bei Stellen mit Stellentext → (erneute) KI-Bewertung, Prompt wird live aus `config.txt` gelesen |
+| **🔄 Neu laden & bewerten** | Bei Stellen ohne Stellentext: kompletter Teil-Durchlauf (Rohtext → Extraktion → Bewertung) für eine URL |
+| **🧠 Steckbrief generieren** | Firmenbeschreibung, Matchbegründung, Interview-Fragen per KI |
+| **📉 Geringen Match einblenden** | Blendet Stellen mit Score ≤ 65% ein/aus (siehe `GERINGER_MATCH_SCHWELLE`) |
+| **Filter & Sortierung** | Nach Bewerbungsstufe, Scanner-Status, Firma, Score, Fahrzeit (Auto/ÖPNV) |
 | **Notizen** | Freitextnotizen pro Stelle, werden in der DB gespeichert |
 | **Bewerbungsstatus** | Dropdown: Beworben / Kennenlerngespräch / Einladung / Zusage / Absage |
 | **Stellentext anzeigen** | Aufklappbarer extrahierter Stellentext |
+| **Standort nachtragen** | Bei Stellen ohne erkannten Standort manuell eintragen |
+| **Passend / Nicht passend umschalten** | KI-Empfehlung manuell übersteuern (Status 4 ↔ 5) |
+| **Als vergeben markieren** | Manuell, falls die automatische Prüfung eine vergebene Stelle nicht erkennt |
+| **Neue Firma testen** | Karriere-URL + Firmenname eingeben, Playwright sucht Jobtitel-Links, optional in `config.txt` übernehmen |
 
 ### Routes
 
 | Route | Methode | Beschreibung |
 |---|---|---|
 | `/` | GET | Liefert `report.html` |
-| `/starten` | GET | Startet komplette Pipeline |
+| `/starten` | GET | Startet komplette Pipeline (SSE-Log) |
+| `/stoppen` | GET | Bricht den laufenden Scan nach dem aktuellen Script ab |
 | `/stream` | GET | SSE-Stream des Scan-Logs |
-| `/status` | GET | Gibt Bewerbungsstatus aus DB zurück |
-| `/status` | POST | Speichert Stufe oder Kommentar |
+| `/firmen` | GET | Alle Firmennamen als JSON (API- + Playwright-Firmen) |
+| `/firma-testen` | GET | Scannt eine einzelne Firma, SSE-Stream |
+| `/firmen-testen-stream` | GET | Testet eine neue Karriere-URL per Playwright, listet gefundene Jobtitel |
+| `/firmen-config-hinzufuegen` | POST | Trägt eine neue Firma in `[firmen]` in `config.txt` ein |
 | `/bewerbung-erstellen` | GET | Generiert Lebenslauf.txt + .docx für eine Stelle |
 | `/download` | GET | Liefert eine Datei zum Download |
-| `/stelle-einfuegen` | POST | Trägt eine Stelle manuell ein |
-| `/manuell-stream` | GET | SSE-Stream für manuellen Eintrag |
+| `/status` | GET | Gibt Bewerbungsstatus aus DB zurück |
+| `/status` | POST | Speichert Stufe, Kommentar oder Nicht-beworben-Grund |
+| `/api/pruefe-stelle` | POST | Prüft eine URL auf Erreichbarkeit (HTTP-Status) |
+| `/steckbrief-erstellen` | POST | Erstellt einen KI-Steckbrief für eine Stelle |
+| `/bewertung-erstellen` | POST | (Neu-)Bewertung einer einzelnen Stelle – Prompt wird live geladen |
+| `/stelle-einfuegen` | POST | Trägt eine Stelle manuell ein (URL, Firma, Titel) |
+| `/manuell-stream` | GET | SSE-Stream: Teil-Pipeline für manuell eingetragene Stellen |
+| `/stelle-neu-laden` | POST | Setzt eine Stelle auf Status 1 zurück (löscht Rohtext, `nicht_passend`) |
+| `/stelle-einzeln-stream` | GET | SSE-Stream: Rohtext → Extraktion → Bewertung für eine URL |
+| `/standort-setzen` | POST | Trägt einen Arbeitsort nach, prüft gegen Whitelist/Blacklist |
+| `/passend-setzen` | POST | Schaltet Status 4 ↔ 5 manuell um |
+| `/vergeben-setzen` | POST | Markiert eine Stelle manuell als vergeben |
 
 ---
 
 ## Datenbank (`jobscanner.db`)
 
-SQLite-Datenbank mit vier Tabellen:
+SQLite-Datenbank, einzige Quelle der Wahrheit; `stellen.json` und `bekannte_stellen.json`
+werden bei jeder Änderung daraus exportiert (siehe TODOs). Fünf Tabellen:
 
-**`stellen`** – Alle Stellenanzeigen mit Rohtext, Stellentext und Status
+**`stellen`** – Alle Stellenanzeigen mit Rohtext, Stellentext, Status, Standort, Steckbrief, Pfaden zu Bewerbungsunterlagen
 
-**`bewertungen`** – KI-Bewertung pro Stelle (Score, Stärken, Lücken, Anpassungshinweise)
+**`bewertungen`** – KI-Bewertung pro Stelle (beide Scores, Stärken, Lücken, Punkteabzüge, Profil-Hinweise, Lebenslauf-Anpassungen, Sprache)
 
-**`bewerbungsstatus`** – Bewerbungsfortschritt pro Stelle (Stufe, Timestamps, Kommentar)
+**`bewerbungsstatus`** – Bewerbungsfortschritt pro Stelle (Stufe, Timestamps, Kommentar, Nicht-beworben-Grund)
 
 **`status_historie`** – Log aller Status-Änderungen
+
+**`fahrzeit_cache`** – Gecachte Google-Maps-Fahrzeiten (Auto/ÖPNV) pro Zieladresse
+
+Status-Definitionen (Labels, Farben, Emojis) liegen zentral in `status_def.py` – von `db.py`,
+`report.py`, `webui.py`, `dashboard.py` und `vergaben_check.py` genutzt.
 
 ### Status-Codes
 
 | Code | Bedeutung |
 |---|---|
-| 0 | Vergeben / nicht mehr verfügbar |
-| 1 | URL bekannt, kein Rohtext |
-| 2 | Rohtext vorhanden |
-| 3 | Stellentext extrahiert |
-| 4 | KI-Bewertung vorhanden |
+| 0 | Vergeben / nicht mehr erreichbar |
+| 1 | Nur Link gefunden, noch kein Rohtext |
+| 2 | Rohtext geholt, kein Stellentext extrahiert |
+| 3 | Stellentext extrahiert, noch nicht bewertet |
+| 4 | KI bewertet → Profil-Score ≥ 70%, bewerben empfohlen |
+| 5 | KI bewertet → Profil-Score < 70%, nicht bewerben |
+| 6 | Beworben, Stelle noch aktiv |
+| 7 | Beworben, Stelle weg / vergeben (Ghosting) |
+| 8 | Absage erhalten |
+| 9 | Vergeben, nie beworben (per HTTP bestätigt) |
+| 10 | Nicht beworben (manuell entschieden) |
 
 ---
 
@@ -225,6 +325,8 @@ python webui.py
 ```bash
 source ~/Jobsuche/venv/bin/activate
 python scanner.py
+python rohtext_holen.py
+python vergaben_check.py
 python extraktor.py
 python bewertung.py
 python report.py
@@ -248,5 +350,3 @@ scp C:\Users\sasch\Documents\Python\Jobsuche\Jobsuche_V2\webui.py sascha@192.168
 - PDF-URLs beim manuellen Einfügen automatisch extrahieren
 - iCloud Mail-Check für automatischen E-Mail-Abgleich
 - Workday-Handler ausbauen (Bosch, Daimler, ZF)
-- `API_FIRMEN` aus Hardcode in `config.txt` auslagern
-- Streamlit-Dashboard für Pipeline-Visualisierung

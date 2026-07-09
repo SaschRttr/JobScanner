@@ -593,8 +593,11 @@ def bewertung_erstellen():
     if not bewertung:
         return jsonify({"fehler": "KI-Bewertung fehlgeschlagen"}), 500
 
-    score = (bewertung or {}).get("score", 0)
-    neuer_status = 4 if score >= 70 else 5
+    # Status hängt am Profil-Score ("lohnt sich die Bewerbung?"), Fallback Lebenslauf-Score
+    profil_score = bewertung.get("score_nach_anpassung")
+    if not isinstance(profil_score, (int, float)):
+        profil_score = bewertung.get("score", 0)
+    neuer_status = 4 if profil_score >= 70 else 5
     _db.upsert_bewertung(url, bewertung)
     _db.upsert_stelle({"url": url, "status": neuer_status, "nicht_passend": False})
     _db.exportiere_stellen_json(STELLEN_JSON)

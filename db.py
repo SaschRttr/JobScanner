@@ -66,6 +66,7 @@ def erstelle_schema():
                 staerken               TEXT,
                 luecken                TEXT,
                 lebenslauf_anpassungen TEXT,
+                profil_hinweise        TEXT,
                 sprache                TEXT,
                 bewertet_am            TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
@@ -123,6 +124,7 @@ def _migriere_schema():
         "ALTER TABLE bewerbungsstatus ADD COLUMN nicht_beworben_grund TEXT",
         "ALTER TABLE bewertungen ADD COLUMN score_nach_anpassung INTEGER",
         "ALTER TABLE bewertungen ADD COLUMN sprache TEXT",
+        "ALTER TABLE bewertungen ADD COLUMN profil_hinweise TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -278,8 +280,8 @@ def upsert_bewertung(url: str, b: dict):
         con.execute("""
             INSERT INTO bewertungen
                 (url, score, score_nach_anpassung, empfehlung, score_begruendung,
-                 staerken, luecken, lebenslauf_anpassungen, sprache, bewertet_am)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 staerken, luecken, lebenslauf_anpassungen, profil_hinweise, sprache, bewertet_am)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 score                  = excluded.score,
                 score_nach_anpassung   = excluded.score_nach_anpassung,
@@ -288,6 +290,7 @@ def upsert_bewertung(url: str, b: dict):
                 staerken               = excluded.staerken,
                 luecken                = excluded.luecken,
                 lebenslauf_anpassungen = excluded.lebenslauf_anpassungen,
+                profil_hinweise        = excluded.profil_hinweise,
                 sprache                = excluded.sprache,
                 bewertet_am            = excluded.bewertet_am
         """, (
@@ -299,6 +302,7 @@ def upsert_bewertung(url: str, b: dict):
             json.dumps(b.get("staerken", []),               ensure_ascii=False),
             json.dumps(b.get("luecken", []),                ensure_ascii=False),
             json.dumps(b.get("lebenslauf_anpassungen", []), ensure_ascii=False),
+            json.dumps(b.get("profil_hinweise", []),        ensure_ascii=False),
             b.get("sprache") or "de",
             datetime.now().strftime("%Y-%m-%d %H:%M"),
         ))
@@ -571,7 +575,7 @@ def lade_alle_stellen() -> list[dict]:
                 s.vergabe_status, s.vergaben_bestaetigt,
                 s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken,
                 b.score, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
-                b.staerken, b.luecken, b.lebenslauf_anpassungen, b.sprache,
+                b.staerken, b.luecken, b.lebenslauf_anpassungen, b.profil_hinweise, b.sprache,
                 b.bewertet_am
             FROM stellen s
             LEFT JOIN bewertungen b ON s.url = b.url
@@ -590,6 +594,7 @@ def lade_alle_stellen() -> list[dict]:
                 "staerken":               json.loads(r["staerken"] or "[]"),
                 "luecken":                json.loads(r["luecken"] or "[]"),
                 "lebenslauf_anpassungen": json.loads(r["lebenslauf_anpassungen"] or "[]"),
+                "profil_hinweise":        json.loads(r["profil_hinweise"] or "[]"),
                 "sprache":                r["sprache"] or "de",
             }
         steckbrief = None

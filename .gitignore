@@ -1,4 +1,5 @@
 config.txt
+config_backup*.txt
 bewerbungen/
 Bewerbungen/
 bekannte_stellen.json

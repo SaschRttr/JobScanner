@@ -99,7 +99,13 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
                 if versuch == 3:
                     return None
                 continue
-            ergebnis["empfehlung"] = "bewerben" if ergebnis.get("score", 0) >= 70 else "nicht bewerben"
+            # Bewerben-Entscheidung hängt am Profil-Score (score_nach_anpassung):
+            # "Lohnt sich die Bewerbung?" ist eine Profil-Frage, keine CV-Screening-Frage.
+            profil_score = ergebnis.get("score_nach_anpassung")
+            if not isinstance(profil_score, (int, float)):
+                profil_score = ergebnis.get("score", 0)
+                ergebnis["score_nach_anpassung"] = profil_score
+            ergebnis["empfehlung"] = "bewerben" if profil_score >= 70 else "nicht bewerben"
             if "sprache" not in ergebnis:
                 ergebnis["sprache"] = "de"
             return ergebnis
@@ -233,11 +239,12 @@ def main():
 
         if bewertung:
             stellen[idx]["bewertung"] = bewertung
-            score = bewertung.get("score", 0)
-            empf  = bewertung.get("empfehlung", "?")
-            neuer_status = 4 if score >= 70 else 5
+            score  = bewertung.get("score", 0)
+            profil = bewertung.get("score_nach_anpassung", score)
+            empf   = bewertung.get("empfehlung", "?")
+            neuer_status = 4 if profil >= 70 else 5
             stellen[idx]["status"] = neuer_status
-            print(f"  ⭐ Score: {score}%  |  {empf.upper()}  →  Status {neuer_status}")
+            print(f"  ⭐ Lebenslauf: {score}%  |  Profil: {profil}%  |  {empf.upper()}  →  Status {neuer_status}")
             bewertet += 1
             upsert_stelle({"url": url, "status": neuer_status})
             upsert_bewertung(url, bewertung)

@@ -56,7 +56,11 @@ MIN_SCORE  = 70
 # =============================================================================
 
 def get_score(s: dict) -> int:
+    # Profil-Score ("lohnt sich die Bewerbung?") mit Fallback auf den Lebenslauf-Score
     b = s.get("bewertung") or {}
+    profil = b.get("score_nach_anpassung")
+    if isinstance(profil, (int, float)):
+        return profil
     return b.get("score_aktuell", b.get("score", 0))
 
 
