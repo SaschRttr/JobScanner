@@ -307,6 +307,7 @@
     }
 
     async function bewertungStarten(btn, stellenUrl) {
+        const originalLabel = btn.textContent;
         btn.disabled = true;
         btn.textContent = '⏳ Bewerte...';
         try {
@@ -320,12 +321,12 @@
                 location.reload();
             } else {
                 btn.disabled = false;
-                btn.textContent = '⭐ Bewertung starten';
+                btn.textContent = originalLabel;
                 alert('Fehler: ' + (data.fehler || 'Unbekannt'));
             }
         } catch(e) {
             btn.disabled = false;
-            btn.textContent = '⭐ Bewertung starten';
+            btn.textContent = originalLabel;
             alert('Server nicht erreichbar');
         }
     }

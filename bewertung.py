@@ -80,14 +80,25 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
         try:
             antwort = client.messages.create(
                 model=KI_MODELL,
-                max_tokens=2048,
+                max_tokens=8192,
                 system=system_param,
                 messages=[{"role": "user", "content": user_teil}],
             )
             text = antwort.content[0].text.strip()
+            if antwort.stop_reason == "max_tokens":
+                print(f"  ⚠️  Antwort abgeschnitten – max_tokens erreicht (Versuch {versuch}/3)")
+                if versuch == 3:
+                    return None
+                continue
             ergebnis = _parse_json_antwort(text)
             if "score_aktuell" in ergebnis and "score" not in ergebnis:
                 ergebnis["score"] = ergebnis["score_aktuell"]
+            if not isinstance(ergebnis.get("score"), (int, float)):
+                # Ohne gültigen Score nicht speichern – sonst landet 0% in der DB
+                print(f"  ⚠️  Kein gültiger Score in der Antwort (Versuch {versuch}/3)")
+                if versuch == 3:
+                    return None
+                continue
             ergebnis["empfehlung"] = "bewerben" if ergebnis.get("score", 0) >= 70 else "nicht bewerben"
             if "sprache" not in ergebnis:
                 ergebnis["sprache"] = "de"

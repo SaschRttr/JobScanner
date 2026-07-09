@@ -257,14 +257,16 @@ def lade_config() -> dict:
             puffer = []
             continue
 
-        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
-            aktiver_abschnitt = z[1:-1].lower()
-            puffer = []
-            continue
-
+        # Innerhalb von Freitext-Abschnitten zählen [..]-Zeilen als Inhalt,
+        # nur der passende [\..]-Marker (oben) beendet den Abschnitt.
         if aktiver_abschnitt in ("prompt", "steckbrief_prompt", "anschreiben_prompt",
                                  "anschreiben_prompt_en", "api_firmen"):
             puffer.append(zeile)
+            continue
+
+        if z.startswith("[") and z.endswith("]") and not z.startswith("[\\"):
+            aktiver_abschnitt = z[1:-1].lower()
+            puffer = []
             continue
 
         if z.startswith("#") or not z:

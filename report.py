@@ -365,7 +365,11 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         steckbrief_html = ""
 
     steckbrief_btn  = f'<button class="steckbrief-btn" onclick="steckbriefGenerieren(this, \'{url_js}\')">🧠 Steckbrief generieren</button>'
-    bewertung_btn   = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_js}\')">⭐ Bewertung starten</button>' if (s.get("stellentext") or s.get("rohtext")) and not s.get("bewertung") else ""
+    if s.get("stellentext") or s.get("rohtext"):
+        _bew_label    = "🔁 Neu bewerten" if s.get("bewertung") else "⭐ Bewertung starten"
+        bewertung_btn = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_js}\')">{_bew_label}</button>'
+    else:
+        bewertung_btn = ""
     neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_js}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
     pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_js}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
