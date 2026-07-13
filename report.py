@@ -399,6 +399,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     else:
         passend_btn = ""
     vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_js}\')">🗑️ Als vergeben markieren</button>'
+    if s.get("gemerkt"):
+        merken_btn = f'<button class="pruef-btn merken-toggle" style="background:#fff8e1;border-color:#ffc107;color:#946c00;" onclick="merkenSetzen(this, \'{url_js}\', false)">🔖 Von Merkliste entfernen</button>'
+    else:
+        merken_btn = f'<button class="pruef-btn merken-toggle" style="background:#f7f7f7;border-color:#bbb;color:#555;" onclick="merkenSetzen(this, \'{url_js}\', true)">🔖 Merken</button>'
 
     hat_lv = "1" if (lv_docx and lv_docx.exists()) else "0"
     _auto_min_attr = ""
@@ -412,11 +416,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
     _zw_attr = ' data-zu-weit="1"' if zu_weit else ''
     _vm_attr = ' data-vorgemerkt="1"' if s.get("pruef_vormerken") else ''
+    _gemerkt_attr = ' data-gemerkt="1"' if s.get("gemerkt") else ''
     if zu_weit:
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr} data-scanner-status="{_scanner_status_attr}">
+    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr}{_gemerkt_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{url_attr}" target="_blank">{_html.escape(s['titel'])}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
@@ -428,6 +433,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     {neu_laden_btn}
     {pruef_btn}
     {passend_btn}
+    {merken_btn}
     {nicht_beworben_btn}
     {vergeben_btn}
     {notizen_html}
@@ -588,6 +594,15 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             f'onclick="document.getElementById(\'cb-vorgemerkt\').click()">{vorgemerkt_count}</strong> ⏳ Verfügbarkeit unsicher'
         )
 
+    # Gemerkte Stellen (manuell per 🔖 Merken-Button auf die Merkliste gesetzt)
+    gemerkt_count = sum(1 for s in stellen if s.get("gemerkt") and not s.get("geloescht_am"))
+    status_zeilen += (
+        ' &nbsp;|&nbsp;\n        '
+        f'<strong id="stat-merkliste" style="cursor:pointer;text-decoration:underline dotted;color:#946c00;" '
+        f'title="Klick: nur gemerkte Stellen anzeigen" '
+        f'onclick="document.getElementById(\'cb-merkliste\').click()">{gemerkt_count}</strong> 🔖 Merkliste'
+    )
+
     # Status-Konstanten aus status_def.py fürs JS bereitstellen (eine Quelle)
     status_js_konstanten = (
         f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
@@ -737,6 +752,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-vorgemerkt" onchange="toggleVorgemerkt(this.checked)">
                 ⏳ Nur Verfügbarkeit unsicher
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-merkliste" onchange="toggleMerkliste(this.checked)">
+                🔖 Nur Merkliste
             </label>
         </div>
         <div class="filter-gruppe">

@@ -1,0 +1,567 @@
+# =============================================================================
+# Job-Scanner Konfiguration
+# =============================================================================
+# Zeilen die mit # beginnen werden ignoriert.
+# Abschnitte beginnen mit [name] und enden mit [\name]
+#
+# Persönliche/geheime Daten (API-Keys, Zugangsdaten, Heimadresse, Prompts)
+# liegen in config_secrets.txt (wird NICHT über GitHub synchronisiert).
+
+# KI-Bewertung aktivieren (true/false)
+LLM_BEWERTUNG = true
+
+# E-Mail-Benachrichtigung aktivieren (true/false) – Zugangsdaten in config_secrets.txt
+EMAIL_AKTIV = true
+
+[suchbegriffe]
+Characterization
+PIC
+Poc
+prototyp
+hardware
+test
+validierung
+messtechnik
+prüfingenieur
+prüftechnik
+testingenieur
+embedded
+elektronik
+entwicklung
+inbetriebnahme
+datenanalyse
+python
+test engineer
+testingenieur
+testentwickl
+prüftechniker
+prüafingenieur
+validation
+validierung
+verification
+verifizierung
+V&V
+IVVQ
+versuchsingenieur
+qualifizierung
+testautomatisierung
+test automation
+inbetriebnahme
+troubleshoot
+fehleranalyse
+fehlerinjektion
+2nd level
+3rd level
+feldtest
+field test
+systemtest
+modultest
+ASIC
+ISO 26262
+hardware engineer
+hardwareentwickl
+schaltplan
+layout engineer
+PCB
+leiterplatte
+altium
+prototyp
+elektronikentwickl
+electronics engineer
+electronics development
+messtechnik
+measurement
+signalaufbereitung
+sensorik
+sensor
+EMV
+leistungselektronik
+power electronics
+inverter
+steuergerät
+embedded
+analog
+mixed signal
+datenanalys
+data engineer
+data analyst
+dashboard
+databricks
+visualisierung
+python
+SQL
+plotly
+pandas
+datenerfassung
+data acquisition
+ladeinfrastruktur
+batteriespeicher
+elektrotechniker
+elektroingenieur
+batterie
+Prüfgeräte
+Prüfsoftwar
+reproduzierbar
+Testsystem
+development engineer
+product engineer
+Entwicklungsingenieur
+Systemingenieur
+field
+Test Engineer
+Validation Engineer
+Hardware Test Engineer
+System Test Engineer
+Electronics Test Engineer
+Embedded Test Engineer
+Test & Measurement Engineer
+R&D Test Engineer
+HIL Test Engineer
+Test Automation Engineer
+Versuchsingenieur
+Prüfingenieur
+Pruefingenieur
+Testingenieur
+Entwicklungstechniker Test & Validierung
+Hardwareentwickler Testsysteme
+Mess- und Prüftechniker
+Electrical
+[\suchbegriffe]
+
+# -----------------------------------------------------------------------------
+
+[ausschlussbegriffe]
+leiter
+bach
+Werkstudent
+außendienst
+Baustellenleiter
+Pflichtpraktikant
+vertrieb
+verkauf
+fahrer
+reinigung
+pflege
+koch
+management
+manager
+teamleiter
+abteilungsleiter
+bereichsleiter
+gruppenleiter
+projektleiter
+netzwerk
+network
+systemadministrator
+Helpdesk
+Praktikant
+Abschlussarbeit
+praktikum
+working student
+internship
+intern
+trainee
+duales studium
+schüler
+abschlussarbeit
+masterarbeit
+bachelorarbeit
+reisetätigkeit
+reisebereit
+dienstreise
+vor ort beim kunden
+kundenstandort
+Hilfskraft
+Chemielaborant
+Mathematiker
+Statistiker
+PLM
+Quality
+Librarian
+Crypto
+Ausbildung
+Seriendisponent
+Lead
+Key Account Manager
+Software engineer
+planner
+FPGA
+Pilote synthèse
+Thermohydraul
+Projekt
+Mechanical
+Einkäufer
+Sales
+Servicetechniker
+Process
+Mechanics
+Safety
+Projektcontrolling
+Controlling
+Auszubildenden
+Bachelorand
+Masterand
+wartung
+aussendienst
+außendienst
+key+account
+Ausbildung
+cookie
+Onboarding
+Initiativbewerbung
+[\ausschlussbegriffe]
+
+# -----------------------------------------------------------------------------
+
+[verbotene_standorte]
+santa rosa
+berlin
+hamburg
+köln
+frankfurt
+düsseldorf
+karlsruhe
+berlin
+Glattbrugg
+Switzerland
+Schweiz
+swiss
+Germering
+Unterstadion
+[\verbotene_standorte]
+
+# -----------------------------------------------------------------------------
+# Format: Firmenname | URL der Stellenbörse
+# -----------------------------------------------------------------------------
+
+[firmen]
+Neura Robotics       | https://jobs.neura-robotics.com/de/search
+Star Cooperation     | https://bewerber.star-cooperation.com/stellenangebote.html
+GlobeFuelCell        | https://www.globefuelcell.com/career
+Hensoldt 	           | https://jobs.hensoldt.net/search/?q=&optionsFacetsDD_country=DE&optionsFacetsDD_location=Pforzheim%2C+DE%2C+75179&optionsFacetsDD_customfield1=Professionals
+Siemens Energy       | https://jobs.siemens-energy.com/de_DE/jobs/Jobs/?29454=964485&29454_format=11381&29455=18299577&29455_format=11382&31346=965786&31346_format=15600&listFilterMode=1&folderRecordsPerPage=20&
+Helmut Fischer GmbH  | https://stellenangebote.helmut-fischer.com/
+Apple Nabern         | https://jobs.apple.com/de-de/search?location=nabern-NA55
+Apple München        | https://jobs.apple.com/de-de/search?location=munich-MUN
+Philips              | https://www.careers.philips.com/global/en/search-results?keywords=&location=B%C3%B6blingen%2C%20Baden-W%C3%BCrttemberg%2C%20Germany&latitude=48.6833&longitude=9.0167&radius=25
+Rohde & Schwarz      | https://www.rohde-schwarz.com/de/karriere/stellenangebote/karriere-stellenangebote_251573.html?term&filter%5BrsCountry%5D%5B%5D=Deutschland&filter%5BrsCity%5D%5B%5D=Stuttgart
+Advantest Hardware   | https://jobs.advantest-career.de/hardware-development?utm_source=karriereseite&utm_medium=button&utm_campaign=jobshop
+Advantest Production | https://jobs.advantest-career.de/production-engineering?utm_source=karriereseite&utm_medium=button&utm_campaign=jobshop
+Advantest Application   | https://jobs.advantest-career.de/application-engineering?utm_source=karriereseite&utm_medium=button&utm_campaign=jobshop
+Festo                | https://jobs.festo.com/search/?searchby=location&createNewAlert=false&q=&locationsearch=esslingen&geolocation=&optionsFacetsDD_customfield2=&optionsFacetsDD_customfield1=Experienced+Professional&optionsFacetsDD_country=
+Daimler Truck        | https://jobsearch.daimlertruck.com/index.php?ac=search_result&search_criterion_entry_level_external%5B%5D=3&language=1
+ZSW                  | https://www.zsw-bw-jobs.de/
+ads-tec Energy       | https://adstec-karriere.dvinci-hr.com/de/jobs
+SMART TESTSOLUTIONS  | https://www.smart-testsolutions.de/de/karriere-angebote.html
+Infineon             | https://jobs.infineon.com/careers?hl=de&location=Stuttgart%2C+BW%2C+Germany&sort_by=distance&filter_distance=30
+Sereact              | https://jobs.ashbyhq.com/sereact
+eta plus electronic  | https://www.eta-uv.de/de/unternehmen/karriere/stellenangebote
+Eberspaecher         | https://www.eberspaecher-karriere.de/jobboerse
+Pilz GmbH	           | https://recruitingapp-5021.de.umantis.com/Jobs/31
+Dekra                | https://careers.dekra.com/search/?searchby=distance&createNewAlert=false&q=&geolocation=70597+-+Deutschland&d=15&lat=48.741899999999994&lon=9.15782857142857&optionsFacetsDD_country=&optionsFacetsDD_facility=&optionsFacetsDD_customfield1=&optionsFacetsDD_customfield5=
+Festool              | https://www.festool-group.com/search?searchResultView=LIST&locationsearch=&pageNumber=0&facetFilters=%7B%22sfstd_jobLocation_obj%22%3A%5B%22Wendlingen%22%2C%22Weilheim%2FTeck%22%2C%22Neidlingen%22%5D%7D&sortBy=&markerViewed=&carouselIndex=
+Balluff              | https://jobs.balluff.com/Jobs/All
+TK Elevator          | https://jobs.tkelevator.com/de?filter=locations.cityState%3ANeuhausen+auf+den+Fildern_IN_+Baden-W%C3%BCrttemberg%2Clocations.cityState%3AEsslingen+am+Neckar_IN_+Baden-W%C3%BCrttemberg%2Clocations.cityState%3APforzheim_IN_+Baden-W%C3%BCrttemberg%2CentryLevel%3ABerufserfahrene
+AP Sensing           | https://www.apsensing.com/de/unternehmen/karriere
+Nokia                | https://jobs.nokia.com/en/sites/CX_1/jobs?location=Stuttgart%2C+Baden-Wuerttemberg%2C+Germany&locationId=100000032414417&locationLevel=city&mode=location&radius=25&radiusUnit=KM
+q.ant                | https://q-ant-gmbh.jobs.personio.de/?language=en
+IMS Chips            | https://k33469.coveto.de/public/jobs/
+[\firmen]
+
+# -----------------------------------------------------------------------------
+# API-Firmen (JSON-Format)
+# Für Standard-APIs: url, methode, seiten, seiten_parameter, seiten_schrittweite,
+#                    payload, antwort_pfad, feld_titel, feld_id, feld_standort, url_vorlage
+# Für Workday-APIs:  typ="workday", tenant, portal, seiten, payload (mit limit/offset)
+# -----------------------------------------------------------------------------
+
+[api_firmen]
+[
+  {
+    "name": "Thales",
+    "url": "https://careers.thalesgroup.com/widgets",
+    "seiten": 5,
+    "seiten_parameter": "from",
+    "seiten_schrittweite": 10,
+    "payload": {
+      "lang": "en_global",
+      "deviceType": "desktop",
+      "country": "global",
+      "pageName": "search-results",
+      "ddoKey": "refineSearch",
+      "sortBy": "",
+      "subsearch": "",
+      "jobs": true,
+      "counts": true,
+      "all_fields": ["category", "country", "state", "city", "type"],
+      "size": 10,
+      "clearAll": false,
+      "jdsource": "facets",
+      "isSliderEnable": false,
+      "pageId": "page18",
+      "siteType": "external",
+      "keywords": "ditzingen",
+      "global": true,
+      "selected_fields": {},
+      "locationData": {}
+    },
+    "antwort_pfad": ["refineSearch", "data", "jobs"],
+    "feld_titel": "title",
+    "feld_id": "jobId",
+    "feld_standort": "city",
+    "feld_rohtext": "descriptionTeaser",
+    "url_vorlage": "https://careers.thalesgroup.com/global/en/job/{id}/{titel}"
+  },
+  {
+    "name": "TE Connectivity",
+    "url": "https://careers.te.com/services/recruiting/v1/jobs",
+    "seiten": 10,
+    "seiten_parameter": "pageNumber",
+    "seiten_schrittweite": 1,
+    "payload": {
+      "locale": "en_US",
+      "pageNumber": 0,
+      "sortBy": "",
+      "keywords": "",
+      "location": "",
+      "facetFilters": {"filter7": ["Germany"]},
+      "brand": "",
+      "skills": [],
+      "categoryId": 0,
+      "alertId": "",
+      "rcmCandidateId": ""
+    },
+    "antwort_pfad": ["jobSearchResult"],
+    "antwort_unterebene": "response",
+    "feld_titel": "unifiedStandardTitle",
+    "feld_id": "id",
+    "feld_standort": "jobLocationShort",
+    "url_vorlage": "https://careers.te.com/job/{url_titel}/{id}-de_DE/",
+    "feld_url_titel": "urlTitle"
+  },
+  {
+    "name": "Trumpf",
+    "url": "https://trumpf.wd3.myworkdayjobs.com/wday/cxs/trumpf/TRUMPF_Graduates_and_Professionals/jobs",
+    "methode": "POST",
+    "seiten": 10,
+    "seiten_parameter": "offset",
+    "seiten_start": 0,
+    "seiten_schrittweite": 20,
+    "payload": {
+      "appliedFacets": {
+        "locations": ["e3c66ea9d86601d7662bca38bb3ee008"]
+      },
+      "limit": 20,
+      "offset": 0,
+      "searchText": ""
+    },
+    "antwort_pfad": ["jobPostings"],
+    "feld_titel": "title",
+    "feld_id": "externalPath",
+    "feld_standort": "locationsText",
+    "url_vorlage": "https://trumpf.wd3.myworkdayjobs.com/TRUMPF_Graduates_and_Professionals{id}"
+  },
+  {
+    "name": "Hitachi Rail",
+    "url": "https://www.hitachirail.com/umbraco/api/workdayrebuild/getjobs",
+    "methode": "GET",
+    "seiten": 5,
+    "seiten_parameter": "page",
+    "seiten_start": 1,
+    "seiten_schrittweite": 1,
+    "payload": {
+      "ItemsPerPage": 20,
+      "sortByField": "primaryJobPostingDate",
+      "sortDirection": "DESC",
+      "page": 1
+    },
+    "antwort_pfad": ["items"],
+    "feld_titel": "jobPostingTitle",
+    "feld_standort": "primaryJobPostingLocation",
+    "feld_id": "url",
+    "url_vorlage": "https://www.hitachirail.com{id}"
+  },
+  {
+    "name": "eta plus",
+    "url": "https://jobs.b-ite.com/api/v1/postings/search",
+    "methode": "POST",
+    "seiten": 1,
+    "seiten_parameter": "_dummy",
+    "seiten_schrittweite": 1,
+    "headers": {
+      "bite-jobsapi-client": "v5-20260319-54d54ae"
+    },
+    "payload": {
+      "key": "73b9185d464269b0f922b6fa609bf1f8fa299d96",
+      "channel": 0,
+      "locale": "de",
+      "sort": {"by": "title", "order": "asc"},
+      "origin": "https://www.eta-uv.de/de/unternehmen/karriere/stellenangebote",
+      "page": {"offset": 0}
+    },
+    "antwort_pfad": ["jobPostings"],
+    "feld_titel": "title",
+    "feld_standort": "jobSite",
+    "feld_id": "url",
+    "url_vorlage": "{id}"
+  },
+  {
+    "name": "Knorr-Bremse",
+    "url": "https://production.api.recruiting-solutions.org/search",
+    "methode": "POST",
+    "seiten": 5,
+    "seiten_parameter": "_dummy",
+    "seiten_schrittweite": 1,
+    "headers": {
+      "customerid": "kb-prod",
+      "internal": "false"
+    },
+    "payload": {
+      "count": true,
+      "facets": [],
+      "filter": "(addresses/any(jt: jt/city eq 'Schwieberdingen')) and language eq 'de_DE'",
+      "search": "*",
+      "searchFields": "jobId,title,description,addresses/city,addresses/country,addresses/name,legalEntity",
+      "skip": 0,
+      "top": 20
+    },
+    "antwort_pfad": ["value"],
+    "feld_titel": "title",
+    "feld_standort": "addresses/city",
+    "feld_id": "link",
+    "url_vorlage": "{id}"
+  },
+  {
+    "name": "Keysight",
+    "url": "https://jobs.keysight.com/api/jobs",
+    "methode": "GET",
+    "seiten": 10,
+    "seiten_parameter": "page",
+    "seiten_start": 1,
+    "seiten_schrittweite": 1,
+    "payload": {
+      "stretchUnit": "MILES",
+      "stretch": 10,
+      "location": "böblingen",
+      "sortBy": "relevance",
+      "descending": "false",
+      "internal": "false"
+    },
+    "antwort_pfad": ["jobs"],
+    "feld_titel": "data.title",
+    "feld_standort": "data.full_location",
+    "feld_id": "data.req_id",
+    "feld_rohtext": ["data.description", "data.qualifications", "data.responsibilities"],
+    "url_vorlage": "https://jobs.keysight.com/external/jobs/{id}?lang=de-de"
+  },
+  {
+    "name": "Airbus",
+    "typ": "workday",
+    "tenant": "ag",
+    "portal": "Airbus",
+    "locale": "de-DE",
+    "seiten": 5,
+    "payload": {
+      "limit": 20,
+      "offset": 0,
+      "searchText": "",
+      "appliedFacets": {
+        "locations": ["f5811cef9cb501008f6f2e6a4c0a6548"],
+        "locationCountry": ["dcc5b7608d8644b3a93716604e78e995"]
+      }
+    }
+  },
+  {
+    "name": "EnBW",
+    "url": "https://careers.enbw.com/widgets",
+    "seiten": 10,
+    "seiten_parameter": "from",
+    "seiten_start": 0,
+    "seiten_schrittweite": 10,
+    "payload": {
+        "lang": "de_DE",
+        "deviceType": "desktop",
+        "country": "global",
+        "pageName": "search-results",
+        "ddoKey": "refineSearch",
+        "sortBy": "",
+        "subsearch": "",
+        "jobs": true,
+        "counts": true,
+        "all_fields": ["category","country","state","city","type"],
+        "size": 10,
+        "clearAll": false,
+        "jdsource": "facets",
+        "isSliderEnable": false,
+        "pageId": "page24",
+        "siteType": "external",
+        "keywords": "",
+        "global": true,
+        "selected_fields": {},
+        "locationData": {}
+    },
+    "antwort_pfad": ["refineSearch", "data", "jobs"],
+    "feld_titel": "title",
+    "feld_standort": "city",
+    "feld_id": "jobId",
+    "url_vorlage": "https://careers.enbw.com/de/de/job/{id}/{titel}"
+},
+{
+    "name": "Woodward",
+    "typ": "workday",
+    "tenant": "woodward",
+    "portal": "woodward",
+    "wd_version": "wd5",
+    "locale": "de-DE",
+    "seiten": 5,
+    "payload": {
+      "limit": 20,
+      "offset": 0,
+      "searchText": "",
+      "appliedFacets": {
+        "locations": ["6da8ebec461a10015fcf5207fb910000", "6da8ebec461a10015fcf56d65e3c0000"],
+        "jobFamilyGroup": ["19c1be8d34a310013321c071024d0000"],
+        "workerSubType": ["6da8ebec461a1000e0b55dfd94fe0001"]
+      }
+    }
+  },
+  {
+    "name": "Leuze Electronic",
+    "typ": "hr4you",
+    "url": "https://leuze3.hr4you.org/job/listing/external",
+    "basis_url": "https://leuze3.hr4you.org",
+    "params": {
+        "resultsPerPage": 20,
+        "tableRequest": "applicant-job-offer"
+    }
+}
+]
+[\api_firmen]
+
+#geht noch nicht: Duerr                | https://www.durr.com/de/karriere/stellenangebote?tx_udgnews_newssearchresult%5Baction%5D=searchResult&tx_udgnews_newssearchresult%5Bajax%5D=1&tx_udgnews_newssearchresult%5Bcontroller%5D=NewsType&tx_udgnews_newssearchresult%5BoverwriteDemand%5D%5Bajax%5D=1&tx_udgnews_newssearchresult%5BoverwriteDemand%5D%5Blimit%5D=0&tx_udgnews_newssearchresult%5BoverwriteDemand%5D%5Boffset%5D=0&tx_udgnews_newssearchresult%5BoverwriteDemand%5D%5Border%5D=datetime%20desc&tx_udgnews_newssearchresult%5BoverwriteDemand%5D%5Btypes%5D%5B0%5D=4&cHash=4afdbe2df1c7aac76eec2c604e4ad149
+
+[firma_domains]
+Advantest Hardware   = candidatecare.com
+Advantest Production = candidatecare.com
+Advantest Software   = candidatecare.com
+Bertrandt            = bertrandt.com
+Rohde & Schwarz      = rohde-schwarz.com
+[\firma_domains]
+
+# -----------------------------------------------------------------------------
+# Firmendaten für Anschreiben (Adresse, Ansprechpartner)
+# Format: Firmenname | Abteilung | Ansprechpartner | Straße | PLZ | Ort
+# -----------------------------------------------------------------------------
+
+[firma_anschreiben]
+Keysight             | Abteilung Personal | Recruiting-Team | Herrenberger Str. 130   | 71034 | Böblingen
+Advantest Hardware   | Abteilung Personal | Recruiting-Team | Herrenberger Straße 130 | 71034 | Böblingen
+Rohde & Schwarz      | Human Resources    | Recruiting-Team | Hemminger Str. 41       | 70499 | Stuttgart
+Siemens Energy       | Abteilung Personal | Recruiting-Team | Schwieberdinger Str. 95-99 | 70435 | Stuttgart
+Festo                | Human Resources    | Recruiting-Team | Ruiter Straße 82        | 73734 | Esslingen
+Infineon             | Abteilung Personal | Recruiting-Team | Siemensstraße 10        | 71254 | Ditzingen
+Neura Robotics       | Abteilung Personal | Recruiting-Team | Gutenbergstraße 44 | 72555 | Metzingen
+Helmut Fischer       | Abteilung Personal | Recruiting-Team | Industriestraße 21 | 71069 Sindelfingen
+eta plus | Abteilung Personal | Recruiting-Team |  Lauterstraße 29 | 72622 | Nürtingen
+Aviotech | Abteilung Personal | Recruiting-Team |  Industriestraße 23 | 70565 | Stuttgart
+[\firma_anschreiben]

@@ -446,8 +446,11 @@ def post_status():
                 _row = _con.execute(
                     "SELECT status, geloescht_am FROM stellen WHERE url = ?", (data["url"],)
                 ).fetchone()
-            if _row and _row["status"] not in (0, 6, 7, 8, 9) and not _row["geloescht_am"]:
-                db.upsert_stelle({"url": data["url"], "status": 6})
+            if _row:
+                if _row["status"] not in (0, 6, 7, 8, 9) and not _row["geloescht_am"]:
+                    db.upsert_stelle({"url": data["url"], "status": 6})
+                # Beworben → gehört nicht mehr auf die Merkliste, wird jetzt aktiv verfolgt
+                db.upsert_stelle({"url": data["url"], "gemerkt": None})
         elif data["wert"] == "absage":
             current = db.status_von(data["url"])
             if current in (6, 7):
@@ -741,6 +744,33 @@ def passend_setzen():
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
     return jsonify({"ok": True, "status": neuer_status})
+
+
+@app.route("/merken-setzen", methods=["POST"])
+def merken_setzen():
+    """
+    Setzt/entfernt die Merkliste-Markierung einer Stelle. Unabhängig vom
+    Scanner-Status - eine gemerkte Stelle wird weiterhin normal von Scanner
+    und Vergaben-Check bearbeitet.
+    Erwartet JSON: { url, gemerkt: true|false }
+    """
+    data = request.get_json()
+    if not data or not data.get("url") or "gemerkt" not in data:
+        return jsonify({"ok": False, "fehler": "url und gemerkt erforderlich"}), 400
+
+    url = data["url"]
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        wert = jetzt() if data["gemerkt"] else None
+        _db.upsert_stelle({"url": url, "gemerkt": wert})
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    return jsonify({"ok": True, "gemerkt": bool(wert)})
 
 
 @app.route("/vergeben-setzen", methods=["POST"])

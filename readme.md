@@ -24,7 +24,8 @@ gestartet werden (siehe `PIPELINE`-Liste in `webui.py`).
 
 | Datei / Ordner | Beschreibung |
 |---|---|
-| `config.txt` | Zentrale Konfiguration (API-Key, Firmen, Suchbegriffe, Prompt) – **nicht in Git**, enthält Secrets |
+| `config.txt` | Öffentliche Konfiguration (Firmen, Suchbegriffe, Ausschlussbegriffe) – **in Git**, keine Secrets |
+| `config_secrets.txt` | Persönliche/geheime Konfiguration (API-Keys, Zugangsdaten, Heimadresse, Prompts) – **nicht in Git** |
 | `scanner.py` | Schritt 1: Stellenanzeigen finden (Playwright/API) |
 | `rohtext_holen.py` | Schritt 1b: Vollständigen Seitentext für einzelne Stellen laden |
 | `vergaben_check.py` | Schritt 1c: Erreichbarkeit bekannter Stellen per HTTP prüfen |
@@ -55,17 +56,33 @@ gestartet werden (siehe `PIPELINE`-Liste in `webui.py`).
 
 ---
 
-## Konfiguration (`config.txt`)
+## Konfiguration (`config.txt` + `config_secrets.txt`)
 
-Die Konfiguration ist in Abschnitte mit `[name]` / `[\name]` Markern aufgeteilt.
+Die Konfiguration ist auf zwei Dateien aufgeteilt, beide mit Abschnitten in
+`[name]` / `[\name]` Markern. `lade_config()` (in `utils.py`) liest zuerst
+`config.txt`, dann `config_secrets.txt` und führt beide zu einem Config-Dict
+zusammen.
 
-### Globale Einstellungen
+- **`config.txt`** – öffentlicher Teil ohne Secrets (Suchbegriffe, Ausschlussbegriffe,
+  Standort-Filter, Firmenliste, API-Firmen, Firmendomains, Anschreiben-Adressen).
+  Liegt in Git und kann z.B. über GitHub synchronisiert werden.
+- **`config_secrets.txt`** – persönlicher/geheimer Teil (API-Keys, E-Mail-Zugangsdaten,
+  Heimadresse, Raspi-IP, alle KI-Prompts). **Nicht in Git**, muss lokal angelegt werden.
+
+### Globale Einstellungen (`config.txt`)
+
+```
+LLM_BEWERTUNG = true         # KI-Bewertung ein/aus
+EMAIL_AKTIV = true           # E-Mail bei Änderungen senden
+```
+
+### Globale Einstellungen (`config_secrets.txt`)
 
 ```
 API_KEY = sk-ant-...         # Anthropic API-Key
-LLM_BEWERTUNG = true         # KI-Bewertung ein/aus
+GOOGLE_MAPS_KEY = ...         # Google Maps Distance Matrix API-Key
+FAHRZEIT_STARTPUNKT = ...     # Heimadresse für Fahrzeit-Berechnung
 RASPI_IP = 192.168.x.x       # IP des Raspberry Pi (für Download-Links)
-EMAIL_AKTIV = true           # E-Mail bei Änderungen senden
 EMAIL_ABSENDER = ...
 EMAIL_PASSWORT = ...
 EMAIL_EMPFAENGER = ...
@@ -73,18 +90,18 @@ EMAIL_EMPFAENGER = ...
 
 ### Abschnitte
 
-| Abschnitt | Beschreibung |
-|---|---|
-| `[suchbegriffe]` | Begriffe die in Stellentiteln gesucht werden |
-| `[ausschlussbegriffe]` | Begriffe die Stellen ausschließen. Mit `+` AND-Verknüpfung |
-| `[verbotene_standorte]` | Städte die gefiltert werden (Blacklist) |
-| `[firmen]` | Firmenname und URL der Karriereseite (Playwright) |
-| `[api_firmen]` | Firmen mit direkter API-Abfrage (JSON-Konfiguration) |
-| `[prompt]` | KI-Bewertungsprompt. Aufbau: Bewertungsregeln → AUSGABEFORMAT (JSON-Schema) → `{lebenslauf}` → `{stellentext}`. Der Teil vor `=== STELLENANZEIGE ===` wird als System-Prompt gesendet (Prompt-Caching) |
-| `[firma_domains]` | Domain-Zuordnung für E-Mail-Filterung |
-| `[firma_anschreiben]` | Ansprechpartner/Adresse pro Firma fürs Anschreiben |
-| `[anschreiben_prompt]` / `[anschreiben_prompt_en]` | KI-Prompt für Anschreiben-Generierung (DE/EN) |
-| `[steckbrief_prompt]` | KI-Prompt für den Firmen-Steckbrief |
+| Abschnitt | Datei | Beschreibung |
+|---|---|---|
+| `[suchbegriffe]` | config.txt | Begriffe die in Stellentiteln gesucht werden |
+| `[ausschlussbegriffe]` | config.txt | Begriffe die Stellen ausschließen. Mit `+` AND-Verknüpfung |
+| `[verbotene_standorte]` | config.txt | Städte die gefiltert werden (Blacklist) |
+| `[firmen]` | config.txt | Firmenname und URL der Karriereseite (Playwright) |
+| `[api_firmen]` | config.txt | Firmen mit direkter API-Abfrage (JSON-Konfiguration) |
+| `[firma_domains]` | config.txt | Domain-Zuordnung für E-Mail-Filterung |
+| `[firma_anschreiben]` | config.txt | Ansprechpartner/Adresse pro Firma fürs Anschreiben |
+| `[prompt]` | config_secrets.txt | KI-Bewertungsprompt. Aufbau: Bewertungsregeln → AUSGABEFORMAT (JSON-Schema) → `{lebenslauf}` → `{stellentext}`. Der Teil vor `=== STELLENANZEIGE ===` wird als System-Prompt gesendet (Prompt-Caching) |
+| `[anschreiben_prompt]` / `[anschreiben_prompt_en]` | config_secrets.txt | KI-Prompt für Anschreiben-Generierung (DE/EN) |
+| `[steckbrief_prompt]` | config_secrets.txt | KI-Prompt für den Firmen-Steckbrief |
 
 Erlaubte Standorte (Whitelist) stehen **nicht** in `config.txt`, sondern in
 `whitelist_standorte.txt` (ein Ort pro Zeile).
@@ -233,6 +250,7 @@ Erreichbar unter `http://192.168.x.x:5000`
 | **Stellentext anzeigen** | Aufklappbarer extrahierter Stellentext |
 | **Standort nachtragen** | Bei Stellen ohne erkannten Standort manuell eintragen |
 | **Passend / Nicht passend umschalten** | KI-Empfehlung manuell übersteuern (Status 4 ↔ 5) |
+| **🔖 Merken / Merkliste** | Button pro Stelle setzt/entfernt ein Merkliste-Flag (unabhängig vom Scanner-Status). Zähler + Checkbox „Nur Merkliste" in der Filterleiste. Wird automatisch entfernt, sobald die Stelle auf „Beworben" gesetzt wird |
 | **Als vergeben markieren** | Manuell, falls die automatische Prüfung eine vergebene Stelle nicht erkennt |
 | **Neue Firma testen** | Karriere-URL + Firmenname eingeben, Playwright sucht Jobtitel-Links, optional in `config.txt` übernehmen |
 
@@ -261,6 +279,7 @@ Erreichbar unter `http://192.168.x.x:5000`
 | `/stelle-einzeln-stream` | GET | SSE-Stream: Rohtext → Extraktion → Bewertung für eine URL |
 | `/standort-setzen` | POST | Trägt einen Arbeitsort nach, prüft gegen Whitelist/Blacklist |
 | `/passend-setzen` | POST | Schaltet Status 4 ↔ 5 manuell um |
+| `/merken-setzen` | POST | Setzt/entfernt das Merkliste-Flag (`gemerkt`) einer Stelle |
 | `/vergeben-setzen` | POST | Markiert eine Stelle manuell als vergeben |
 
 ---
@@ -270,7 +289,7 @@ Erreichbar unter `http://192.168.x.x:5000`
 SQLite-Datenbank, einzige Quelle der Wahrheit; `stellen.json` und `bekannte_stellen.json`
 werden bei jeder Änderung daraus exportiert (siehe TODOs). Fünf Tabellen:
 
-**`stellen`** – Alle Stellenanzeigen mit Rohtext, Stellentext, Status, Standort, Steckbrief, Pfaden zu Bewerbungsunterlagen
+**`stellen`** – Alle Stellenanzeigen mit Rohtext, Stellentext, Status, Standort, Steckbrief, Pfaden zu Bewerbungsunterlagen. `gemerkt` (Timestamp oder NULL) ist ein vom Status unabhängiges Merkliste-Flag – wird manuell per 🔖-Button gesetzt/entfernt und automatisch gelöscht, sobald die Stelle auf „Beworben" gesetzt wird
 
 **`bewertungen`** – KI-Bewertung pro Stelle (beide Scores, Stärken, Lücken, Punkteabzüge, Profil-Hinweise, Lebenslauf-Anpassungen, Sprache)
 

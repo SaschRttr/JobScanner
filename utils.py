@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote
 
 CONFIG_PFAD = Path(__file__).parent / "config.txt"
+CONFIG_SECRETS_PFAD = Path(__file__).parent / "config_secrets.txt"
 WHITELIST_PFAD = Path(__file__).parent / "whitelist_standorte.txt"
 
 
@@ -237,7 +238,26 @@ def lade_config() -> dict:
         "anschreiben_prompt_en":  "",
     }
 
-    zeilen = CONFIG_PFAD.read_text(encoding="utf-8").splitlines()
+    _parse_config_datei(CONFIG_PFAD, result)
+
+    if CONFIG_SECRETS_PFAD.exists():
+        _parse_config_datei(CONFIG_SECRETS_PFAD, result)
+    else:
+        print(f"⚠️  config_secrets.txt nicht gefunden: {CONFIG_SECRETS_PFAD}")
+
+    if WHITELIST_PFAD.exists():
+        for zeile in WHITELIST_PFAD.read_text(encoding="utf-8").splitlines():
+            z = zeile.strip()
+            if z and not z.startswith("#"):
+                result["erlaubte_standorte"].append(normalisiere_ort(z))
+
+    return result
+
+
+def _parse_config_datei(pfad: Path, result: dict) -> None:
+    """Parst eine Config-Datei (config.txt oder config_secrets.txt) und
+    trägt die gefundenen Werte in `result` ein (überschreibt vorhandene Keys)."""
+    zeilen = pfad.read_text(encoding="utf-8").splitlines()
     aktiver_abschnitt = None
     puffer = []
 
@@ -320,11 +340,3 @@ def lade_config() -> dict:
                 firma, _, dom = z.partition("=")
                 if firma.strip() and dom.strip():
                     result["firma_domains"][firma.strip()] = dom.strip().lower()
-
-    if WHITELIST_PFAD.exists():
-        for zeile in WHITELIST_PFAD.read_text(encoding="utf-8").splitlines():
-            z = zeile.strip()
-            if z and not z.startswith("#"):
-                result["erlaubte_standorte"].append(normalisiere_ort(z))
-
-    return result

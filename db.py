@@ -125,6 +125,7 @@ def _migriere_schema():
         "ALTER TABLE bewertungen ADD COLUMN score_nach_anpassung INTEGER",
         "ALTER TABLE bewertungen ADD COLUMN sprache TEXT",
         "ALTER TABLE bewertungen ADD COLUMN profil_hinweise TEXT",
+        "ALTER TABLE stellen ADD COLUMN gemerkt TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -244,6 +245,10 @@ def upsert_stelle(s: dict):
             if "pruef_vormerken" in s:
                 felder.append("pruef_vormerken = ?")
                 werte.append(s["pruef_vormerken"])  # None löscht, Timestamp setzt
+
+            if "gemerkt" in s:
+                felder.append("gemerkt = ?")
+                werte.append(s["gemerkt"])  # None löscht, Timestamp setzt
 
             if "titel" in s and s["titel"]:
                 felder.append("titel = ?")
@@ -573,7 +578,7 @@ def lade_alle_stellen() -> list[dict]:
                 s.rohtext, s.stellentext, s.status,
                 s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
-                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken,
+                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken, s.gemerkt,
                 b.score, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
                 b.staerken, b.luecken, b.lebenslauf_anpassungen, b.profil_hinweise, b.sprache,
                 b.bewertet_am
@@ -623,6 +628,7 @@ def lade_alle_stellen() -> list[dict]:
             "vergabe_status":      r["vergabe_status"],
             "vergaben_bestaetigt": bool(r["vergaben_bestaetigt"]),
             "pruef_vormerken":     r["pruef_vormerken"],
+            "gemerkt":             r["gemerkt"],
             "steckbrief":          steckbrief,
             "lebenslauf_pfad":     r["lebenslauf_pfad"],
             "anschreiben_pfad":    r["anschreiben_pfad"],

@@ -74,6 +74,24 @@
             if (tsEl) {
                 tsEl.textContent = (wert && status[url][tsKey]) ? ('seit ' + status[url][tsKey]) : '';
             }
+
+            // Beworben → Stelle verlässt die Merkliste
+            if (wert === 'beworben') {
+                let entfernt = false;
+                document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el2 => {
+                    if (el2.dataset.gemerkt === '1') {
+                        entfernt = true;
+                        delete el2.dataset.gemerkt;
+                        const b = el2.querySelector('.merken-toggle');
+                        if (b) _setzeMerkenBtn(b, url, false);
+                    }
+                });
+                if (entfernt) {
+                    const zaehler = document.getElementById('stat-merkliste');
+                    if (zaehler) zaehler.textContent = String(Math.max(0, (parseInt(zaehler.textContent) || 0) - 1));
+                    if (_flatAktiv) _aktualisiereFlach();
+                }
+            }
         } else {
             status[url][feld] = wert;
         }
@@ -529,6 +547,7 @@
     let _aktiverFirmaFilter = null;
     let _nurNichtBewertet = false;
     let _nurVorgemerkt = false;
+    let _nurMerkliste = false;
     let _flatAktiv = false;
     const _stellenUrsprung = [];
 
@@ -550,6 +569,10 @@
         _nurVorgemerkt = checked;
         _aktualisiere();
     }
+    function toggleMerkliste(checked) {
+        _nurMerkliste = checked;
+        _aktualisiere();
+    }
     function setzeFilter(filter) {
         _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
         _aktualisiere();
@@ -568,7 +591,7 @@
     }
     function _aktualisiere() {
         _aktualisiereFilterBtns();
-        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null || _aktiverFirmaFilter !== null || _nurNichtBewertet || _nurVorgemerkt;
+        const brauchtFlach = _aktiverFilter !== null || _aktiveSortierung !== null || _aktiverStatusFilter !== null || _aktiverFirmaFilter !== null || _nurNichtBewertet || _nurVorgemerkt || _nurMerkliste;
         if (brauchtFlach && !_flatAktiv) _aktiviereFlach();
         else if (!brauchtFlach && _flatAktiv) _deaktiviereFlach();
         else if (brauchtFlach && _flatAktiv) _aktualisiereFlach();
@@ -651,11 +674,11 @@
         // Bei gesetztem Firmen-Filter (oder Vorgemerkt-Ansicht) sollen alle
         // betroffenen Stellen sichtbar sein – Geringer-Match/Zu-weit nur
         // ausblenden, wenn keine Firma gewählt ist.
-        const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt;
+        const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
         if (!zeigeGM) {
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
         }
-        const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt;
+        const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
         if (!zeigeZW) {
             gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
         }
@@ -665,6 +688,9 @@
         }
         if (_nurVorgemerkt) {
             gefiltert = gefiltert.filter(el => el.dataset.vorgemerkt === '1');
+        }
+        if (_nurMerkliste) {
+            gefiltert = gefiltert.filter(el => el.dataset.gemerkt === '1');
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
@@ -700,7 +726,8 @@
         }[_aktiveSortierung] || '';
         const nichtBewertetText = _nurNichtBewertet ? '❓ Nicht bewertet' : '';
         const vorgemerktText = _nurVorgemerkt ? '⏳ Verfügbarkeit unsicher – wird beim nächsten Lauf gelöscht' : '';
-        info.textContent = [firmaText, filterText, statusText, sortText, nichtBewertetText, vorgemerktText].filter(Boolean).join(' · ')
+        const merklisteText = _nurMerkliste ? '🔖 Merkliste' : '';
+        info.textContent = [firmaText, filterText, statusText, sortText, nichtBewertetText, vorgemerktText, merklisteText].filter(Boolean).join(' · ')
             + ` — ${gefiltert.length} Stelle${gefiltert.length !== 1 ? 'n' : ''}`;
         fa.innerHTML = '';
         fa.appendChild(info);
@@ -830,6 +857,48 @@
             alert('Server nicht erreichbar');
             btn.disabled = false;
             btn.textContent = '🗑️ Als vergeben markieren';
+        }
+    }
+
+    function _setzeMerkenBtn(b, url, gemerkt) {
+        if (gemerkt) {
+            b.textContent = '🔖 Von Merkliste entfernen';
+            b.style.background = '#fff8e1'; b.style.borderColor = '#ffc107'; b.style.color = '#946c00';
+            b.onclick = () => merkenSetzen(b, url, false);
+        } else {
+            b.textContent = '🔖 Merken';
+            b.style.background = '#f7f7f7'; b.style.borderColor = '#bbb'; b.style.color = '#555';
+            b.onclick = () => merkenSetzen(b, url, true);
+        }
+        b.disabled = false;
+    }
+
+    async function merkenSetzen(btn, url, gemerkt) {
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/merken-setzen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url, gemerkt})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                _setzeMerkenBtn(btn, url, !gemerkt);
+                return;
+            }
+            document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el => {
+                if (gemerkt) el.dataset.gemerkt = '1'; else delete el.dataset.gemerkt;
+                const b = el.querySelector('.merken-toggle');
+                if (b) _setzeMerkenBtn(b, url, gemerkt);
+            });
+            const zaehler = document.getElementById('stat-merkliste');
+            if (zaehler) zaehler.textContent = String((parseInt(zaehler.textContent) || 0) + (gemerkt ? 1 : -1));
+            if (_flatAktiv) _aktualisiereFlach();
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            _setzeMerkenBtn(btn, url, !gemerkt);
         }
     }
 
