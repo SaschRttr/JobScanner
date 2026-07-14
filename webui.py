@@ -319,16 +319,28 @@ def bewerbung_erstellen():
     _titel_sauber = re.sub(r'[\\/:*?"<>|]', '', _titel).strip().replace(' ', '_') or "Stelle"
     datei_suffix  = f"Sascha_Rüttiger_{_titel_sauber}"
 
+    # Vorlagen je nach Sprache der Stelle wählen (Fallback auf Deutsch falls EN-Vorlage fehlt)
+    sprache = ergebnis.get("sprache", "de")
+
+    def _vorlage_pfad(name_de: str, name_en: str) -> Path:
+        if sprache == "en":
+            pfad_en = BASIS_PFAD / name_en
+            if pfad_en.exists():
+                return pfad_en
+        return BASIS_PFAD / name_de
+
     # Schritt 2: Lebenslauf.docx mit Tracked Changes erzeugen
     from docx_patcher import erzeuge_docx_mit_changes
 
-    vorlage_docx = BASIS_PFAD / "lebenslauf_vorlage.docx"
-    lv_pfad      = txt_pfad.parent / f"Lebenslauf_{datei_suffix}.docx"
+    vorlage_docx     = _vorlage_pfad("lebenslauf_vorlage.docx", "lebenslauf_vorlage_en.docx")
+    vorlage_lv_txt   = _vorlage_pfad("lebenslauf_vorlage.txt",  "lebenslauf_vorlage_en.txt")
+    lv_pfad          = txt_pfad.parent / f"Lebenslauf_{datei_suffix}.docx"
 
     ok = erzeuge_docx_mit_changes(
-        txt_pfad      = txt_pfad,
-        vorlage_pfad  = vorlage_docx,
-        ausgabe_pfad  = lv_pfad,
+        txt_pfad         = txt_pfad,
+        vorlage_pfad     = vorlage_docx,
+        ausgabe_pfad     = lv_pfad,
+        vorlage_txt_pfad = vorlage_lv_txt,
     )
     if not ok:
         return jsonify({"ok": False, "fehler": "DOCX-Generierung fehlgeschlagen"}), 500
@@ -341,8 +353,8 @@ def bewerbung_erstellen():
     try:
         if not as_txt.exists():
             raise FileNotFoundError(anschreiben_fehler or "Anschreiben.txt nicht gefunden")
-        vorlage_as_docx = BASIS_PFAD / "anschreiben_vorlage.docx"
-        vorlage_as_txt  = BASIS_PFAD / "anschreiben_vorlage.txt"
+        vorlage_as_docx = _vorlage_pfad("anschreiben_vorlage.docx", "anschreiben_vorlage_en.docx")
+        vorlage_as_txt  = _vorlage_pfad("anschreiben_vorlage.txt",  "anschreiben_vorlage_en.txt")
         ok_as = erzeuge_docx_mit_changes(
             txt_pfad         = as_txt,
             vorlage_pfad     = vorlage_as_docx,

@@ -31,7 +31,8 @@ except ImportError:
     sys.exit(1)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import (lade_config, lade_json, sicherer_pfadname,
+import db
+from utils import (lade_config, sicherer_pfadname,
                    extrahiere_abschnitt, ersetze_abschnitt)
 
 
@@ -40,7 +41,6 @@ from utils import (lade_config, lade_json, sicherer_pfadname,
 # =============================================================================
 
 BASIS_PFAD           = Path(__file__).parent
-STELLEN_JSON         = BASIS_PFAD / "stellen.json"
 VORLAGE_PFAD         = BASIS_PFAD / "lebenslauf_vorlage.txt"
 ANSCHREIBEN_VORLAGE  = BASIS_PFAD / "anschreiben_vorlage.txt"
 BEWERBUNGEN_DIR      = BASIS_PFAD / "bewerbungen"
@@ -69,37 +69,141 @@ def _antwort_text(antwort) -> str:
     return next((b.text for b in antwort.content if b.type == "text"), "").strip()
 
 
+_GELEAKTER_MARKER = re.compile(r"^\s*=+\s*AKTUELLER\s+ABSCHNITT.*?=+\s*\n+", re.IGNORECASE)
+
+
+def entferne_geleakten_marker(text: str) -> str:
+    """
+    Entfernt eine geleakte Prompt-Marker-Zeile (z.B. '=== AKTUELLER ABSCHNITT (angepasst) ==='),
+    falls die KI sie trotz Anweisung an den Anfang der Antwort gesetzt hat. So wird eine
+    ansonsten valide Anpassung nicht wegen einer einzelnen kosmetischen Zeile verworfen.
+    """
+    return _GELEAKTER_MARKER.sub("", text, count=1).strip()
+
+
+_RUECKFRAGE_PHRASEN = (
+    "ich benötige", "ich brauche", "um diesen abschnitt",
+    "bevor ich", "ich kann diesen abschnitt nicht",
+)
+
+
+def ist_valide_abschnitt(text: str) -> bool:
+    """
+    Prüft ob eine KI-Antwort wie ein echter Lebenslauf-Abschnitt aussieht,
+    statt einer Rückfrage oder einem Meta-Kommentar (z.B. wenn die KI laut
+    Prompt-Regel keine Fakten erfinden will und stattdessen nachfragt).
+
+    Das Wort "abschnitt" (case-insensitive) ist der zuverlässigste Indikator:
+    die KI referenziert damit den Prompt/sich selbst ("dieser Abschnitt",
+    "der Original-Abschnitt", "=== AKTUELLER ABSCHNITT ===" o.ä.) – in einem
+    echten Lebenslauf-Abschnitt kommt dieses Wort nie vor.
+    """
+    text_lower = text.lower()
+    if "?" in text or "abschnitt" in text_lower or "===" in text:
+        return False
+    return not any(text_lower.startswith(p) for p in _RUECKFRAGE_PHRASEN)
+
+
+def pruefe_auf_erfindungen(lebenslauf_gesamt: str, angepasst: str, client) -> list:
+    """
+    Lässt die KI in einem separaten Aufruf gegenprüfen, ob der angepasste
+    Abschnitt Fähigkeiten/Tools/Erfahrungen nennt, die NIRGENDWO im GESAMTEN
+    Lebenslauf vorkommen oder daraus ableitbar sind (nicht nur im gerade
+    bearbeiteten Abschnitt – eine Fähigkeit, die z.B. nur bei einer anderen
+    Stelle dokumentiert ist, aber legitim in "Fähigkeiten" auftauchen soll,
+    darf nicht als Erfindung gelten). Reine Keyword-Heuristiken (z.B. auf neue
+    Akronyme) übersehen Erfindungen ohne Akronym (z.B. "Python-based
+    instrument control") und lösen bei harmlosen Wörtern wie "CV" Fehlalarm
+    aus – ein zweiter, gezielter KI-Check ist robuster.
+    Gibt eine Liste erkannter Erfindungen zurück (leer = nichts Neues erfunden).
+    Bei API-Fehlern wird [] zurückgegeben (blockiert die Anpassung nicht).
+    """
+    prompt = f"""Vergleiche LEBENSLAUF (gesamter Lebenslauf einer Person) und
+ANGEPASST (ein neu formulierter Abschnitt aus diesem Lebenslauf) unten. Liste
+jede konkrete Fähigkeit, Technologie, jedes Tool, Protokoll oder jede
+Erfahrung im ANGEPASSTEN Text auf, die NIRGENDWO im LEBENSLAUF vorkommt und
+auch nicht eindeutig daraus ableitbar ist.
+
+Antworte NUR als JSON-Array von kurzen Strings (leeres Array [] falls nichts
+Neues erfunden wurde), ohne Markdown, ohne Kommentar.
+
+=== LEBENSLAUF ===
+{lebenslauf_gesamt}
+
+=== ANGEPASST ===
+{angepasst}"""
+
+    try:
+        antwort = client.messages.create(
+            model=KI_MODELL,
+            max_tokens=512,
+            thinking={"type": "disabled"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = re.sub(r"```json|```", "", _antwort_text(antwort)).strip()
+        start, ende = text.find("["), text.rfind("]") + 1
+        if start != -1 and ende > start:
+            text = text[start:ende]
+        erfindungen = json.loads(text)
+        return erfindungen if isinstance(erfindungen, list) else []
+    except Exception as e:
+        print(f"  ⚠️  Verifikations-Check fehlgeschlagen (wird ignoriert): {e}")
+        return []
+
+
+_MARKER_KEYWORDS = {
+    "KOMPETENZPROFIL":   ["profil", "summary", "einleitung", "zusammenfassung",
+                          "kompetenz", "usp", "stärken"],
+    "STELLE_1_AUFGABEN": ["bosch", "sofc", "fuel cell", "robert bosch",
+                          "feuerbach", "aktuelle", "aktuell"],
+    "STELLE_2_AUFGABEN": ["automotive steering", "schwäbisch gmünd", "testadapter",
+                          "asic", "servolenkung"],
+    "STELLE_3_AUFGABEN": ["power tec", "böblingen", "solarwechselrichter", "vde"],
+    "STELLE_4_AUFGABEN": ["sma solar", "niestetal", "offgrid", "storage"],
+    "FAEHIGKEITEN":      ["fähigkeit", "skill", "tool", "software", "technologie",
+                          "python", "sql", "altium", "databricks", "tableau",
+                          "werkzeug", "kenntnisse", "reihenfolge"],
+}
+
+
 def bestimme_relevante_marker(anpassungen: list) -> list:
     """
     Leitet aus den Anpassungshinweisen ab welche Abschnitte geändert werden müssen.
     Gibt eine Liste von Marker-Namen zurück.
     """
-    marker_map = {
-        "kompetenzprofil":  ["profil", "summary", "einleitung", "zusammenfassung",
-                             "kompetenz", "USP", "stärken"],
-        "STELLE_1_AUFGABEN": ["bosch", "sofc", "fuel cell", "robert bosch",
-                              "feuerbach", "aktuelle", "aktuell"],
-        "STELLE_2_AUFGABEN": ["automotive steering", "schwäbisch gmünd", "testadapter",
-                              "asic", "servolenkung"],
-        "STELLE_3_AUFGABEN": ["power tec", "böblingen", "solarwechselrichter", "vde"],
-        "STELLE_4_AUFGABEN": ["sma solar", "niestetal", "offgrid", "storage"],
-        "FAEHIGKEITEN":      ["fähigkeit", "skill", "tool", "software", "technologie",
-                              "python", "sql", "altium", "databricks", "tableau",
-                              "werkzeug", "kenntnisse", "reihenfolge"],
-    }
-
     relevante = set()
     anpassungen_lower = " ".join(anpassungen).lower()
 
-    for marker, schlagworte in marker_map.items():
+    for marker, schlagworte in _MARKER_KEYWORDS.items():
         if any(s in anpassungen_lower for s in schlagworte):
-            relevante.add(marker.upper())
+            relevante.add(marker)
 
     # Fallback: wenn keine Zuordnung → Kompetenzprofil und Fähigkeiten
     if not relevante:
         relevante = {"KOMPETENZPROFIL", "FAEHIGKEITEN"}
 
     return list(relevante)
+
+
+def filtere_anpassungen_fuer_marker(marker: str, anpassungen: list) -> list:
+    """
+    Wählt aus allen Anpassungshinweisen nur die aus, die inhaltlich zu diesem
+    Marker passen (gleiche Schlagwörter wie bestimme_relevante_marker). Ohne
+    diesen Filter sieht die KI bei JEDEM Abschnitt ALLE Hinweise gleichzeitig
+    und kann z.B. einen für FAEHIGKEITEN gedachten Hinweis (z.B. "ISO 26262 in
+    Fähigkeiten zusammenfassen") fälschlich in eine STELLE_X_AUFGABEN-Anpassung
+    einweben, obwohl die Erfahrung dort laut Lebenslauf gar nicht stattfand
+    (Cross-Contamination zwischen Abschnitten/Stellen).
+    Fallback: alle Hinweise, falls keiner zum Marker passt (sollte kaum
+    vorkommen, da der Marker überhaupt nur wegen mind. einem passenden Hinweis
+    gewählt wird).
+    """
+    schlagworte = _MARKER_KEYWORDS.get(marker)
+    if not schlagworte:
+        return anpassungen
+
+    gefiltert = [a for a in anpassungen if any(s in a.lower() for s in schlagworte)]
+    return gefiltert or anpassungen
 
 
 # =============================================================================
@@ -111,10 +215,12 @@ def passe_abschnitt_an(
     abschnitt_inhalt: str,
     anpassungen: list,
     stelle: dict,
-    client
+    client,
+    sprache: str = "de",
 ) -> str | None:
     """Lässt die KI einen einzelnen Abschnitt anpassen."""
     anpassungen_text = "\n".join(f"- {a}" for a in anpassungen)
+    sprache_name = "Englisch" if sprache == "en" else "Deutsch"
 
     prompt = f"""Du bist ein professioneller Bewerbungsberater.
 
@@ -128,8 +234,21 @@ Anpassungshinweise:
 {anpassungen_text}
 
 Regeln:
-- Verändere NUR was die Anpassungshinweise für diesen Abschnitt verlangen
+- Verändere NUR was die Anpassungshinweise für diesen Abschnitt ({abschnitt_name}) verlangen
+- Falls ein Anpassungshinweis erkennbar einen ANDEREN Abschnitt oder eine andere
+  Stelle betrifft (z.B. eine Erfahrung die laut Hinweis nur bei einem anderen
+  Arbeitgeber/einer anderen Position stattfand), ignoriere ihn hier – wende ihn
+  NICHT auf diesen Abschnitt an
 - Erfinde KEINE neuen Fakten oder Erfahrungen
+- Nenne eine konkrete Technologie/Methode/Tool/Tätigkeit NUR, wenn sie bereits
+  im Original-Abschnitt unten vorkommt oder direkt daraus ableitbar ist – auch
+  wenn ein Anpassungshinweis sie ohne Einschränkung vorschlägt. Anpassungshinweise
+  können ungenau oder spekulativ sein und sind KEIN Beleg für tatsächliche Erfahrung
+- Falls du eine Anpassung ohne Fakten zu erfinden nicht sauber umsetzen kannst,
+  gib GENAU den Original-Abschnitt unverändert zurück
+- Stelle KEINE Rückfragen, schreibe KEINE Meta-Kommentare, KEINE Erklärungen
+  außerhalb des eigentlichen Abschnitt-Inhalts
+- Antworte ausschließlich auf {sprache_name} – der Original-Abschnitt ist auf {sprache_name}
 - Behalte Formatierung (Bullet-Zeichen, Einrückung) exakt bei
 - Gib NUR den angepassten Abschnitt zurück, ohne Marker-Zeilen, ohne Kommentar
 
@@ -143,7 +262,8 @@ Regeln:
             thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}],
         )
-        return _antwort_text(antwort) or None
+        text = entferne_geleakten_marker(_antwort_text(antwort))
+        return text or None
     except Exception as e:
         print(f"  ❌ API-Fehler bei Abschnitt {abschnitt_name}: {e}")
         return None
@@ -291,7 +411,8 @@ def generiere_anschreiben(
     prompt = prompt.replace("{score_begruendung}", score_begruendung or "(keine Angaben)")
     prompt = prompt.replace("{aufgaben_pool}",     aufgaben_pool)
 
-    # --- KI-Aufruf (1 Retry bei kaputtem JSON) ---
+    # --- KI-Aufruf (1 Retry bei kaputtem JSON oder Rückfrage/Meta-Text) ---
+    felder = ("ANREDE", "ABSATZ_1", "ABSATZ_2_INTRO", "ABSATZ_2_BULLETS", "ABSATZ_3", "ABSATZ_4")
     inhalt = None
     letzter_fehler = ""
     for versuch in (1, 2):
@@ -307,7 +428,17 @@ def generiere_anschreiben(
             start, ende = text.find("{"), text.rfind("}") + 1
             if start != -1 and ende > start:
                 text = text[start:ende]
-            inhalt = json.loads(text)
+            geparst = json.loads(text)
+
+            ungueltige_felder = [
+                f for f in felder if not ist_valide_abschnitt(geparst.get(f, ""))
+            ]
+            if ungueltige_felder:
+                letzter_fehler = f"KI-Antwort wirkte wie Rückfrage/Meta-Text in: {', '.join(ungueltige_felder)}"
+                print(f"  ⚠️  {letzter_fehler} (Versuch {versuch}/2)")
+                continue
+
+            inhalt = geparst
             break
         except json.JSONDecodeError as e:
             letzter_fehler = f"KI-Antwort war kein gültiges JSON: {e}"
@@ -353,7 +484,7 @@ def passe_stelle_an(url: str) -> dict:
     if not config["api_key"]:
         return {"ok": False, "fehler": "Kein API-Key in config.txt"}
 
-    stellen = lade_json(STELLEN_JSON, [])
+    stellen = db.lade_alle_stellen()
     stelle  = next((s for s in stellen if s.get("url") == url), None)
 
     if not stelle:
@@ -384,22 +515,35 @@ def passe_stelle_an(url: str) -> dict:
     lv_vorlage = vorlage_pfad.read_text(encoding="utf-8")
     client     = anthropic_lib.Anthropic(api_key=config["api_key"])
 
-    relevante_marker   = bestimme_relevante_marker(anpassungen)
-    angepasste_vorlage = lv_vorlage
+    relevante_marker      = bestimme_relevante_marker(anpassungen)
+    angepasste_vorlage    = lv_vorlage
+    nicht_angepasste_marker = []
 
     for marker in relevante_marker:
         abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
         if not abschnitt:
             continue
-        neuer_inhalt = passe_abschnitt_an(marker, abschnitt, anpassungen, stelle, client)
-        if neuer_inhalt:
+        marker_anpassungen = filtere_anpassungen_fuer_marker(marker, anpassungen)
+        neuer_inhalt = passe_abschnitt_an(marker, abschnitt, marker_anpassungen, stelle, client, sprache=sprache)
+        erfundene = []
+        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt):
+            erfundene = pruefe_auf_erfindungen(lv_vorlage, neuer_inhalt, client)
+        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt) and not erfundene:
             angepasste_vorlage = ersetze_abschnitt(angepasste_vorlage, marker, neuer_inhalt)
+        else:
+            if erfundene:
+                print(f"  ⚠️  {marker}: KI-Antwort enthält unbelegte Angaben {erfundene} – Original behalten")
+            elif neuer_inhalt:
+                print(f"  ⚠️  {marker}: KI-Antwort wirkte wie Rückfrage/Meta-Text – Original behalten")
+            nicht_angepasste_marker.append(marker)
 
     with open(ziel, "w", encoding="utf-8") as f:
         f.write(f"Firma:                {firma}\n")
         f.write(f"Stelle:               {titel}\n")
         f.write(f"Score aktuell:        {s_aktuell}%\n")
         f.write(f"Score nach Anpassung: {s_danach}%\n")
+        if nicht_angepasste_marker:
+            f.write(f"Nicht angepasst (Original behalten): {', '.join(nicht_angepasste_marker)}\n")
         f.write(f"Erstellt am:          {datetime.now().strftime('%d.%m.%Y %H:%M')}\n")
         f.write(f"URL:                  {url}\n")
         f.write(f"\nAngepasste Abschnitte: {', '.join(relevante_marker)}\n")
@@ -428,7 +572,7 @@ def passe_stelle_an(url: str) -> dict:
             anschreiben_fehler = generiere_anschreiben(
                 stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
 
-    return {"ok": True, "pfad": str(ziel), "anschreiben_fehler": anschreiben_fehler}
+    return {"ok": True, "pfad": str(ziel), "anschreiben_fehler": anschreiben_fehler, "sprache": sprache}
 
 
 # =============================================================================
@@ -450,11 +594,11 @@ def main():
         print(f"   Bitte lebenslauf_vorlage.txt in {BASIS_PFAD} ablegen.")
         sys.exit(1)
 
-    stellen  = lade_json(STELLEN_JSON, [])
+    stellen  = db.lade_alle_stellen()
     client   = anthropic_lib.Anthropic(api_key=config["api_key"])
 
     if not stellen:
-        print("ℹ️  stellen.json ist leer – zuerst scanner.py ausführen.")
+        print("ℹ️  Keine Stellen in der Datenbank – zuerst scanner.py ausführen.")
         return
 
     # Alle Stellen mit Score >= MIN_SCORE und Anpassungshinweisen
@@ -516,6 +660,7 @@ def main():
 
         # Vorlage schrittweise anpassen
         angepasste_vorlage = lv_vorlage
+        nicht_angepasste_marker = []
         for marker in relevante_marker:
             abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
             if not abschnitt:
@@ -523,16 +668,26 @@ def main():
                 continue
 
             print(f"  🤖 Passe Abschnitt {marker} an...")
+            marker_anpassungen = filtere_anpassungen_fuer_marker(marker, anpassungen)
             neuer_inhalt = passe_abschnitt_an(
-                marker, abschnitt, anpassungen, stelle, client
+                marker, abschnitt, marker_anpassungen, stelle, client, sprache=sprache
             )
-            if neuer_inhalt:
+            erfundene = []
+            if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt):
+                erfundene = pruefe_auf_erfindungen(lv_vorlage, neuer_inhalt, client)
+            if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt) and not erfundene:
                 angepasste_vorlage = ersetze_abschnitt(
                     angepasste_vorlage, marker, neuer_inhalt
                 )
                 print(f"  ✅ {marker} angepasst")
             else:
-                print(f"  ⚠️  {marker} konnte nicht angepasst werden – Original behalten")
+                if erfundene:
+                    print(f"  ⚠️  {marker}: KI-Antwort enthält unbelegte Angaben {erfundene} – Original behalten")
+                elif neuer_inhalt:
+                    print(f"  ⚠️  {marker}: KI-Antwort wirkte wie Rückfrage/Meta-Text – Original behalten")
+                else:
+                    print(f"  ⚠️  {marker} konnte nicht angepasst werden – Original behalten")
+                nicht_angepasste_marker.append(marker)
 
         # Datei schreiben
         with open(ziel, "w", encoding="utf-8") as f:
@@ -540,6 +695,8 @@ def main():
             f.write(f"Stelle:               {titel}\n")
             f.write(f"Score aktuell:        {s_aktuell}%\n")
             f.write(f"Score nach Anpassung: {s_danach}%\n")
+            if nicht_angepasste_marker:
+                f.write(f"Nicht angepasst (Original behalten): {', '.join(nicht_angepasste_marker)}\n")
             f.write(f"Erstellt am:          {datetime.now().strftime('%d.%m.%Y %H:%M')}\n")
             f.write(f"URL:                  {stelle['url']}\n")
             f.write(f"\nAngepasste Abschnitte: {', '.join(relevante_marker)}\n")
