@@ -22,6 +22,22 @@ def jetzt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
+def effektiver_score(bewertung: dict) -> float:
+    """
+    Höchster der drei Scores (Lebenslauf/score, Optimierbar/score_potenzial,
+    Profil/score_nach_anpassung). score_aktuell bleibt bewusst streng (hartes
+    CV-Screening) – die Bewerben-Entscheidung soll aber das Potenzial mit
+    einbeziehen, nicht nur den strengsten Wert.
+    """
+    werte = [
+        bewertung.get("score"),
+        bewertung.get("score_potenzial"),
+        bewertung.get("score_nach_anpassung"),
+    ]
+    gueltige = [w for w in werte if isinstance(w, (int, float))]
+    return max(gueltige) if gueltige else 0
+
+
 def domain(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 

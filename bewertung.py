@@ -23,7 +23,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, standort_verboten
+from utils import lade_config, standort_verboten, effektiver_score
 
 
 # =============================================================================
@@ -49,6 +49,50 @@ def _parse_json_antwort(text: str) -> dict:
     if start != -1 and ende > start:
         text = text[start:ende]
     return json.loads(text)
+
+
+def _berechne_score_aus_abzuegen(ergebnis: dict) -> float | None:
+    """
+    Berechnet score_aktuell deterministisch aus punkteabzug statt der vom Modell
+    geschätzten Zahl zu vertrauen. In der Praxis werden oft nur 2-3 von 5+ im
+    "luecken"-Array genannten Lücken auch tatsächlich im "punkteabzug"-Array
+    verrechnet (mehrfach beobachtet, z.B. bei ADS-TEC: 5 Lücken genannt, nur 2 im
+    punkteabzug-Array, macht 91% statt der eigentlich zu erwartenden ~70%).
+    Gibt None zurück, falls kein gültiges punkteabzug-Array vorhanden ist.
+    """
+    punkteabzug = ergebnis.get("punkteabzug")
+    if not isinstance(punkteabzug, list) or not punkteabzug:
+        return None
+
+    summe = 0
+    for eintrag in punkteabzug:
+        abzug = eintrag.get("abzug") if isinstance(eintrag, dict) else None
+        if isinstance(abzug, (int, float)):
+            summe += abzug
+
+    return max(0, min(100, 100 + summe))
+
+
+def _berechne_potenzial_aus_schliessbaren(ergebnis: dict, score_aktuell: float) -> float | None:
+    """
+    Berechnet score_potenzial deterministisch aus score_aktuell + schliessbare_luecken,
+    statt der vom Modell geschätzten Zahl zu vertrauen (gleiches Muster wie
+    _berechne_score_aus_abzuegen: Modell-Arithmetik über mehrere Felder hinweg ist
+    unzuverlässig, z.B. beobachtet score_aktuell=84 + Summe(punkte_zurueck)=13 → 97,
+    Modell nannte aber 92).
+    Gibt None zurück, falls kein gültiges schliessbare_luecken-Array vorhanden ist.
+    """
+    schliessbare = ergebnis.get("schliessbare_luecken")
+    if not isinstance(schliessbare, list) or not schliessbare:
+        return None
+
+    summe = 0
+    for eintrag in schliessbare:
+        punkte = eintrag.get("punkte_zurueck") if isinstance(eintrag, dict) else None
+        if isinstance(punkte, (int, float)):
+            summe += punkte
+
+    return max(score_aktuell, min(100, score_aktuell + summe))
 
 
 def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, client) -> dict | None:
@@ -91,6 +135,16 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
                     return None
                 continue
             ergebnis = _parse_json_antwort(text)
+            berechneter_score = _berechne_score_aus_abzuegen(ergebnis)
+            if berechneter_score is not None:
+                modell_score = ergebnis.get("score_aktuell")
+                if isinstance(modell_score, (int, float)) and abs(modell_score - berechneter_score) > 5:
+                    luecken     = ergebnis.get("luecken") or []
+                    punkteabzug = ergebnis.get("punkteabzug") or []
+                    print(f"  ⚠️  Score-Abweichung: Modell nannte {modell_score}%, Punkteabzug ergibt "
+                          f"{berechneter_score}% – nutze berechneten Wert. Anzahl Lücken: {len(luecken)}, "
+                          f"Anzahl Punkteabzüge: {len(punkteabzug)}")
+                ergebnis["score_aktuell"] = berechneter_score
             if "score_aktuell" in ergebnis and "score" not in ergebnis:
                 ergebnis["score"] = ergebnis["score_aktuell"]
             if not isinstance(ergebnis.get("score"), (int, float)):
@@ -99,13 +153,26 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
                 if versuch == 3:
                     return None
                 continue
-            # Bewerben-Entscheidung hängt am Profil-Score (score_nach_anpassung):
-            # "Lohnt sich die Bewerbung?" ist eine Profil-Frage, keine CV-Screening-Frage.
-            profil_score = ergebnis.get("score_nach_anpassung")
-            if not isinstance(profil_score, (int, float)):
-                profil_score = ergebnis.get("score", 0)
-                ergebnis["score_nach_anpassung"] = profil_score
-            ergebnis["empfehlung"] = "bewerben" if profil_score >= 70 else "nicht bewerben"
+            if not isinstance(ergebnis.get("punkteabzug"), list):
+                ergebnis["punkteabzug"] = []
+            if not isinstance(ergebnis.get("schliessbare_luecken"), list):
+                ergebnis["schliessbare_luecken"] = []
+            berechnetes_potenzial = _berechne_potenzial_aus_schliessbaren(ergebnis, ergebnis["score_aktuell"])
+            if berechnetes_potenzial is not None:
+                modell_potenzial = ergebnis.get("score_potenzial")
+                if isinstance(modell_potenzial, (int, float)) and abs(modell_potenzial - berechnetes_potenzial) > 5:
+                    print(f"  ⚠️  Potenzial-Abweichung: Modell nannte {modell_potenzial}%, schliessbare_luecken "
+                          f"ergibt {berechnetes_potenzial}% – nutze berechneten Wert.")
+                ergebnis["score_potenzial"] = berechnetes_potenzial
+            elif not isinstance(ergebnis.get("score_potenzial"), (int, float)):
+                ergebnis["score_potenzial"] = ergebnis["score"]
+            if not isinstance(ergebnis.get("score_nach_anpassung"), (int, float)):
+                ergebnis["score_nach_anpassung"] = ergebnis["score"]
+            # Bewerben-Entscheidung hängt am höchsten der drei Scores: score_aktuell
+            # bleibt bewusst streng, aber das erkannte Potenzial (score_potenzial)
+            # oder der Profil-Fit (score_nach_anpassung) sollen eine Chance nicht
+            # verdecken, nur weil ein einzelner Score sie konservativ einschätzt.
+            ergebnis["empfehlung"] = "bewerben" if effektiver_score(ergebnis) >= 70 else "nicht bewerben"
             if "sprache" not in ergebnis:
                 ergebnis["sprache"] = "de"
             return ergebnis
@@ -239,12 +306,13 @@ def main():
 
         if bewertung:
             stellen[idx]["bewertung"] = bewertung
-            score  = bewertung.get("score", 0)
-            profil = bewertung.get("score_nach_anpassung", score)
-            empf   = bewertung.get("empfehlung", "?")
-            neuer_status = 4 if profil >= 70 else 5
+            score      = bewertung.get("score", 0)
+            potenzial  = bewertung.get("score_potenzial", score)
+            profil     = bewertung.get("score_nach_anpassung", score)
+            empf       = bewertung.get("empfehlung", "?")
+            neuer_status = 4 if effektiver_score(bewertung) >= 70 else 5
             stellen[idx]["status"] = neuer_status
-            print(f"  ⭐ Lebenslauf: {score}%  |  Profil: {profil}%  |  {empf.upper()}  →  Status {neuer_status}")
+            print(f"  ⭐ Lebenslauf: {score}%  →  Optimierbar: {potenzial}%  →  Profil: {profil}%  |  {empf.upper()}  →  Status {neuer_status}")
             bewertet += 1
             upsert_stelle({"url": url, "status": neuer_status})
             upsert_bewertung(url, bewertung)

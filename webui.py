@@ -25,7 +25,7 @@ import urllib.parse
 import json
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
-from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt
+from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt, effektiver_score
 print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
@@ -288,17 +288,20 @@ def bewerbung_erstellen():
     Startet anpasser.py für eine einzelne Stelle (per URL-Parameter).
     Danach ruft er bewerbung_generator.py auf um DOCX-Dateien zu erzeugen.
     Gibt JSON zurück: { ok, nachricht, lebenslauf_url, anschreiben_url }
-    Aufruf: GET /bewerbung-erstellen?url=<stellenurl>
+    Aufruf: GET /bewerbung-erstellen?url=<stellenurl>[&force=1]
+    force=1 erzwingt eine komplette Neu-Generierung (auch das Anschreiben,
+    das sonst übersprungen wird, falls Anschreiben.txt schon existiert).
     """
     stellen_url = request.args.get("url", "")
     if not stellen_url:
         return jsonify({"ok": False, "fehler": "Kein url-Parameter übergeben"}), 400
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
 
     # Schritt 1: TXT erzeugen via anpasser
     try:
         sys.path.insert(0, str(BASIS_PFAD))
         from anpasser import passe_stelle_an
-        ergebnis = passe_stelle_an(stellen_url)
+        ergebnis = passe_stelle_an(stellen_url, force=force)
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"anpasser Fehler: {e}"}), 500
 
@@ -608,11 +611,8 @@ def bewertung_erstellen():
     if not bewertung:
         return jsonify({"fehler": "KI-Bewertung fehlgeschlagen"}), 500
 
-    # Status hängt am Profil-Score ("lohnt sich die Bewerbung?"), Fallback Lebenslauf-Score
-    profil_score = bewertung.get("score_nach_anpassung")
-    if not isinstance(profil_score, (int, float)):
-        profil_score = bewertung.get("score", 0)
-    neuer_status = 4 if profil_score >= 70 else 5
+    # Status hängt am höchsten der drei Scores (score_aktuell/score_potenzial/score_nach_anpassung)
+    neuer_status = 4 if effektiver_score(bewertung) >= 70 else 5
     _db.upsert_bewertung(url, bewertung)
     _db.upsert_stelle({"url": url, "status": neuer_status, "nicht_passend": False})
     _db.exportiere_stellen_json(STELLEN_JSON)

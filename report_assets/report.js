@@ -439,6 +439,50 @@
             checkbox.checked  = false;
         }
     }
+
+    async function bewerbungNeuGenerieren(link, stellenUrl, firma, titel) {
+        const box      = document.getElementById('bew-box-' + firma + '-' + titel);
+        const statusEl = document.getElementById('bew-status-' + firma + '-' + titel);
+        link.style.pointerEvents = 'none';
+        link.style.opacity = '0.5';
+        if (statusEl) {
+            statusEl.textContent = '⏳ Wird neu erstellt...';
+            statusEl.style.color = '#2980b9';
+        }
+
+        try {
+            const server = window.location.origin;
+            const res    = await fetch(server + '/bewerbung-erstellen?force=1&url=' + encodeURIComponent(stellenUrl));
+            const data   = await res.json();
+
+            if (data.ok) {
+                const anschreibenHtml = data.anschreiben_url
+                    ? `✉️ <a href="${server + data.anschreiben_url}" style="color:#27ae60;">Anschreiben.docx</a>`
+                    : `<span style="color:#c0392b;">⚠️ Anschreiben fehlgeschlagen${data.anschreiben_fehler ? ': ' + data.anschreiben_fehler : ''}</span>`;
+                box.innerHTML = `
+                    📄 <a href="${server + data.lebenslauf_url}" style="color:#27ae60; margin-right:12px;">Lebenslauf.docx</a>
+                    ${anschreibenHtml}
+                    <a href="#" onclick="bewerbungNeuGenerieren(this, '${stellenUrl}', '${firma}', '${titel}'); return false;"
+                       style="color:#7f8c8d; margin-left:12px;" title="Lebenslauf & Anschreiben neu generieren">🔄 Neu generieren</a>
+                    <span id="bew-status-${firma}-${titel}" style="margin-left:8px; color:#888;"></span>`;
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '❌ ' + (data.fehler || 'Unbekannter Fehler');
+                    statusEl.style.color = '#e74c3c';
+                }
+                link.style.pointerEvents = 'auto';
+                link.style.opacity = '1';
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.textContent = '❌ Server nicht erreichbar';
+                statusEl.style.color = '#e74c3c';
+            }
+            link.style.pointerEvents = 'auto';
+            link.style.opacity = '1';
+        }
+    }
+
     async function stelleEinfuegen() {
        const url = document.getElementById('manuell-url').value.trim();
         const firma = document.getElementById('manuell-firma').value.trim();

@@ -60,11 +60,14 @@ def erstelle_schema():
             CREATE TABLE IF NOT EXISTS bewertungen (
                 url                    TEXT PRIMARY KEY,
                 score                  INTEGER,
+                score_potenzial        INTEGER,
                 score_nach_anpassung   INTEGER,
                 empfehlung             TEXT,
                 score_begruendung      TEXT,
                 staerken               TEXT,
                 luecken                TEXT,
+                punkteabzug            TEXT,
+                schliessbare_luecken   TEXT,
                 lebenslauf_anpassungen TEXT,
                 profil_hinweise        TEXT,
                 sprache                TEXT,
@@ -126,6 +129,9 @@ def _migriere_schema():
         "ALTER TABLE bewertungen ADD COLUMN sprache TEXT",
         "ALTER TABLE bewertungen ADD COLUMN profil_hinweise TEXT",
         "ALTER TABLE stellen ADD COLUMN gemerkt TEXT",
+        "ALTER TABLE bewertungen ADD COLUMN score_potenzial INTEGER",
+        "ALTER TABLE bewertungen ADD COLUMN schliessbare_luecken TEXT",
+        "ALTER TABLE bewertungen ADD COLUMN punkteabzug TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -284,16 +290,20 @@ def upsert_bewertung(url: str, b: dict):
     with verbindung() as con:
         con.execute("""
             INSERT INTO bewertungen
-                (url, score, score_nach_anpassung, empfehlung, score_begruendung,
-                 staerken, luecken, lebenslauf_anpassungen, profil_hinweise, sprache, bewertet_am)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (url, score, score_potenzial, score_nach_anpassung, empfehlung, score_begruendung,
+                 staerken, luecken, punkteabzug, schliessbare_luecken, lebenslauf_anpassungen,
+                 profil_hinweise, sprache, bewertet_am)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 score                  = excluded.score,
+                score_potenzial        = excluded.score_potenzial,
                 score_nach_anpassung   = excluded.score_nach_anpassung,
                 empfehlung             = excluded.empfehlung,
                 score_begruendung      = excluded.score_begruendung,
                 staerken               = excluded.staerken,
                 luecken                = excluded.luecken,
+                punkteabzug            = excluded.punkteabzug,
+                schliessbare_luecken   = excluded.schliessbare_luecken,
                 lebenslauf_anpassungen = excluded.lebenslauf_anpassungen,
                 profil_hinweise        = excluded.profil_hinweise,
                 sprache                = excluded.sprache,
@@ -301,11 +311,14 @@ def upsert_bewertung(url: str, b: dict):
         """, (
             url,
             b.get("score", 0),
+            b.get("score_potenzial"),
             b.get("score_nach_anpassung"),
             b.get("empfehlung", ""),
             b.get("score_begruendung", ""),
             json.dumps(b.get("staerken", []),               ensure_ascii=False),
             json.dumps(b.get("luecken", []),                ensure_ascii=False),
+            json.dumps(b.get("punkteabzug", []),            ensure_ascii=False),
+            json.dumps(b.get("schliessbare_luecken", []),   ensure_ascii=False),
             json.dumps(b.get("lebenslauf_anpassungen", []), ensure_ascii=False),
             json.dumps(b.get("profil_hinweise", []),        ensure_ascii=False),
             b.get("sprache") or "de",
@@ -579,9 +592,9 @@ def lade_alle_stellen() -> list[dict]:
                 s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
                 s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken, s.gemerkt,
-                b.score, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
-                b.staerken, b.luecken, b.lebenslauf_anpassungen, b.profil_hinweise, b.sprache,
-                b.bewertet_am
+                b.score, b.score_potenzial, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
+                b.staerken, b.luecken, b.punkteabzug, b.schliessbare_luecken, b.lebenslauf_anpassungen,
+                b.profil_hinweise, b.sprache, b.bewertet_am
             FROM stellen s
             LEFT JOIN bewertungen b ON s.url = b.url
             ORDER BY s.gefunden_am DESC
@@ -593,11 +606,14 @@ def lade_alle_stellen() -> list[dict]:
         if r["score"] is not None:
             bewertung = {
                 "score":                  r["score"],
+                "score_potenzial":        r["score_potenzial"],
                 "score_nach_anpassung":   r["score_nach_anpassung"],
                 "empfehlung":             r["empfehlung"],
                 "score_begruendung":      r["score_begruendung"],
                 "staerken":               json.loads(r["staerken"] or "[]"),
                 "luecken":                json.loads(r["luecken"] or "[]"),
+                "punkteabzug":            json.loads(r["punkteabzug"] or "[]"),
+                "schliessbare_luecken":   json.loads(r["schliessbare_luecken"] or "[]"),
                 "lebenslauf_anpassungen": json.loads(r["lebenslauf_anpassungen"] or "[]"),
                 "profil_hinweise":        json.loads(r["profil_hinweise"] or "[]"),
                 "sprache":                r["sprache"] or "de",

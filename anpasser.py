@@ -33,7 +33,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent))
 import db
 from utils import (lade_config, sicherer_pfadname,
-                   extrahiere_abschnitt, ersetze_abschnitt)
+                   extrahiere_abschnitt, ersetze_abschnitt, effektiver_score)
 
 
 # =============================================================================
@@ -56,12 +56,9 @@ MIN_SCORE  = 70
 # =============================================================================
 
 def get_score(s: dict) -> int:
-    # Profil-Score ("lohnt sich die Bewerbung?") mit Fallback auf den Lebenslauf-Score
+    # Höchster der drei Scores – konsistent mit der Bewerben-Entscheidung in bewertung.py
     b = s.get("bewertung") or {}
-    profil = b.get("score_nach_anpassung")
-    if isinstance(profil, (int, float)):
-        return profil
-    return b.get("score_aktuell", b.get("score", 0))
+    return effektiver_score(b)
 
 
 def _antwort_text(antwort) -> str:
@@ -473,12 +470,16 @@ def generiere_anschreiben(
 # EINZELSTELLE ANPASSEN  (wird von webui.py / Flask aufgerufen)
 # =============================================================================
 
-def passe_stelle_an(url: str) -> dict:
+def passe_stelle_an(url: str, force: bool = False) -> dict:
     """
     Passt den Lebenslauf für eine einzelne Stelle an.
     Gibt ein dict zurück:
       { "ok": True,  "pfad": "/pfad/zu/Lebenslauf.txt" }
       { "ok": False, "fehler": "Fehlermeldung" }
+
+    force=True erzwingt eine Neu-Generierung des Anschreibens, auch wenn
+    Anschreiben.txt bereits existiert (Lebenslauf.txt wird ohnehin immer
+    neu geschrieben).
     """
     config = lade_config()
     if not config["api_key"]:
@@ -556,7 +557,7 @@ def passe_stelle_an(url: str) -> dict:
     # Anschreiben-Vorlage je nach Sprache wählen
     as_ziel = ordner / "Anschreiben.txt"
     anschreiben_fehler = None
-    if not as_ziel.exists():
+    if force or not as_ziel.exists():
         if sprache == "en":
             as_vorlage_pfad = BASIS_PFAD / "anschreiben_vorlage_en.txt"
             if not as_vorlage_pfad.exists():

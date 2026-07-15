@@ -30,7 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import (lade_config, lade_json, ist_ausgeschlossen, text_matched,
-                   standort_ablehnungsgrund, sicherer_pfadname)
+                   standort_ablehnungsgrund, sicherer_pfadname, effektiver_score)
 from status_def import (STATUS_LABELS, STATUS_EMOJIS, INAKTIVE_STATUSWERTE,
                         UNBEWERTETE_STATUSWERTE, FILTER_STATUS_VALS)
 
@@ -229,18 +229,44 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     # KI-Bewertung
     bewertung_html = ""
     if s.get("bewertung"):
-        b     = s["bewertung"]
-        score    = b.get("score", 0)
-        score_na = b.get("score_nach_anpassung")
+        b          = s["bewertung"]
+        score      = b.get("score", 0)
+        score_pot  = b.get("score_potenzial")
+        score_na   = b.get("score_nach_anpassung")
         empf  = b.get("empfehlung", "?")
-        farbe       = "#27ae60" if score >= 70 else "#f39c12" if score >= 40 else "#e74c3c"
-        farbe_na    = "#27ae60" if (score_na or 0) >= 70 else "#f39c12" if (score_na or 0) >= 40 else "#e74c3c"
+        def _farbe(v: float) -> str:
+            return "#27ae60" if v >= 70 else "#f39c12" if v >= 40 else "#e74c3c"
         empf_farbe  = "#27ae60" if empf == "bewerben" else "#e74c3c"
         staerken    = "".join(f"<li>{p}</li>" for p in b.get("staerken", []))
         luecken     = "".join(f"<li>{p}</li>" for p in b.get("luecken", []))
         anpassungen = "".join(f"<li>{p}</li>" for p in b.get("lebenslauf_anpassungen", []))
         begruendung = b.get("score_begruendung", "")
-        # Profil-Hinweise: warum weicht der Profil-Score vom Lebenslauf-Score ab
+        # Punkteabzug: detaillierte Aufschlüsselung, welche einzelne Anforderung
+        # wie viele Punkte gekostet hat und warum (Basis für score_aktuell)
+        _pa = b.get("punkteabzug", [])
+        punkteabzug_html = (
+            "<p><strong>Punkteabzug im Detail:</strong></p><ul>"
+            + "".join(
+                f'<li><strong style="color:#c0392b;">{e.get("abzug", 0)}</strong> '
+                f'[{e.get("typ", "?")}] {e.get("anforderung", "")}'
+                f'<br><span style="color:#777;font-size:0.85em;">{e.get("begruendung", "")}</span></li>'
+                for e in _pa if isinstance(e, dict)
+            )
+            + "</ul>"
+        ) if _pa else ""
+        # Schliessbare Lücken: welche Lücke lässt sich durch welche vorhandene, aber im
+        # CV fehlende Profil-Kompetenz schließen (Basis für score_potenzial + Lebenslauf-Anpassungen)
+        _sl = b.get("schliessbare_luecken", [])
+        schliessbare_luecken_html = (
+            "<p><strong>Schließbare Lücken (Optimierungspotenzial):</strong></p><ul>"
+            + "".join(
+                f'<li>{e.get("anforderung", "")} → <em>{e.get("profil_kompetenz", "")}</em>'
+                f' <span style="color:#27ae60;">(+{e.get("punkte_zurueck", 0)} Punkte)</span></li>'
+                for e in _sl if isinstance(e, dict)
+            )
+            + "</ul>"
+        ) if _sl else ""
+        # Profil-Hinweise: warum weicht der Profil-Score vom Optimierungs-Score ab
         _ph = b.get("profil_hinweise", [])
         profil_hinweise_html = (
             "<p><strong>Profil-Auf-/Abwertungen:</strong></p><ul>"
@@ -250,17 +276,27 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             )
             + "</ul>"
         ) if _ph else ""
-        # Zwei Perspektiven: Lebenslauf-Score (Recruiter-Sicht) vs. Profil-Score
-        # ("lohnt sich die Bewerbung?"). Bei identischen Werten nur ein Score.
-        if score_na is not None and score_na != score:
-            score_html = (
-                f'<span style="color:#999;font-size:0.85em;">Lebenslauf:</span> '
-                f'<strong style="color:{farbe};">{score}%</strong>'
-                f' → <span style="color:#999;font-size:0.85em;">Profil:</span> '
-                f'<strong style="color:{farbe_na};">{score_na}%</strong>'
-            )
+        # Drei Perspektiven: Lebenslauf-Score (Recruiter-Sicht) → Optimierbar
+        # (Lücken, die sich durch Lebenslauf-Anpassung schließen ließen) → Profil-Score
+        # ("lohnt sich die Bewerbung?"). Bei vorhandenem score_potenzial werden immer
+        # alle drei Werte gezeigt, auch bei Gleichstand – konsistente Darstellung.
+        # Alte Bewertungen ohne score_potenzial zeigen weiterhin nur abweichende Werte.
+        if isinstance(score_pot, (int, float)):
+            schritte = [("Lebenslauf", score), ("Optimierbar", score_pot)]
+            if isinstance(score_na, (int, float)):
+                schritte.append(("Profil", score_na))
         else:
-            score_html = f'<strong style="color:{farbe};">Score: {score}%</strong>'
+            schritte = [("Lebenslauf", score)]
+            if isinstance(score_na, (int, float)) and score_na != score:
+                schritte.append(("Profil", score_na))
+        if len(schritte) == 1:
+            score_html = f'<strong style="color:{_farbe(score)};">Score: {score}%</strong>'
+        else:
+            score_html = " → ".join(
+                f'<span style="color:#999;font-size:0.85em;">{label}:</span> '
+                f'<strong style="color:{_farbe(wert)};">{wert}%</strong>'
+                for label, wert in schritte
+            )
         bewertung_html = f"""
         <div class="bewertung">
             {score_html}
@@ -269,6 +305,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             <details><summary>Details anzeigen</summary>
                 <p><strong>Stärken:</strong></p><ul>{staerken}</ul>
                 <p><strong>Lücken:</strong></p><ul>{luecken}</ul>
+                {punkteabzug_html}
+                {schliessbare_luecken_html}
                 {profil_hinweise_html}
                 <p><strong>Lebenslauf-Anpassungen:</strong></p><ul>{anpassungen}</ul>
                 <p class="begruendung">📊 {begruendung}</p>
@@ -333,8 +371,11 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
             as_dl = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
             links.append(f'✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>')
         lebenslauf_html = f"""
-        <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;">
+        <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             {''.join(links)}
+            <a href="#" onclick="bewerbungNeuGenerieren(this, '{url_js}', '{firma_safe}', '{titel_safe}'); return false;"
+               style="color:#7f8c8d; margin-left:12px;" title="Lebenslauf &amp; Anschreiben neu generieren">🔄 Neu generieren</a>
+            <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
         </div>"""
     else:
         # Noch nicht erstellt → Checkbox anzeigen (für jede Stelle, unabhängig vom Score)
@@ -460,9 +501,7 @@ def _hat_geringen_score(s: dict) -> bool:
     b = s.get("bewertung")
     if not b:
         return False
-    if (b.get("score_nach_anpassung") or 0) > GERINGER_MATCH_SCHWELLE:
-        return False
-    return (b.get("score") or 0) <= GERINGER_MATCH_SCHWELLE
+    return effektiver_score(b) <= GERINGER_MATCH_SCHWELLE
 
 
 def erstelle_report(stellen: list, config: dict | None = None) -> str:
@@ -794,7 +833,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     top10 = sorted(
         [s for s in aktive_haupt if (s.get("bewertung") or {}).get("score", 0) > 0
          and bekannte_status.get(s["url"]) in (4, 6)],
-        key=lambda s: max(s["bewertung"].get("score", 0), s["bewertung"].get("score_nach_anpassung") or 0),
+        key=lambda s: effektiver_score(s["bewertung"]),
         reverse=True
     )[:10]
     if top10:
@@ -813,11 +852,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 
     for firma_name in alle_firmen:
         firma_stellen = firmen_dict.get(firma_name, [])
-        # Profil-Score entscheidet über "Hoch" (Fallback Lebenslauf-Score bei Alt-Bewertungen)
+        # Höchster der drei Scores entscheidet über "Hoch" (konsistent mit Status 4/5)
         def _entscheidungs_score(s):
-            b = s.get("bewertung") or {}
-            sn = b.get("score_nach_anpassung")
-            return sn if isinstance(sn, (int, float)) else b.get("score", 0)
+            return effektiver_score(s.get("bewertung") or {})
         hoch = [s for s in firma_stellen if _entscheidungs_score(s) >= 70]
         rest = [s for s in firma_stellen if s not in hoch]
 
@@ -974,11 +1011,17 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         url      = _html.escape(s.get("url", "#"), quote=True)
         arbeitsort = _html.escape(s.get("arbeitsort") or "")
         standort_text = f" · {arbeitsort}" if arbeitsort else ""
-        score    = (s.get("bewertung") or {}).get("score")
-        score_na = (s.get("bewertung") or {}).get("score_nach_anpassung")
+        b        = s.get("bewertung") or {}
+        score    = b.get("score")
+        score_pot = b.get("score_potenzial")
+        score_na = b.get("score_nach_anpassung")
         if score:
             score_text = f'<span style="color:{score_farbe(score)};font-weight:bold;">{score}%</span>'
-            if score_na and score_na > score:
+            if isinstance(score_pot, (int, float)):
+                score_text += f' → <span style="color:{score_farbe(score_pot)};font-weight:bold;">{score_pot}%</span>'
+                if isinstance(score_na, (int, float)):
+                    score_text += f' → <span style="color:{score_farbe(score_na)};font-weight:bold;">{score_na}%</span>'
+            elif score_na and score_na > score:
                 score_text += f' → <span style="color:{score_farbe(score_na)};font-weight:bold;">{score_na}%</span>'
         else:
             score_text = ""
