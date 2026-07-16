@@ -601,7 +601,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     geloescht        = [s for s in stellen if s.get("geloescht_am")]
     nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
     absagen          = [s for s in aktive  if s["url"] in absage_urls]
-    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
+    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
+    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
 
@@ -992,13 +993,15 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         pass
     absage_urls = {url for url, info in job_status.items() if info.get("stufe") == "absage"}
 
+    bekannte_status  = {s["url"]: s.get("status") for s in stellen}
+    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
     aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
     neue          = [s for s in aktive  if s.get("neu") and s["url"] not in absage_urls]
     geloescht     = [s for s in stellen if s.get("geloescht_am")]
     nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
     absagen       = [s for s in aktive  if s["url"] in absage_urls]
-    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls]
-    aktive_haupt  = [s for s in aktive  if not _hat_geringen_score(s) and s["url"] not in absage_urls]
+    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
+    aktive_haupt  = [s for s in aktive  if (not _hat_geringen_score(s) or s["url"] in entschieden_urls) and s["url"] not in absage_urls]
 
     def score_farbe(score: int) -> str:
         if score >= 70: return "#27ae60"
