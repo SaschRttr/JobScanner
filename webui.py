@@ -70,6 +70,8 @@ def komprimiere_response(response):
     if response.status_code != 200 or "Content-Encoding" in response.headers:
         return response
     ctype = response.headers.get("Content-Type", "")
+    if ctype.startswith("text/event-stream"):
+        return response
     if not (ctype.startswith("text/") or "json" in ctype or "javascript" in ctype):
         return response
 
