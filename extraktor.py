@@ -76,7 +76,11 @@ def ki_extrahiere_standort(text: str, dom: str, client) -> str:
     text_snippet = text_anfang + ("\n...\n" + text_ende if text_ende else "")
 
     prompt = f"""Aus dem folgenden Stellentext von '{dom}': Welche Stadt/Ort ist der Arbeitsort dieser Stelle?
-Es handelt sich um eine Stellenanzeige eines deutschsprachigen oder europäischen Unternehmens.
+Es handelt sich um eine Stellenanzeige eines deutschsprachigen oder europäischen Unternehmens – der Arbeitsort
+liegt also so gut wie sicher in Deutschland, Österreich oder der Schweiz. Nimm bei mehrdeutigen Ortsnamen
+(z.B. "Owen") IMMER den deutschen/DACH-Ort an, nicht eine gleichnamige Stadt in einem anderen Land
+(z.B. NICHT "Owen Sound" in Kanada). Rate keinen Ort ins Blaue – wenn der Text keinen Hinweis liefert,
+antworte UNBEKANNT statt zu raten.
 Antworte NUR mit dem Ort oder der Adresse (z.B. "Böblingen" oder "Herrenberger Str. 130, 71034 Böblingen").
 Wenn wirklich keine Stadt erkennbar ist, antworte exakt: UNBEKANNT
 
@@ -122,6 +126,10 @@ Deine Aufgaben:
    und einen ENDE-Marker (erste Zeile NACH dem relevanten Teil).
    START-Marker darf KEIN Jobtitel sein – wähle eine strukturelle Zeile wie "Deine Aufgaben", "Responsibilities", "Über uns" o.ä.
 3. Extrahiere den Arbeitsstandort (Stadt/Ort) der Stelle. Nur die Stadt, kein Land.
+   Der Arbeitsort liegt so gut wie sicher in Deutschland, Österreich oder der Schweiz. Nimm bei
+   mehrdeutigen Ortsnamen (z.B. "Owen") IMMER den deutschen/DACH-Ort an, nicht eine gleichnamige
+   Stadt in einem anderen Land (z.B. NICHT "Owen Sound" in Kanada). Rate keinen Ort ins Blaue –
+   wenn der Text keinen Hinweis liefert, lass "arbeitsort" leer statt zu raten.
 
 Antworte NUR als JSON ohne Markdown:
 {{

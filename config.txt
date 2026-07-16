@@ -209,6 +209,7 @@ Ausbildung
 cookie
 Onboarding
 Initiativbewerbung
+Director
 [\ausschlussbegriffe]
 
 # -----------------------------------------------------------------------------

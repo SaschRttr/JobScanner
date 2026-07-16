@@ -109,18 +109,18 @@ def pipeline_im_hintergrund():
         with open(LOG_DATEI, "w", encoding="utf-8") as log:
             for script in PIPELINE:
                 if scan_stoppen:
-                    log.write("\n⛔ Scan wurde manuell abgebrochen.\n")
+                    log.write(f"\n[{jetzt()}] ⛔ Scan wurde manuell abgebrochen.\n")
                     log.flush()
                     break
 
                 script_pfad = BASIS_PFAD / script
 
                 if not script_pfad.exists():
-                    log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
+                    log.write(f"[{jetzt()}] ⚠️  {script} nicht gefunden – übersprungen\n")
                     log.flush()
                     continue
 
-                log.write(f"\n▶️  Starte {script} ...\n")
+                log.write(f"\n[{jetzt()}] ▶️  Starte {script} ...\n")
                 log.flush()
 
                 prozess = subprocess.Popen(
@@ -146,20 +146,20 @@ def pipeline_im_hintergrund():
                 laufender_prozess = None
 
                 if scan_stoppen:
-                    log.write(f"\n⛔ Scan wurde nach {script} abgebrochen.\n")
+                    log.write(f"\n[{jetzt()}] ⛔ Scan wurde nach {script} abgebrochen.\n")
                     log.flush()
                     break
 
                 if prozess.returncode == 0:
-                    log.write(f"✅ {script} fertig\n")
+                    log.write(f"[{jetzt()}] ✅ {script} fertig\n")
                 else:
-                    log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
+                    log.write(f"[{jetzt()}] ❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
                 log.flush()
 
             if not scan_stoppen:
-                log.write("\nFERTIG\n")
+                log.write(f"\n[{jetzt()}] FERTIG\n")
             else:
-                log.write("\nFERTIG\n")  # Stream-Ende-Signal auch beim Abbruch
+                log.write(f"\n[{jetzt()}] FERTIG\n")  # Stream-Ende-Signal auch beim Abbruch
             log.flush()
     finally:
         scan_laeuft       = False
@@ -962,7 +962,7 @@ def manuell_stream():
             with open(LOG_DATEI, "w", encoding="utf-8") as log:
                 for script in TEIL_PIPELINE:
                     script_pfad = BASIS_PFAD / script
-                    log.write(f"\n Starte {script} ...\n")
+                    log.write(f"\n[{jetzt()}] Starte {script} ...\n")
                     log.flush()
                     extra_args = ["--keine-mail"] if script == "report.py" else []
                     if url_filter and script != "report.py":
@@ -985,11 +985,11 @@ def manuell_stream():
                             log.flush()
                     prozess.wait()
                     if prozess.returncode == 0:
-                        log.write(f"OK {script} fertig\n")
+                        log.write(f"[{jetzt()}] OK {script} fertig\n")
                     else:
-                        log.write(f"FEHLER {script} (Code {prozess.returncode})\n")
+                        log.write(f"[{jetzt()}] FEHLER {script} (Code {prozess.returncode})\n")
                     log.flush()
-                log.write("\nFERTIG\n")
+                log.write(f"\n[{jetzt()}] FERTIG\n")
                 log.flush()
         finally:
             scan_laeuft = False
