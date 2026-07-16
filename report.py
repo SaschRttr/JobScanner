@@ -48,7 +48,7 @@ STATUS_JSON     = BASIS_PFAD / "status.json"
 SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
 
 
-def _scan_status_html() -> str:
+def _scan_status_html(stellen: list | None = None) -> str:
     """Zeigt ganz oben im Report, ob beim letzten scanner.py-Lauf alle Firmen
     erfolgreich gescannt wurden – sonst welche Firma mit welchem Fehler
     hängengeblieben ist. Spart das Durchsuchen des Logfiles."""
@@ -59,10 +59,33 @@ def _scan_status_html() -> str:
     fehler = {name: info for name, info in status.items() if not info.get("ok")}
     letzter_stand = max((info.get("zeitpunkt", "") for info in status.values()), default="")
 
+    # Reine Sichtbarkeits-Info (kein Alarm): passend/ausgeschlossen je Firma, damit
+    # auffällt, wenn z.B. plötzlich gar keine Ausschluss-Treffer (Praktikum,
+    # Werkstudent, ...) mehr dabei sind, obwohl "erreichbar" gemeldet wird – ein
+    # Hinweis auf zu enge/falsche Links, ohne dass es hart als Fehler gilt.
+    def _firmen_details_html() -> str:
+        if not stellen:
+            return ""
+        zeilen = []
+        for name in sorted(status.keys()):
+            firmen_stellen = [s for s in stellen if s.get("firma") == name and not s.get("geloescht_am")]
+            if not firmen_stellen:
+                continue
+            passend      = sum(1 for s in firmen_stellen if not s.get("nicht_passend"))
+            ausgeschlossen = sum(1 for s in firmen_stellen if s.get("nicht_passend"))
+            zeilen.append(f'<li>{name}: {passend} passend, {ausgeschlossen} ausgeschlossen</li>')
+        if not zeilen:
+            return ""
+        return (
+            '<details style="margin-top:6px;"><summary style="cursor:pointer;">Details je Firma</summary>'
+            f'<ul style="margin:6px 0 0 0;">{"".join(zeilen)}</ul></details>\n'
+        )
+
     if not fehler:
         return (
             f'<div class="summary-box" style="background:#eafaf1; border-left:4px solid #27ae60; color:#1e3a2f;">'
             f'✅ Alle {len(status)} Firmen beim letzten Scan erreichbar (Stand: {letzter_stand})'
+            f'{_firmen_details_html()}'
             f'</div>\n'
         )
 
@@ -75,6 +98,7 @@ def _scan_status_html() -> str:
         f'<div class="summary-box" style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17;">'
         f'⚠️ {len(fehler)} von {len(status)} Firmen beim letzten Scan mit Problem (Stand: {letzter_stand}):'
         f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
+        f'{_firmen_details_html()}'
         f'</div>\n'
     )
 
@@ -126,6 +150,47 @@ def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None
         "auto_km":     auto["km"]     if auto    else None,
         "transit_min": transit["min"] if transit else None,
     }
+
+
+def aktualisiere_fahrzeit_fuer_stelle(url: str, firma: str, arbeitsort: str, config: dict) -> dict | None:
+    """
+    Berechnet die Fahrzeit für EINE Stelle per Google-API und speichert sie im Cache.
+    Wird gezielt aufgerufen, wenn eine Stelle neu gefunden wird oder ihr Standort
+    manuell gesetzt/geändert wird – NICHT bei jedem Report-Rebuild (das würde bei
+    vielen ungecachten Stellen den Web-Request blockieren, da die API-Calls
+    synchron sind und bis zu 10s/Request dauern können).
+    Überschreibt einen bestehenden Cache-Eintrag (auch einen leeren), erlaubt also
+    einen Retry falls die Adresse beim letzten Mal keine Route ergeben hat.
+    """
+    api_key    = (config or {}).get("google_maps_key", "")
+    startpunkt = (config or {}).get("fahrzeit_startpunkt", "")
+    if not api_key or not startpunkt or api_key == "DEIN_GOOGLE_MAPS_API_KEY":
+        return None
+
+    firma_adressen = (config or {}).get("firma_adressen", {})
+    adresse = firma_adressen.get(firma)
+    ziel    = adresse or arbeitsort or None
+    genau   = adresse is not None
+    if not ziel:
+        return None
+
+    daten = hole_fahrzeit_daten(ziel, api_key, startpunkt)
+    if daten is None:
+        return None
+
+    eintrag = {
+        "ziel":        ziel,
+        "genau":       genau,
+        "auto_min":    daten["auto_min"],
+        "auto_km":     daten["auto_km"],
+        "transit_min": daten["transit_min"],
+    }
+    try:
+        from db import speichere_fahrzeit_cache
+        speichere_fahrzeit_cache(url, eintrag)
+    except Exception:
+        pass
+    return eintrag
 
 
 # =============================================================================
@@ -519,49 +584,27 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 
     if api_key and startpunkt and api_key != "DEIN_GOOGLE_MAPS_API_KEY":
         try:
-            from db import hole_fahrzeit_cache, speichere_fahrzeit_cache
+            from db import hole_fahrzeit_cache
             db_ok = True
         except Exception:
             db_ok = False
 
         relevante = [s for s in stellen if not s.get("nicht_passend")]
-        _api_cache: dict = {}  # ziel → API-Ergebnis (verhindert doppelte API-Calls)
 
+        # Nur aus dem Cache lesen – die eigentliche Berechnung passiert gezielt
+        # beim erstmaligen Fund einer Stelle bzw. beim manuellen Setzen/Ändern
+        # des Standorts (siehe aktualisiere_fahrzeit_fuer_stelle), NICHT hier bei
+        # jedem Report-Rebuild. Sonst blockiert ein Rebuild mit vielen noch nicht
+        # gecachten Stellen den aufrufenden Web-Request minutenlang.
         for s in relevante:
-            url      = s["url"]
-            firma    = s.get("firma", "")
+            url        = s["url"]
             arbeitsort = s.get("arbeitsort") or ""
-            adresse = firma_adressen.get(firma)
-            ziel    = adresse or arbeitsort or None
-            genau   = adresse is not None
 
-            if not ziel:
+            cached = hole_fahrzeit_cache(url) if db_ok else None
+            if cached is not None:
+                fahrzeit_daten[url] = cached
+            elif not arbeitsort and not firma_adressen.get(s.get("firma", "")):
                 fahrzeit_daten[url] = {"kein_ziel": True}
-                continue
-
-            # DB-Cache per URL prüfen
-            if db_ok:
-                cached = hole_fahrzeit_cache(url)
-                if cached is not None:
-                    fahrzeit_daten[url] = cached
-                    continue
-
-            # API-Call (Session-Cache vermeidet Doppel-Requests für gleiche Zieladresse)
-            if ziel not in _api_cache:
-                _api_cache[ziel] = hole_fahrzeit_daten(ziel, api_key, startpunkt)
-            daten = _api_cache[ziel]
-
-            eintrag = {
-                "ziel":        ziel,
-                "genau":       genau,
-                "auto_min":    daten["auto_min"]    if daten else None,
-                "auto_km":     daten["auto_km"]     if daten else None,
-                "transit_min": daten["transit_min"] if daten else None,
-            }
-            if db_ok:
-                speichere_fahrzeit_cache(url, eintrag)
-            if daten:
-                fahrzeit_daten[url] = eintrag
 
     # Fahrzeit-Filter nur anwenden wenn keine Whitelist aktiv ist: ein Ort auf der
     # Whitelist ist explizit gewollt (z.B. Apple München trotz >60min), die
@@ -662,7 +705,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 </head>
 <body>
     <h1>🔍 Job-Scanner Report</h1>
-    {_scan_status_html()}
+    {_scan_status_html(stellen)}
     <div class="summary-box">
         {status_zeilen} &nbsp;|&nbsp;
         Stand: {datum}
@@ -1099,21 +1142,43 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 # E-MAIL SENDEN
 # =============================================================================
 
-def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0):
+def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0, scan_fehler: dict | None = None):
     datum = datetime.now().strftime("%d.%m.%Y")
+    scan_fehler = scan_fehler or {}
+
+    betreff = f"Job-Scanner {datum} – {neue} neu, {geloescht} vergeben"
+    if scan_fehler:
+        betreff += f" – ⚠️ {len(scan_fehler)} Firma/Firmen mit Scan-Problem"
 
     msg = MIMEMultipart("alternative")
     msg["From"]    = config["email_absender"]
     msg["To"]      = config["email_empfaenger"]
-    msg["Subject"] = f"Job-Scanner {datum} – {neue} neu, {geloescht} vergeben"
+    msg["Subject"] = betreff
 
     plain = (
         f"Job-Scanner Änderungen vom {datum}:\n\n"
         f"  Neue Stellen:          {neue}\n"
         f"  Nicht mehr verfügbar:  {geloescht}\n"
     )
+    scan_fehler_html = ""
+    if scan_fehler:
+        plain += "\n  ⚠️ Firmen mit Scan-Problem (liefern evtl. keine Stellen mehr):\n"
+        for name, info in sorted(scan_fehler.items()):
+            plain += f"    - {name}: {info.get('fehler', 'unbekannter Fehler')} ({info.get('zeitpunkt', '')})\n"
+        zeilen = "".join(
+            f'<li><b>{name}</b> – {info.get("fehler", "unbekannter Fehler")} '
+            f'<span style="color:#666; font-size:0.85em;">({info.get("zeitpunkt", "")})</span></li>\n'
+            for name, info in sorted(scan_fehler.items())
+        )
+        scan_fehler_html = (
+            f'<div style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17; '
+            f'padding:10px 14px; margin-bottom:12px; border-radius:6px;">'
+            f'⚠️ {len(scan_fehler)} Firma/Firmen beim letzten Scan mit Problem – evtl. liefert die Seite keine Stellen mehr:'
+            f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
+            f'</div>\n'
+        )
     msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(aenderungs_html, "html", "utf-8"))
+    msg.attach(MIMEText(scan_fehler_html + aenderungs_html, "html", "utf-8"))
 
     try:
         with smtplib.SMTP("smtp.mail.me.com", 587, local_hostname="raspberrypi.local") as server:
@@ -1208,17 +1273,19 @@ def main():
     REPORT_PFAD.write_text(report_html, encoding="utf-8")
     print(f"  ✅ Report gespeichert: {REPORT_PFAD}")
 
-    # E-Mail nur bei Änderungen
+    # E-Mail bei Änderungen ODER wenn eine Firma beim letzten Scan keine Stellen mehr lieferte
     neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]
     geloescht = [s for s in stellen if s.get("geloescht_am")]
+    scan_status = lade_json(SCAN_STATUS_JSON, {})
+    scan_fehler = {name: info for name, info in scan_status.items() if not info.get("ok")}
 
     if args.keine_mail:
         print("  ℹ️  Mail-Versand unterdrückt (--keine-mail)")
     elif config["email_aktiv"]:
-        if neue or geloescht:
-            print(f"  📧 Sende Änderungs-Mail ({len(neue)} neu, {len(geloescht)} vergeben)...")
+        if neue or geloescht or scan_fehler:
+            print(f"  📧 Sende Mail ({len(neue)} neu, {len(geloescht)} vergeben, {len(scan_fehler)} Scan-Problem(e))...")
             aenderungs_html = erstelle_aenderungs_html(stellen)
-            sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht))
+            sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht), scan_fehler=scan_fehler)
         else:
             print("  ℹ️  Keine Änderungen – keine Mail gesendet.")
     else:

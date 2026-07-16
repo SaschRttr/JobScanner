@@ -27,7 +27,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, lade_json, speichere_json, jetzt, domain, berechne_standort
+from utils import lade_config, lade_json, speichere_json, jetzt, domain, berechne_standort, standort_aus_url
 
 
 # =============================================================================
@@ -38,6 +38,12 @@ BASIS_PFAD      = Path(__file__).parent
 STELLEN_JSON    = BASIS_PFAD / "stellen.json"
 BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 STRUKTUREN_JSON = BASIS_PFAD / "strukturen.json"
+SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
+
+# Erkennungssignatur für Einträge, die dieser Check selbst gesetzt hat –
+# damit spätere Läufe nur ihre eigenen "ok"-Rücksetzungen vornehmen und
+# keine von scanner.py gesetzten Fehlermeldungen überschreiben.
+_LINK_MUSTER_FEHLER_MARKER = "Link-Muster evtl. falsch"
 
 KI_MODELL = "claude-haiku-4-5-20251001"
 
@@ -223,6 +229,13 @@ def main():
     print(f"  {len(zu_bearbeiten)} Stellen zu bearbeiten (Status 2)")
 
     extrahiert = 0
+    # Pro Firma: wie viele Stellen lieferten trotz vorhandenem Link keinen
+    # brauchbaren Inhalt (Rohtext leer/zu kurz)? Wenn ausnahmslos alle
+    # verarbeiteten Stellen einer Firma daran scheitern, deutet das auf ein
+    # falsches Link-Muster hin (z.B. Kategorie- statt Job-Links wie bei
+    # Advantest) – das meldet die bisherige "0 Treffer"-Prüfung in scanner.py
+    # nicht, weil dort ja Links gefunden wurden.
+    firma_extraktion_stats: dict = {}
 
     for idx, stelle in zu_bearbeiten:
         url     = stelle["url"]
@@ -274,10 +287,24 @@ def main():
                 strukturen.setdefault(dom, {}).update(neue_struktur)
                 print(f"  💾 Struktur für '{dom}' gelernt")
 
+        if not arbeitsort:
+            arbeitsort = standort_aus_url(url)
+            if arbeitsort:
+                print(f"  📍 Arbeitsort (aus URL): {arbeitsort}")
+
         stellen[idx]["arbeitsort"] = arbeitsort or ""
         stellen[idx]["standort"] = berechne_standort(arbeitsort, erlaubte_orte, verbotene_orte)
         if not arbeitsort:
             print(f"  ⚠️  Kein Standort erkannt – muss manuell nachgetragen werden: {firma} – {titel[:60]} ({url})")
+        else:
+            try:
+                from report import aktualisiere_fahrzeit_fuer_stelle
+                aktualisiere_fahrzeit_fuer_stelle(url, firma, arbeitsort, config)
+            except Exception as e:
+                print(f"  ⚠️  Fahrzeit-Berechnung fehlgeschlagen: {e}")
+
+        firma_stat = firma_extraktion_stats.setdefault(firma, {"verarbeitet": 0, "fehlgeschlagen": 0})
+        firma_stat["verarbeitet"] += 1
 
         if stellentext and len(stellentext) > 100:
             stellen[idx]["stellentext"] = stellentext
@@ -297,6 +324,7 @@ def main():
                            "standort":   stellen[idx]["standort"],
                            "status": 3})
         else:
+            firma_stat["fehlgeschlagen"] += 1
             print(f"  ⚠️  Rohtext zu kurz oder leer – Status auf 1 zurückgesetzt (scanner.py lädt neu)")
             stellen[idx]["rohtext"] = None
             stellen[idx]["status"] = 1
@@ -309,6 +337,26 @@ def main():
     if zu_bearbeiten:
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
+
+    if firma_extraktion_stats:
+        scan_status = lade_json(SCAN_STATUS_JSON, {})
+        for name, stat in firma_extraktion_stats.items():
+            bisher = scan_status.get(name, {})
+            war_link_muster_fehler = _LINK_MUSTER_FEHLER_MARKER in (bisher.get("fehler") or "")
+            if stat["fehlgeschlagen"] == stat["verarbeitet"]:
+                scan_status[name] = {
+                    "ok": False,
+                    "fehler": (f"{stat['fehlgeschlagen']}/{stat['verarbeitet']} Job-Links liefern keinen "
+                               f"Inhalt (Rohtext leer/zu kurz) – {_LINK_MUSTER_FEHLER_MARKER}"),
+                    "zeitpunkt": jetzt(),
+                }
+                print(f"  ⚠️  {name}: alle verarbeiteten Links ohne Inhalt – als Scan-Problem vermerkt")
+            elif war_link_muster_fehler:
+                # War beim letzten Lauf komplett fehlgeschlagen, diesmal kam wieder
+                # Inhalt durch – eigene Markierung zurücksetzen (Fehler von scanner.py
+                # bleiben unangetastet, die betreffen einen anderen Lauf/Schritt).
+                scan_status[name] = {"ok": True, "fehler": None, "zeitpunkt": jetzt()}
+        speichere_json(SCAN_STATUS_JSON, scan_status)
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

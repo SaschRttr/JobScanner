@@ -56,6 +56,29 @@ def normalisiere_url(url: str) -> str:
     return dekodiert.rstrip("/")
 
 
+# Manche ATS (z.B. jobs.renesas.com) rendern den Ort per JS-Widget, das im
+# gescrapten body-Text fehlt – kodieren ihn aber zuverlässig in der URL,
+# z.B. ".../senior-test-engineer-in-dresden-germany-jid-6058".
+_URL_LAENDER = (
+    "germany|deutschland|austria|oesterreich|switzerland|schweiz|"
+    "netherlands|france|poland|belgium|italy|spain|"
+    "czech-republic|hungary|romania|sweden|denmark|"
+    "united-kingdom|uk|ireland"
+)
+_URL_ORT_RE = re.compile(
+    rf'-in-([a-z][a-z\-]*?)-(?:{_URL_LAENDER})-jid-\d+',
+    re.IGNORECASE
+)
+
+
+def standort_aus_url(url: str) -> str:
+    """Fallback: Ort aus der URL extrahieren, wenn er im Seitentext fehlt."""
+    m = _URL_ORT_RE.search(url)
+    if not m:
+        return ""
+    return m.group(1).replace("-", " ").strip().title()
+
+
 def sicherer_pfadname(text: str, max_len: int = 50) -> str:
     """Macht aus einem Titel/Firmennamen einen dateisystem-sicheren Ordnernamen."""
     bereinigt = re.sub(r'[^\w\s\-]', '', text).strip()

@@ -23,6 +23,7 @@ import time
 import threading
 import urllib.parse
 import json
+import gzip
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
 from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt, effektiver_score
@@ -57,6 +58,33 @@ PIPELINE = [
 # =============================================================================
 
 app = Flask(__name__)
+
+
+@app.after_request
+def komprimiere_response(response):
+    """Komprimiert Text-Antworten (v.a. den mehrere MB großen Report) mit gzip,
+    wenn der Browser das unterstützt. Reduziert die Übertragungsgröße um
+    ca. 80-90% und damit spürbar die Ladezeit."""
+    if "gzip" not in request.headers.get("Accept-Encoding", "").lower():
+        return response
+    if response.status_code != 200 or "Content-Encoding" in response.headers:
+        return response
+    ctype = response.headers.get("Content-Type", "")
+    if not (ctype.startswith("text/") or "json" in ctype or "javascript" in ctype):
+        return response
+
+    response.direct_passthrough = False
+    daten = response.get_data()
+    komprimiert = gzip.compress(daten, compresslevel=6)
+    if len(komprimiert) < len(daten):
+        response.set_data(komprimiert)
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(komprimiert))
+        response.headers.pop("Accept-Ranges", None)
+        response.headers.pop("Content-Range", None)
+        response.headers["Vary"] = "Accept-Encoding"
+    return response
+
 
 @app.route("/")
 def index():
@@ -716,6 +744,15 @@ def standort_setzen():
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
+    try:
+        from report import aktualisiere_fahrzeit_fuer_stelle
+        with _db.verbindung() as con:
+            row = con.execute("SELECT firma FROM stellen WHERE url = ?", (url,)).fetchone()
+        firma = row["firma"] if row else ""
+        aktualisiere_fahrzeit_fuer_stelle(url, firma, arbeitsort, cfg)
+    except Exception as e:
+        print(f"  ⚠️  Fahrzeit-Berechnung fehlgeschlagen: {e}")
+
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         cwd=str(BASIS_PFAD),
@@ -1118,4 +1155,4 @@ if __name__ == "__main__":
     print(f"  http://localhost:{PORT}")
     print(f"  Zum Beenden: Strg+C")
     print(f"{'='*50}\n")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
