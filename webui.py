@@ -602,7 +602,7 @@ def bewertung_erstellen():
 
     try:
         import anthropic
-        from bewertung import bewerte_stelle
+        from bewertung import bewerte_stelle, status_fuer_score
         client = anthropic.Anthropic(api_key=api_key)
         bewertung = bewerte_stelle(stellentext, lebenslauf, prompt_vorlage, client)
     except Exception as e:
@@ -612,7 +612,7 @@ def bewertung_erstellen():
         return jsonify({"fehler": "KI-Bewertung fehlgeschlagen"}), 500
 
     # Status hängt am höchsten der drei Scores (score_aktuell/score_potenzial/score_nach_anpassung)
-    neuer_status = 4 if effektiver_score(bewertung) >= 70 else 5
+    neuer_status = status_fuer_score(effektiver_score(bewertung))
     _db.upsert_bewertung(url, bewertung)
     _db.upsert_stelle({"url": url, "status": neuer_status, "nicht_passend": False})
     _db.exportiere_stellen_json(STELLEN_JSON)
@@ -728,9 +728,9 @@ def standort_setzen():
 @app.route("/passend-setzen", methods=["POST"])
 def passend_setzen():
     """
-    Schaltet eine KI-bewertete Stelle manuell zwischen Status 4 (bewerben)
-    und Status 5 (nicht bewerben) um - für Fälle, in denen man die
-    KI-Empfehlung übersteuern will.
+    Schaltet eine KI-bewertete Stelle manuell auf Status 4 (bewerben) oder
+    Status 5 (nicht bewerben) - für Fälle, in denen man die KI-Empfehlung
+    übersteuern will, oder um einen Grenzfall (Status 11) final einzuordnen.
     Erwartet JSON: { url, passend: true|false }
     """
     data = request.get_json()
@@ -746,8 +746,8 @@ def passend_setzen():
         aktueller = _db.status_von(url)
         if aktueller is None:
             return jsonify({"ok": False, "fehler": "Stelle nicht gefunden"}), 404
-        if aktueller not in (4, 5):
-            return jsonify({"ok": False, "fehler": f"Nur bewertete Stellen (Status 4/5) umschaltbar, aktuell: {aktueller}"}), 409
+        if aktueller not in (4, 5, 11):
+            return jsonify({"ok": False, "fehler": f"Nur bewertete Stellen (Status 4/5/11) umschaltbar, aktuell: {aktueller}"}), 409
 
         _db.upsert_stelle({"url": url, "status": neuer_status})
         _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")

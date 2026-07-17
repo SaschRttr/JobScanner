@@ -310,13 +310,14 @@ Status-Definitionen (Labels, Farben, Emojis) liegen zentral in `status_def.py` �
 | 1 | Nur Link gefunden, noch kein Rohtext |
 | 2 | Rohtext geholt, kein Stellentext extrahiert |
 | 3 | Stellentext extrahiert, noch nicht bewertet |
-| 4 | KI bewertet → Profil-Score ≥ 70%, bewerben empfohlen |
-| 5 | KI bewertet → Profil-Score < 70%, nicht bewerben |
+| 4 | KI bewertet → Profil-Score ≥ 75%, bewerben empfohlen |
+| 5 | KI bewertet → Profil-Score < 65%, nicht bewerben |
 | 6 | Beworben, Stelle noch aktiv |
 | 7 | Beworben, Stelle weg / vergeben (Ghosting) |
 | 8 | Absage erhalten |
 | 9 | Vergeben, nie beworben (per HTTP bestätigt) |
 | 10 | Nicht beworben (manuell entschieden) |
+| 11 | Grenzfall: Profil-Score 65–75%, manuell zu prüfen (KI-Bewertung streut in diesem Band zu stark für eine automatische Entscheidung) |
 
 ---
 

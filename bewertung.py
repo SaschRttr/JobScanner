@@ -5,8 +5,9 @@ Bewertet alle Stellen mit sauberem Stellentext per KI.
 Prompt kommt aus config.txt.
 
 Status-Übergänge:
-  3 (Stellentext extrahiert) → 4 (KI-Bewertung ≥ 70 %, bewerben)
-                             → 5 (KI-Bewertung < 70 %, nicht bewerben)
+  3 (Stellentext extrahiert) → 4  (KI-Bewertung ≥ 75 %, bewerben)
+                             → 11 (KI-Bewertung 65-75 %, Grenzfall – manuell prüfen)
+                             → 5  (KI-Bewertung < 65 %, nicht bewerben)
 
 Nutzung:
   python bewertung.py
@@ -35,12 +36,39 @@ STELLEN_JSON    = BASIS_PFAD / "stellen.json"
 BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 LEBENSLAUF_PFAD = BASIS_PFAD / "lebenslauf.txt"
 
-KI_MODELL = "claude-haiku-4-5-20251001"
+KI_MODELL = "claude-sonnet-5"
+
+# Score-Band um den 70%-Cutoff: Stellen hier landen auf Status 11 (Grenzfall)
+# statt automatisch auf 4/5. Grund: der Varianz-Test hat gezeigt, dass die
+# KI-Bewertung derselben Stelle über mehrere Läufe hinweg um bis zu ±13 Punkte
+# streuen kann - im Cutoff-Bereich kippt dadurch auch die "bewerben"/"nicht
+# bewerben"-Empfehlung. Ein Band statt eines harten Werts vermeidet, dass die
+# Automatik bei diesen Grenzfällen eine unsichere Entscheidung vorspiegelt.
+GRENZZONE_MIN = 65
+GRENZZONE_MAX = 75
+
+
+def empfehlung_fuer_score(score: float) -> str:
+    if GRENZZONE_MIN <= score <= GRENZZONE_MAX:
+        return "unsicher"
+    return "bewerben" if score >= 70 else "nicht bewerben"
+
+
+def status_fuer_score(score: float) -> int:
+    """Status 11 (Grenzfall) im Unsicherheitsband, sonst 4 (bewerben) oder 5 (nicht bewerben)."""
+    if GRENZZONE_MIN <= score <= GRENZZONE_MAX:
+        return 11
+    return 4 if score >= 70 else 5
 
 
 # =============================================================================
 # KI-BEWERTUNG
 # =============================================================================
+
+def _antwort_text(antwort) -> str:
+    """Extrahiert den Text-Block aus einer API-Antwort (überspringt thinking-Blöcke)."""
+    return next((b.text for b in antwort.content if b.type == "text"), "").strip()
+
 
 def _parse_json_antwort(text: str) -> dict:
     text = text.removeprefix("```json").removesuffix("```").strip()
@@ -126,9 +154,10 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
                 model=KI_MODELL,
                 max_tokens=8192,
                 system=system_param,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": user_teil}],
             )
-            text = antwort.content[0].text.strip()
+            text = _antwort_text(antwort)
             if antwort.stop_reason == "max_tokens":
                 print(f"  ⚠️  Antwort abgeschnitten – max_tokens erreicht (Versuch {versuch}/3)")
                 if versuch == 3:
@@ -172,7 +201,7 @@ def bewerte_stelle(stellentext: str, lebenslauf: str, prompt_vorlage: str, clien
             # bleibt bewusst streng, aber das erkannte Potenzial (score_potenzial)
             # oder der Profil-Fit (score_nach_anpassung) sollen eine Chance nicht
             # verdecken, nur weil ein einzelner Score sie konservativ einschätzt.
-            ergebnis["empfehlung"] = "bewerben" if effektiver_score(ergebnis) >= 70 else "nicht bewerben"
+            ergebnis["empfehlung"] = empfehlung_fuer_score(effektiver_score(ergebnis))
             if "sprache" not in ergebnis:
                 ergebnis["sprache"] = "de"
             return ergebnis
@@ -310,7 +339,7 @@ def main():
             potenzial  = bewertung.get("score_potenzial", score)
             profil     = bewertung.get("score_nach_anpassung", score)
             empf       = bewertung.get("empfehlung", "?")
-            neuer_status = 4 if effektiver_score(bewertung) >= 70 else 5
+            neuer_status = status_fuer_score(effektiver_score(bewertung))
             stellen[idx]["status"] = neuer_status
             print(f"  ⭐ Lebenslauf: {score}%  →  Optimierbar: {potenzial}%  →  Profil: {profil}%  |  {empf.upper()}  →  Status {neuer_status}")
             bewertet += 1

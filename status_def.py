@@ -16,6 +16,7 @@ Status  Bedeutung
 8       Absage erhalten
 9       Vergeben, nie beworben (per HTTP bestätigt)
 10      Nicht beworben (manuell entschieden)
+11      Grenzfall: Score im Unsicherheitsband um den 70%-Cutoff, manuell zu prüfen
 """
 
 STATUS_LABELS = {
@@ -30,15 +31,16 @@ STATUS_LABELS = {
     8: "Absage erhalten",
     9: "Vergeben, nie beworben",
     10: "nicht beworben",
+    11: "Grenzfall",
 }
 
 STATUS_EMOJIS = {
-    4: "📋", 5: "👎", 6: "✅", 7: "👻", 8: "❌", 9: "🗑️", 10: "🚫",
+    4: "📋", 5: "👎", 6: "✅", 7: "👻", 8: "❌", 9: "🗑️", 10: "🚫", 11: "⚖️",
 }
 
 STATUS_FARBEN = {
     4: "#3498db", 5: "#e67e22", 6: "#27ae60",
-    7: "#f39c12", 8: "#e74c3c", 9: "#95a5a6", 10: "#c0392b",
+    7: "#f39c12", 8: "#e74c3c", 9: "#95a5a6", 10: "#c0392b", 11: "#8e44ad",
 }
 
 # Stellen mit diesen Status gelten als inaktiv (vergeben/abgeschlossen)
@@ -48,7 +50,7 @@ INAKTIVE_STATUSWERTE = (0, 7, 8, 9, 10)
 UNBEWERTETE_STATUSWERTE = (1, 2, 3)
 
 # Status-Werte, für die der Report Filter-Buttons anbietet
-FILTER_STATUS_VALS = (4, 5, 6, 7, 8, 9, 10)
+FILTER_STATUS_VALS = (11, 4, 5, 6, 7, 8, 9, 10)
 
 
 def status_fuer_stufe(stufe: str) -> int:

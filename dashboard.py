@@ -15,10 +15,10 @@ DB = Path(__file__).parent / "jobscanner.db"
 
 st.set_page_config(page_title="Job-Scanner Dashboard", page_icon="🔍", layout="wide")
 
-# Anzeige-Status 4–9 aus der zentralen Definition (Label + Farbe)
+# Anzeige-Status 4–9 + 11 aus der zentralen Definition (Label + Farbe)
 SCANNER_STATUS = {
     sv: (f"{STATUS_EMOJIS[sv]} {STATUS_LABELS[sv]}", STATUS_FARBEN[sv])
-    for sv in (4, 5, 6, 7, 8, 9)
+    for sv in (4, 5, 6, 7, 8, 9, 11)
 }
 
 # ---------------------------------------------------------------------------

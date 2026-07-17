@@ -138,6 +138,7 @@
     .scanner-status-8 { background: #e74c3c; }
     .scanner-status-9  { background: #7f8c8d; }
     .scanner-status-10 { background: #c0392b; }
+    .scanner-status-11 { background: #8e44ad; }
     .scan-box {
         background: white; border-radius: 8px; padding: 20px;
         margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);

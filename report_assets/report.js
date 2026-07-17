@@ -8,7 +8,7 @@
     function aktualisiereStatusBadge(el, neuerStatus) {
         const badge = el.querySelector('.scanner-status');
         if (!badge) return;
-        for (let i = 0; i <= 10; i++) badge.classList.remove('scanner-status-' + i);
+        for (let i = 0; i <= 11; i++) badge.classList.remove('scanner-status-' + i);
         badge.classList.add('scanner-status-' + neuerStatus);
         badge.title = 'Status ' + neuerStatus;
         badge.textContent = STATUS_LABELS[neuerStatus] || String(neuerStatus);
@@ -867,8 +867,12 @@
             // Stelle kann mehrfach im Report stehen (Neue Stellen, Top 10, pro Firma)
             document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el => {
                 aktualisiereStatusBadge(el, data.status);
-                const b = el.querySelector('.passend-toggle');
-                if (b) _setzePassendBtn(b, url, passend);
+                // Grenzfall-Karten haben zwei Buttons (Passend/Nicht passend) - nach der
+                // Entscheidung bleibt nur noch der eine Standard-Umschalter übrig.
+                el.querySelectorAll('.passend-toggle').forEach((b, i) => {
+                    if (i === 0) _setzePassendBtn(b, url, passend);
+                    else b.remove();
+                });
             });
         } catch(e) {
             alert('Server nicht erreichbar');

@@ -32,8 +32,9 @@ from urllib.parse import urlparse
 from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
     berechne_standort, standort_ablehnungsgrund, ablehnungsgrund,
-    text_matched, klick_cookie_banner, normalisiere_ort,
+    text_matched, klick_cookie_banner, normalisiere_ort, effektiver_score,
 )
+from bewertung import status_fuer_score
 from browser import (
     USER_AGENT, MIN_ROHTEXT_LAENGE,
     starte_browser, neuer_context, neue_seite,
@@ -964,8 +965,7 @@ def main():
             # repariere_inkonsistente_status() sie sofort wieder als vergeben.
             bekannte[url]["vergaben_bestaetigt"] = False
             if idx is not None and stellen[idx].get("bewertung"):
-                score = (stellen[idx]["bewertung"] or {}).get("score", 0)
-                bekannte[url]["status"] = 4 if score >= 70 else 5
+                bekannte[url]["status"] = status_fuer_score(effektiver_score(stellen[idx]["bewertung"] or {}))
                 bekannte[url]["geloescht_am"] = None
                 bekannte[url]["nicht_passend"] = False
                 stellen[idx]["geloescht_am"] = None

@@ -236,7 +236,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         empf  = b.get("empfehlung", "?")
         def _farbe(v: float) -> str:
             return "#27ae60" if v >= 70 else "#f39c12" if v >= 40 else "#e74c3c"
-        empf_farbe  = "#27ae60" if empf == "bewerben" else "#e74c3c"
+        empf_farbe  = "#27ae60" if empf == "bewerben" else "#8e44ad" if empf == "unsicher" else "#e74c3c"
         staerken    = "".join(f"<li>{p}</li>" for p in b.get("staerken", []))
         luecken     = "".join(f"<li>{p}</li>" for p in b.get("luecken", []))
         anpassungen = "".join(f"<li>{p}</li>" for p in b.get("lebenslauf_anpassungen", []))
@@ -437,6 +437,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_js}\', false)">👎 Nicht passend</button>'
     elif scanner_status == 5:
         passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_js}\', true)">📋 Passend – bewerben</button>'
+    elif scanner_status == 11:
+        # Grenzfall: keine KI-Vorentscheidung, daher beide Optionen gleichwertig anbieten
+        passend_btn = (
+            f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_js}\', true)">📋 Passend – bewerben</button>'
+            f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_js}\', false)">👎 Nicht passend</button>'
+        )
     else:
         passend_btn = ""
     vergeben_btn        = "" if ist_geloescht else f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="vergebenMarkieren(this, \'{url_js}\')">🗑️ Als vergeben markieren</button>'
