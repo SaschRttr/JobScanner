@@ -23,6 +23,7 @@ import time
 import threading
 import urllib.parse
 import json
+import gzip
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
 from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt, effektiver_score
@@ -58,6 +59,35 @@ PIPELINE = [
 
 app = Flask(__name__)
 
+
+@app.after_request
+def komprimiere_response(response):
+    """Komprimiert Text-Antworten (v.a. den mehrere MB großen Report) mit gzip,
+    wenn der Browser das unterstützt. Reduziert die Übertragungsgröße um
+    ca. 80-90% und damit spürbar die Ladezeit."""
+    if "gzip" not in request.headers.get("Accept-Encoding", "").lower():
+        return response
+    if response.status_code != 200 or "Content-Encoding" in response.headers:
+        return response
+    ctype = response.headers.get("Content-Type", "")
+    if ctype.startswith("text/event-stream"):
+        return response
+    if not (ctype.startswith("text/") or "json" in ctype or "javascript" in ctype):
+        return response
+
+    response.direct_passthrough = False
+    daten = response.get_data()
+    komprimiert = gzip.compress(daten, compresslevel=6)
+    if len(komprimiert) < len(daten):
+        response.set_data(komprimiert)
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(komprimiert))
+        response.headers.pop("Accept-Ranges", None)
+        response.headers.pop("Content-Range", None)
+        response.headers["Vary"] = "Accept-Encoding"
+    return response
+
+
 @app.route("/")
 def index():
     """Liefert den aktuellen Report aus."""
@@ -79,18 +109,18 @@ def pipeline_im_hintergrund():
         with open(LOG_DATEI, "w", encoding="utf-8") as log:
             for script in PIPELINE:
                 if scan_stoppen:
-                    log.write("\n⛔ Scan wurde manuell abgebrochen.\n")
+                    log.write(f"\n[{jetzt()}] ⛔ Scan wurde manuell abgebrochen.\n")
                     log.flush()
                     break
 
                 script_pfad = BASIS_PFAD / script
 
                 if not script_pfad.exists():
-                    log.write(f"⚠️  {script} nicht gefunden – übersprungen\n")
+                    log.write(f"[{jetzt()}] ⚠️  {script} nicht gefunden – übersprungen\n")
                     log.flush()
                     continue
 
-                log.write(f"\n▶️  Starte {script} ...\n")
+                log.write(f"\n[{jetzt()}] ▶️  Starte {script} ...\n")
                 log.flush()
 
                 prozess = subprocess.Popen(
@@ -116,20 +146,20 @@ def pipeline_im_hintergrund():
                 laufender_prozess = None
 
                 if scan_stoppen:
-                    log.write(f"\n⛔ Scan wurde nach {script} abgebrochen.\n")
+                    log.write(f"\n[{jetzt()}] ⛔ Scan wurde nach {script} abgebrochen.\n")
                     log.flush()
                     break
 
                 if prozess.returncode == 0:
-                    log.write(f"✅ {script} fertig\n")
+                    log.write(f"[{jetzt()}] ✅ {script} fertig\n")
                 else:
-                    log.write(f"❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
+                    log.write(f"[{jetzt()}] ❌ {script} mit Fehler beendet (Code {prozess.returncode})\n")
                 log.flush()
 
             if not scan_stoppen:
-                log.write("\nFERTIG\n")
+                log.write(f"\n[{jetzt()}] FERTIG\n")
             else:
-                log.write("\nFERTIG\n")  # Stream-Ende-Signal auch beim Abbruch
+                log.write(f"\n[{jetzt()}] FERTIG\n")  # Stream-Ende-Signal auch beim Abbruch
             log.flush()
     finally:
         scan_laeuft       = False
@@ -716,6 +746,15 @@ def standort_setzen():
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
+    try:
+        from report import aktualisiere_fahrzeit_fuer_stelle
+        with _db.verbindung() as con:
+            row = con.execute("SELECT firma FROM stellen WHERE url = ?", (url,)).fetchone()
+        firma = row["firma"] if row else ""
+        aktualisiere_fahrzeit_fuer_stelle(url, firma, arbeitsort, cfg)
+    except Exception as e:
+        print(f"  ⚠️  Fahrzeit-Berechnung fehlgeschlagen: {e}")
+
     subprocess.run(
         [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         cwd=str(BASIS_PFAD),
@@ -923,7 +962,7 @@ def manuell_stream():
             with open(LOG_DATEI, "w", encoding="utf-8") as log:
                 for script in TEIL_PIPELINE:
                     script_pfad = BASIS_PFAD / script
-                    log.write(f"\n Starte {script} ...\n")
+                    log.write(f"\n[{jetzt()}] Starte {script} ...\n")
                     log.flush()
                     extra_args = ["--keine-mail"] if script == "report.py" else []
                     if url_filter and script != "report.py":
@@ -946,11 +985,11 @@ def manuell_stream():
                             log.flush()
                     prozess.wait()
                     if prozess.returncode == 0:
-                        log.write(f"OK {script} fertig\n")
+                        log.write(f"[{jetzt()}] OK {script} fertig\n")
                     else:
-                        log.write(f"FEHLER {script} (Code {prozess.returncode})\n")
+                        log.write(f"[{jetzt()}] FEHLER {script} (Code {prozess.returncode})\n")
                     log.flush()
-                log.write("\nFERTIG\n")
+                log.write(f"\n[{jetzt()}] FERTIG\n")
                 log.flush()
         finally:
             scan_laeuft = False
@@ -1118,4 +1157,4 @@ if __name__ == "__main__":
     print(f"  http://localhost:{PORT}")
     print(f"  Zum Beenden: Strg+C")
     print(f"{'='*50}\n")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
