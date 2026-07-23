@@ -103,6 +103,35 @@ def _scan_status_html(stellen: list | None = None) -> str:
     )
 
 
+def _rohtext_fehler_liste(stellen: list) -> list:
+    """Aktive Stellen, deren Rohtext beim letzten rohtext_holen.py-Lauf gar nicht
+    oder nur unvollständig (zu kurz, z.B. Login-Wall/leere SPA) geladen werden
+    konnte (nicht_ladbar-Flag). Analog zu _scan_status_html, nur pro Stelle statt
+    pro Firma – damit fällt es auf, bevor die Stelle stillschweigend ohne
+    Bewertung liegen bleibt."""
+    return [
+        s for s in stellen
+        if s.get("nicht_ladbar") and not s.get("geloescht_am") and not s.get("nicht_passend")
+    ]
+
+
+def _rohtext_fehler_html(stellen: list) -> str:
+    fehlerhaft = _rohtext_fehler_liste(stellen)
+    if not fehlerhaft:
+        return ""
+
+    zeilen = "".join(
+        f'<li><b>{_html.escape(s.get("firma", "?"))}</b>: '
+        f'<a href="{_html.escape(s.get("url", ""))}" target="_blank">{_html.escape((s.get("titel") or s.get("url", ""))[:80])}</a> '
+        f'<span style="color:#666; font-size:0.85em;">(gefunden {s.get("gefunden_am", "?")})</span></li>\n'
+        for s in sorted(fehlerhaft, key=lambda s: s.get("firma", ""))
+    )
+    return (
+        f'<div class="summary-box" style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17;">'
+        f'⚠️ {len(fehlerhaft)} Stelle(n) ohne Stellentext – Rohtext konnte nicht oder nur unvollständig geladen werden:'
+        f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
+        f'</div>\n'
+    )
 
 
 
@@ -712,6 +741,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 <body>
     <h1>🔍 Job-Scanner Report</h1>
     {_scan_status_html(stellen)}
+    {_rohtext_fehler_html(stellen)}
     <div class="summary-box">
         {status_zeilen} &nbsp;|&nbsp;
         Stand: {datum}
@@ -1148,13 +1178,17 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 # E-MAIL SENDEN
 # =============================================================================
 
-def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0, scan_fehler: dict | None = None):
+def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0,
+               scan_fehler: dict | None = None, rohtext_fehler: list | None = None):
     datum = datetime.now().strftime("%d.%m.%Y")
     scan_fehler = scan_fehler or {}
+    rohtext_fehler = rohtext_fehler or []
 
     betreff = f"Job-Scanner {datum} – {neue} neu, {geloescht} vergeben"
     if scan_fehler:
         betreff += f" – ⚠️ {len(scan_fehler)} Firma/Firmen mit Scan-Problem"
+    if rohtext_fehler:
+        betreff += f" – ⚠️ {len(rohtext_fehler)} Stelle(n) ohne Stellentext"
 
     msg = MIMEMultipart("alternative")
     msg["From"]    = config["email_absender"]
@@ -1183,8 +1217,26 @@ def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int
             f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
             f'</div>\n'
         )
+
+    rohtext_fehler_html = ""
+    if rohtext_fehler:
+        plain += "\n  ⚠️ Stellen ohne Stellentext (Rohtext nicht/unvollständig geladen):\n"
+        for s in sorted(rohtext_fehler, key=lambda s: s.get("firma", "")):
+            plain += f"    - {s.get('firma', '?')}: {s.get('titel', s.get('url', ''))}\n"
+        zeilen2 = "".join(
+            f'<li><b>{_html.escape(s.get("firma", "?"))}</b>: '
+            f'<a href="{_html.escape(s.get("url", ""))}" target="_blank">{_html.escape((s.get("titel") or s.get("url", ""))[:80])}</a></li>\n'
+            for s in sorted(rohtext_fehler, key=lambda s: s.get("firma", ""))
+        )
+        rohtext_fehler_html = (
+            f'<div style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17; '
+            f'padding:10px 14px; margin-bottom:12px; border-radius:6px;">'
+            f'⚠️ {len(rohtext_fehler)} Stelle(n) ohne Stellentext – Rohtext konnte nicht oder nur unvollständig geladen werden:'
+            f'<ul style="margin:6px 0 0 0;">{zeilen2}</ul>'
+            f'</div>\n'
+        )
     msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(scan_fehler_html + aenderungs_html, "html", "utf-8"))
+    msg.attach(MIMEText(scan_fehler_html + rohtext_fehler_html + aenderungs_html, "html", "utf-8"))
 
     try:
         with smtplib.SMTP("smtp.mail.me.com", 587, local_hostname="raspberrypi.local") as server:
@@ -1284,14 +1336,17 @@ def main():
     geloescht = [s for s in stellen if s.get("geloescht_am")]
     scan_status = lade_json(SCAN_STATUS_JSON, {})
     scan_fehler = {name: info for name, info in scan_status.items() if not info.get("ok")}
+    rohtext_fehler = _rohtext_fehler_liste(stellen)
 
     if args.keine_mail:
         print("  ℹ️  Mail-Versand unterdrückt (--keine-mail)")
     elif config["email_aktiv"]:
-        if neue or geloescht or scan_fehler:
-            print(f"  📧 Sende Mail ({len(neue)} neu, {len(geloescht)} vergeben, {len(scan_fehler)} Scan-Problem(e))...")
+        if neue or geloescht or scan_fehler or rohtext_fehler:
+            print(f"  📧 Sende Mail ({len(neue)} neu, {len(geloescht)} vergeben, "
+                  f"{len(scan_fehler)} Scan-Problem(e), {len(rohtext_fehler)} Stelle(n) ohne Stellentext)...")
             aenderungs_html = erstelle_aenderungs_html(stellen)
-            sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht), scan_fehler=scan_fehler)
+            sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht),
+                       scan_fehler=scan_fehler, rohtext_fehler=rohtext_fehler)
         else:
             print("  ℹ️  Keine Änderungen – keine Mail gesendet.")
     else:

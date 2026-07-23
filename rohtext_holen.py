@@ -21,6 +21,7 @@ Status-Übergänge:
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -87,12 +88,33 @@ def _bereinige_rohtext(rohtext: str) -> str:
     return "\n".join(ergebnis)
 
 
-def _extrahiere_titel(page) -> str | None:
-    """Liest den echten Jobtitel von der geladenen Seite."""
+def _slug_woerter(url: str) -> set[str]:
+    """Wortmenge aus dem letzten URL-Pfadsegment (z.B. Job-Slug), als
+    Vergleichsbasis um Titel-Kandidaten zu validieren."""
+    pfad = url.split("?")[0].rstrip("/")
+    segment = pfad.rsplit("/", 1)[-1]
+    return {w for w in re.split(r"[^a-zA-Z0-9]+", segment.lower()) if len(w) >= 4}
+
+
+def _extrahiere_titel(page, url: str = "") -> str | None:
+    """Liest den echten Jobtitel von der geladenen Seite.
+    Manche SPAs (z.B. Workday) zeigen im <h1> nur eine generische
+    Seitenüberschrift statt des Jobtitels – deshalb wird jeder Kandidat
+    gegen den URL-Slug geprüft (der i.d.R. den Jobtitel enthält) und nur
+    bei Übereinstimmung übernommen."""
+    slug = _slug_woerter(url) if url else set()
+
+    def _passt_zur_url(kandidat: str) -> bool:
+        if not slug:
+            return True
+        woerter = {w for w in re.split(r"[^a-zA-Z0-9]+", kandidat.lower()) if len(w) >= 4}
+        return bool(woerter & slug)
+
+    kandidaten = []
     try:
         h1 = page.locator("h1").first.inner_text(timeout=3000).strip()
         if h1 and len(h1) > 5:
-            return h1
+            kandidaten.append(h1)
     except Exception:
         pass
     try:
@@ -102,10 +124,14 @@ def _extrahiere_titel(page) -> str | None:
                 titel = titel.split(trenner)[0].strip()
                 break
         if titel and len(titel) > 5:
-            return titel
+            kandidaten.append(titel)
     except Exception:
         pass
-    return None
+
+    for k in kandidaten:
+        if _passt_zur_url(k):
+            return k
+    return kandidaten[0] if kandidaten else None
 
 
 def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
@@ -221,6 +247,14 @@ def main():
     zu_kurz    = 0
     fehler     = 0
 
+    # Diese Navigation-Header (Sec-Fetch-*, Upgrade-Insecure-Requests) gelten
+    # in Playwright context-weit für JEDEN Request – auch für die internen
+    # XHR/Fetch-Aufrufe, mit denen SPAs (z.B. Workday) Jobdaten nachladen.
+    # Ein echter Browser schickt dort andere Sec-Fetch-Werte als bei der
+    # Seiten-Navigation; erzwingt man sie überall, liefern SPA-Backends wie
+    # Workday leeren Content zurück. Deshalb nur für die WAF-Domain(s)
+    # aktivieren, für die sie ursprünglich gedacht waren.
+    _WAF_DOMAINS = ("advantest-career.de",)
     _EXTRA_HEADERS = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Sec-Fetch-Site": "none",
@@ -230,10 +264,14 @@ def main():
         "Upgrade-Insecure-Requests": "1",
     }
 
+    def _braucht_waf_header(url: str) -> bool:
+        return any(d in url for d in _WAF_DOMAINS)
+
     with sync_playwright() as p:
         browser = starte_browser(p)
-        context = neuer_context(browser, extra_headers=_EXTRA_HEADERS)
-        page = neue_seite(context)
+        aktueller_waf_modus = None
+        context = None
+        page = None
 
         for idx, stelle in zu_laden:
             url    = stelle["url"]
@@ -246,6 +284,16 @@ def main():
             print(f"  {firma}: {titel[:55]}")
             print(f"  Status {status} | Aktuell: {len(alter_rohtext)} Z. | {url[:60]}")
 
+            waf_modus = _braucht_waf_header(url)
+            if context is None or waf_modus != aktueller_waf_modus:
+                if page:
+                    page.close()
+                if context:
+                    context.close()
+                context = neuer_context(browser, extra_headers=_EXTRA_HEADERS if waf_modus else None)
+                page = neue_seite(context)
+                aktueller_waf_modus = waf_modus
+
             rohtext, http_status = lade_rohtext_playwright(page, url)
 
             if rohtext is None and http_status in (403, 429):
@@ -256,13 +304,13 @@ def main():
                 print(f"  🔄 HTTP {http_status} – frische Session, zweiter Versuch...")
                 page.close()
                 context.close()
-                context = neuer_context(browser, extra_headers=_EXTRA_HEADERS)
+                context = neuer_context(browser, extra_headers=_EXTRA_HEADERS if waf_modus else None)
                 page = neue_seite(context)
                 rohtext, http_status = lade_rohtext_playwright(page, url)
 
             if rohtext and len(rohtext.strip()) >= MIN_ROHTEXT_LAENGE:
                 # Jobtitel direkt von der Seite lesen (genauer als Link-Text)
-                seiten_titel = _extrahiere_titel(page)
+                seiten_titel = _extrahiere_titel(page, url)
                 if seiten_titel:
                     stellen[idx]["titel"] = seiten_titel
                     print(f"  🏷️  Titel: {seiten_titel[:70]}")
@@ -279,6 +327,7 @@ def main():
                     "rohtext": rohtext,
                     "titel":  stellen[idx]["titel"],
                     "status": neuer_status,
+                    "nicht_ladbar": False,
                 })
 
             elif rohtext:
