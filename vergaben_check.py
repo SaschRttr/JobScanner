@@ -15,6 +15,7 @@ Ergebnis pro URL:
   HTTP 404 / 410 / 0             → status=9 / vergaben (nach 2 Bestätigungen)
   HTTP 403 / 429                 → einmal retry nach 8s
   Verbindungsfehler / Timeout    → status=9 / vergaben (nach 2 Bestätigungen, wie 404/410)
+  Bot-Schutz/CAPTCHA erkannt     → kein Urteil, unabhängig vom HTTP-Code (z.B. icims.com/AWS WAF)
 
 Nutzung:
   python vergaben_check.py                # Standard
@@ -98,6 +99,21 @@ _NOTFOUND_URL_MARKERS = ["notfound", "not-found", "job-not-found"]
 # Marker oben ausgewertet.
 _MAX_BODY_BYTES = 2_000_000
 
+# Manche Portale (z.B. icims.com hinter CloudFront/AWS WAF) blocken JEDEN
+# Skript-Request mit einer CAPTCHA-"Human Verification"-Seite (meist HTTP 405).
+# Das passiert unabhängig vom tatsächlichen Stellen-Status - so eine Antwort
+# ist also weder "aktiv" noch "vergeben", sondern schlicht nicht prüfbar.
+_BOT_SCHUTZ_MARKERS = [
+    "human verification",
+    "awswaf",
+    "captcha-container",
+    "checking your browser",
+]
+
+
+def _ist_bot_schutz(body: str) -> bool:
+    return any(marker in body for marker in _BOT_SCHUTZ_MARKERS)
+
 
 # =============================================================================
 # HTTP-CHECK
@@ -114,7 +130,11 @@ def _einzel_request(url: str) -> tuple[int | None, str, str]:
             body = resp.read(_MAX_BODY_BYTES).decode("utf-8", errors="ignore").lower()
             return resp.status, resp.url, body
     except urllib.error.HTTPError as e:
-        return e.code, url, ""
+        try:
+            body = e.read(_MAX_BODY_BYTES).decode("utf-8", errors="ignore").lower()
+        except Exception:
+            body = ""
+        return e.code, url, body
     except Exception:
         return None, url, ""
 
@@ -187,31 +207,37 @@ def _workday_job_aktiv(url: str) -> bool | None:
         return None
 
 
-def pruefe_url(url: str) -> int | None:
-    """Gibt HTTP-Ergebnis zurück: 200=aktiv, 0=vergaben, 404/410=vergaben, None=unbekannt."""
+def pruefe_url(url: str) -> tuple[int | None, bool]:
+    """Gibt (HTTP-Ergebnis, bot_schutz) zurück: 200=aktiv, 0=vergaben, 404/410=vergaben,
+    None=unbekannt. bot_schutz=True heißt: Antwort kam von einer CAPTCHA/Human-
+    Verification-Schranke (z.B. AWS WAF) - Status damit nicht beurteilbar, unabhängig
+    vom zurückgegebenen Code."""
     code, final_url, body = _einzel_request(url)
+    bot_schutz = _ist_bot_schutz(body)
 
     if code in (403, 429):
         time.sleep(8)
         code2, final_url2, body2 = _einzel_request(url)
         if code2 is not None:
             code, final_url, body = code2, final_url2, body2
+            bot_schutz = bot_schutz or _ist_bot_schutz(body)
 
     elif code == 404:
         time.sleep(3)
         code2, final_url2, body2 = _einzel_request(url)
         if code2 is not None and code2 != 404:
             code, final_url, body = code2, final_url2, body2
+            bot_schutz = bot_schutz or _ist_bot_schutz(body)
 
     if code == 200:
         if ".wd3.myworkdayjobs.com" in url and "/job/" in url:
             aktiv = _workday_job_aktiv(url)
             if aktiv is False:
-                return 0
+                return 0, bot_schutz
         else:
             code = _prüfe_200(url, final_url, body)
 
-    return code
+    return code, bot_schutz
 
 
 # =============================================================================
@@ -337,9 +363,13 @@ def main():
         print(f"  {titel[:60]}")
         print(f"  Status {status} | {url[:70]}")
 
-        code = pruefe_url(url)
+        code, bot_schutz = pruefe_url(url)
 
-        if code in (404, 410, 0) or code is None:
+        if bot_schutz:
+            print(f"  🤖 Bot-Schutz/CAPTCHA erkannt (HTTP {code}) – kein Urteil möglich")
+            unklar += 1
+
+        elif code in (404, 410, 0) or code is None:
             # Timeouts/Verbindungsfehler werden wie 404/410 behandelt: bleiben sie
             # über zwei aufeinanderfolgende Läufe bestehen, ist die Seite mit
             # ziemlicher Sicherheit dauerhaft weg (nicht nur ein kurzer Netzwerk-Hänger).

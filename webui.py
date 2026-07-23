@@ -532,11 +532,13 @@ def api_pruefe_stelle():
     try:
         sys.path.insert(0, str(BASIS_PFAD))
         from vergaben_check import pruefe_url
-        code = pruefe_url(url)
+        code, bot_schutz = pruefe_url(url)
     except Exception as e:
         return jsonify({"fehler": str(e)}), 500
 
-    if code in (404, 410, 0):
+    if bot_schutz:
+        ergebnis = "botschutz"
+    elif code in (404, 410, 0):
         ergebnis = "vergaben"
     elif code == 200:
         ergebnis = "aktiv"

@@ -803,6 +803,9 @@
             } else if (data.ergebnis === 'vergaben') {
                 ergebnisEl.textContent = `❌ Nicht erreichbar (HTTP ${data.code})`;
                 ergebnisEl.style.color = '#e74c3c';
+            } else if (data.ergebnis === 'botschutz') {
+                ergebnisEl.textContent = '🤖 Bot-Schutz erkannt – nicht automatisch prüfbar, bitte manuell im Browser checken';
+                ergebnisEl.style.color = '#888';
             } else {
                 ergebnisEl.textContent = `❓ Unklar (HTTP ${data.code ?? '–'})`;
                 ergebnisEl.style.color = '#888';
