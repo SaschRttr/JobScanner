@@ -131,6 +131,8 @@ Electrical
 # -----------------------------------------------------------------------------
 
 [ausschlussbegriffe]
+thesis
+technikerarbeit
 leiter
 bach
 Werkstudent
@@ -210,6 +212,7 @@ cookie
 Onboarding
 Initiativbewerbung
 Director
+Business+development 
 [\ausschlussbegriffe]
 
 # -----------------------------------------------------------------------------

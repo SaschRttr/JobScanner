@@ -262,6 +262,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
     gesehen = set()
     gesamt_jobs_gesehen = 0
     api_fehler = False
+    struktur_fehler = False
 
     for seite in range(api_config["seiten"]):
         seiten_start = api_config.get("seiten_start", 0)
@@ -305,8 +306,16 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             break
 
         jobs = data
+        pfad_ok = True
         for schluessel in api_config["antwort_pfad"]:
-            jobs = jobs.get(schluessel, {}) if isinstance(jobs, dict) else {}
+            if isinstance(jobs, dict) and schluessel in jobs:
+                jobs = jobs[schluessel]
+            else:
+                pfad_ok = False
+                jobs = []
+                break
+        if not pfad_ok:
+            struktur_fehler = True
         if not jobs:
             print(f"  ℹ️  Keine weiteren Jobs auf Seite {seite+1}")
             break
@@ -394,9 +403,12 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
 
     if not api_fehler:
-        if gesamt_jobs_gesehen == 0:
-            print(f"  ⚠️  0 Jobs von der API erhalten – Request/Payload evtl. defekt")
-            status_merken(name, False, "0 Jobs von der API erhalten (evtl. defekter Request/Payload)")
+        if struktur_fehler:
+            print(f"  ⚠️  Antwortstruktur unerwartet (Pfad {api_config['antwort_pfad']} nicht gefunden) – Request/Payload evtl. defekt")
+            status_merken(name, False, f"Antwortstruktur unerwartet (Pfad {api_config['antwort_pfad']} nicht gefunden)")
+        elif gesamt_jobs_gesehen == 0:
+            print(f"  ℹ️  0 Jobs von der API erhalten (aktuell keine offenen Stellen laut Filter)")
+            status_merken(name, True)
         else:
             status_merken(name, True)
 
@@ -421,6 +433,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
     max_seite    = 1
     gesamt_zeilen_gesehen = 0
     api_fehler   = False
+    struktur_fehler = False
 
     while seite <= max_seite:
         params = {**params_basis, "page": seite}
@@ -443,6 +456,9 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
             status_merken(name, False, f"Fehler: {e}")
             api_fehler = True
             break
+
+        if "html" not in data:
+            struktur_fehler = True
 
         if seite == 1:
             max_seite = int(data.get("maxPage", 1))
@@ -498,9 +514,12 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
 
     if not api_fehler:
-        if gesamt_zeilen_gesehen == 0:
-            print(f"  ⚠️  0 Zeilen von der API erhalten – Request/Payload evtl. defekt")
-            status_merken(name, False, "0 Jobs von der API erhalten (evtl. defekter Request/Payload)")
+        if struktur_fehler:
+            print(f"  ⚠️  Antwortstruktur unerwartet ('html'-Feld fehlt) – Request/Payload evtl. defekt")
+            status_merken(name, False, "Antwortstruktur unerwartet ('html'-Feld fehlt)")
+        elif gesamt_zeilen_gesehen == 0:
+            print(f"  ℹ️  0 Zeilen von der API erhalten (aktuell keine offenen Stellen laut Filter)")
+            status_merken(name, True)
         else:
             status_merken(name, True)
 
@@ -526,6 +545,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
     limit = api_config["payload"].get("limit", 20)
     gesamt_jobs_gesehen = 0
     api_fehler = False
+    struktur_fehler = False
 
     for seite in range(api_config["seiten"]):
         payload = dict(api_config["payload"])
@@ -549,6 +569,9 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             status_merken(name, False, f"API-Fehler: {e}")
             api_fehler = True
             break
+
+        if "jobPostings" not in data:
+            struktur_fehler = True
 
         total = data.get("total", 0)
         jobs  = data.get("jobPostings", [])
@@ -606,9 +629,12 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
 
     if not api_fehler:
-        if gesamt_jobs_gesehen == 0:
-            print(f"  ⚠️  0 Jobs von der API erhalten – Request/Payload evtl. defekt")
-            status_merken(name, False, "0 Jobs von der API erhalten (evtl. defekter Request/Payload)")
+        if struktur_fehler:
+            print(f"  ⚠️  Antwortstruktur unerwartet ('jobPostings'-Feld fehlt) – Request/Payload evtl. defekt")
+            status_merken(name, False, "Antwortstruktur unerwartet ('jobPostings'-Feld fehlt)")
+        elif gesamt_jobs_gesehen == 0:
+            print(f"  ℹ️  0 Jobs von der API erhalten (aktuell keine offenen Stellen laut Filter)")
+            status_merken(name, True)
         else:
             status_merken(name, True)
 

@@ -63,6 +63,28 @@ def _warte_fuer(url: str) -> int:
     return _WARTE_MS_DEFAULT
 
 
+# Domain-spezifische CSS-Selektoren für den Arbeitsort, wenn er als eigenes
+# Meta-Element im DOM steht statt im Fließtext. Bei Keysight (Phenom-basierte
+# Karriereseite) steht der Ort z.B. in einem eigenen <li id="header-locations">
+# neben dem Titel – nicht im h1 und ohne "Standort:"-Label, deshalb reißt
+# Regex/KI-Extraktion aus dem Rohtext hier oft ins Leere oder rät falsch.
+_ORT_SELEKTOR: dict[str, str] = {
+    "jobs.keysight.com": "#header-locations",
+}
+
+
+def _extrahiere_ort(page, url: str) -> str | None:
+    """Liest den Arbeitsort aus einem bekannten domain-spezifischen DOM-Element."""
+    selektor = next((sel for teil, sel in _ORT_SELEKTOR.items() if teil in url), None)
+    if not selektor:
+        return None
+    try:
+        text = page.locator(selektor).first.inner_text(timeout=3000).strip()
+        return text or None
+    except Exception:
+        return None
+
+
 def _url_anpassen(url: str) -> str:
     """Domain-spezifische URL-Umschreibungen für bessere Inhalte."""
     # Bertrandt onlyfy: Volltext-URL statt Detail-URL
@@ -322,13 +344,21 @@ def main():
                 geladen += 1
                 print(f"  ✅ {len(rohtext)} Zeichen geladen (Status → {neuer_status})")
 
-                upsert_stelle({
+                update_felder = {
                     "url":    url,
                     "rohtext": rohtext,
                     "titel":  stellen[idx]["titel"],
                     "status": neuer_status,
                     "nicht_ladbar": False,
-                })
+                }
+
+                seiten_ort = _extrahiere_ort(page, url)
+                if seiten_ort:
+                    stellen[idx]["arbeitsort"] = seiten_ort
+                    update_felder["arbeitsort"] = seiten_ort
+                    print(f"  📍 Ort: {seiten_ort}")
+
+                upsert_stelle(update_felder)
 
             elif rohtext:
                 # Geladen aber zu kurz (z.B. Login-Wall, leere SPA)
