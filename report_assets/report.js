@@ -483,8 +483,43 @@
         }
     }
 
+    // Trägt eine Stelle über /stelle-einfuegen ein und lässt die Teil-Pipeline
+    // (rohtext_holen/extraktor/bewertung/report) über /manuell-stream laufen.
+    // meldung(text, istFehler) zeigt Statustext an; onZeile(text) ist optional
+    // und bekommt jede rohe Log-Zeile (für ein sichtbares Output-Fenster).
+    async function _stelleEinfuegenAusfuehren(url, firma, titel, meldung, onZeile) {
+        const res = await fetch(SERVER + '/stelle-einfuegen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, firma, titel })
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            meldung('Fehler: ' + (data.fehler || 'Unbekannt'), true);
+            return;
+        }
+
+        meldung('Eingetragen - Pipeline laeuft...', false);
+
+        const quelle = new EventSource(SERVER + '/manuell-stream');
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                meldung('Fertig - Seite wird neu geladen...', false);
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+            if (onZeile) onZeile(e.data);
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            meldung('Verbindungsfehler zum Server', true);
+        };
+    }
+
     async function stelleEinfuegen() {
-       const url = document.getElementById('manuell-url').value.trim();
+        const url = document.getElementById('manuell-url').value.trim();
         const firma = document.getElementById('manuell-firma').value.trim();
         const titel = document.getElementById('manuell-titel').value.trim();
         const statusEl = document.getElementById('manuell-status');
@@ -498,43 +533,132 @@
 
         statusEl.textContent = 'Stelle wird eingetragen...';
         statusEl.style.color = '#2980b9';
+        output.style.display = 'block';
+        output.textContent = '';
 
-        const server = window.location.origin;
+        await _stelleEinfuegenAusfuehren(url, firma, titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+            },
+            (zeile) => {
+                output.textContent += zeile + '\n';
+                output.scrollTop = output.scrollHeight;
+            }
+        );
+    }
 
-        const res = await fetch(server + '/stelle-einfuegen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, firma, titel })
-        });
-        const data = await res.json();
+    // "In Pipeline aufnehmen"-Button bei einem Titel ohne Suchbegriff-Treffer:
+    // url/firma/titel stehen schon als data-Attribute an der .kt-eintrag-Zeile.
+    async function stelleAusKeinTrefferAufnehmen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
 
-        if (!data.ok) {
-            statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+        btn.disabled = true;
+        statusEl.textContent = 'Wird eingetragen...';
+        statusEl.style.color = '#2980b9';
+
+        await _stelleEinfuegenAusfuehren(zeile.dataset.url, zeile.dataset.firma, zeile.dataset.titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+                if (istFehler) btn.disabled = false;
+            }
+        );
+    }
+
+    // "Stellentext anzeigen"-Button: lädt den Rohtext live per Playwright (ohne
+    // die Stelle zu speichern) und zeigt ihn in der .kt-vorschau-Box darunter an.
+    // Zweiter Klick blendet nur ein/aus, ohne erneut zu laden.
+    async function stellentextVorschau(btn) {
+        const zeile   = btn.closest('.kt-eintrag');
+        const box     = zeile.querySelector('.kt-vorschau');
+        const statusEl = zeile.querySelector('.kt-status');
+
+        if (box.dataset.geladen === '1') {
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+
+        btn.disabled = true;
+        statusEl.textContent = 'Lädt Stellentext...';
+        statusEl.style.color = '#2980b9';
+        box.style.display = 'block';
+        box.textContent = 'Lädt...';
+
+        try {
+            const res = await fetch(SERVER + '/kein-treffer-vorschau', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: zeile.dataset.url })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                box.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.textContent = '';
+                btn.disabled = false;
+                return;
+            }
+            box.textContent = data.text;
+            box.dataset.geladen = '1';
+            statusEl.textContent = '';
+        } catch (e) {
+            box.textContent = 'Server nicht erreichbar';
+            statusEl.textContent = '';
+        }
+        btn.disabled = false;
+    }
+
+    // "Als Suchbegriff vormerken"-Button: übernimmt ausgewählte Wort-Chips
+    // (kt-chip-active) plus optionalen Freitext als Vorschlag in
+    // neue_suchbegriffe.json - landet NICHT direkt in config.txt, sondern wird
+    // erst später gesammelt durchgesehen.
+    async function suchbegriffHinzufuegen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
+        const freitext = zeile.querySelector('.kt-freitext');
+
+        const begriffe = Array.from(zeile.querySelectorAll('.kt-chip-active')).map(c => c.textContent);
+        if (freitext.value.trim()) begriffe.push(freitext.value.trim());
+
+        if (begriffe.length === 0) {
+            statusEl.textContent = 'Bitte mind. einen Begriff wählen oder eingeben.';
             statusEl.style.color = '#e74c3c';
             return;
         }
 
-        statusEl.textContent = 'Eingetragen - Pipeline laeuft...';
-        statusEl.style.color = '#27ae60';
-        output.style.display = 'block';
-        output.textContent = '';
+        btn.disabled = true;
+        statusEl.textContent = 'Wird vorgemerkt...';
+        statusEl.style.color = '#2980b9';
 
-        const quelle = new EventSource(server + '/manuell-stream');
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                statusEl.textContent = 'Fertig - Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
+        try {
+            const res = await fetch(SERVER + '/suchbegriff-hinzufuegen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    begriffe,
+                    url: zeile.dataset.url,
+                    firma: zeile.dataset.firma,
+                    titel: zeile.dataset.titel
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
                 return;
             }
-            output.textContent += e.data + '\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            statusEl.textContent = 'Verbindungsfehler zum Server';
+            const mitText = data.stellentext_dabei ? ' (inkl. Stellentext)' : '';
+            statusEl.textContent = '✅ vorgemerkt: ' + begriffe.join(', ') + mitText;
+            statusEl.style.color = '#27ae60';
+            freitext.value = '';
+            zeile.querySelectorAll('.kt-chip-active').forEach(c => c.classList.remove('kt-chip-active'));
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
             statusEl.style.color = '#e74c3c';
-        };
+            btn.disabled = false;
+        }
     }
 
     async function neuLadenUndBewerten(btn, stellenUrl) {

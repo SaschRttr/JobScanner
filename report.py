@@ -46,6 +46,95 @@ REPORT_PFAD     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
 STATUS_JSON     = BASIS_PFAD / "status.json"
 SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
+KEIN_TREFFER_JSON = BASIS_PFAD / "kein_treffer.json"
+KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
+
+
+def _titel_chips_html(titel: str) -> str:
+    woerter = re.split(r"[^\wäöüÄÖÜß&]+", titel)
+    gesehen = set()
+    chips = []
+    for w in woerter:
+        wl = w.lower()
+        if len(w) < 2 or wl in gesehen:
+            continue
+        gesehen.add(wl)
+        chips.append(
+            f'<button type="button" class="kt-chip" '
+            f'onclick="this.classList.toggle(\'kt-chip-active\')">{_html.escape(w)}</button>'
+        )
+    return "".join(chips)
+
+
+def erstelle_kein_treffer_seite() -> str:
+    """Eigenständige Seite (kein_treffer.html) für die Whitelist-Diagnose - getrennt
+    vom Haupt-Report, damit das Produktivsystem (Bewerbungs-Tracking) übersichtlich
+    bleibt. Wird von webui.py unter /kein-treffer ausgeliefert."""
+    kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
+    gesamt = sum(len(v) for v in kein_treffer.values())
+    status_js_konstanten = (
+        f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
+        f"const INAKTIVE_STATUS = {json.dumps(list(INAKTIVE_STATUSWERTE))};\n"
+        f"const UNBEWERTETE_STATUS = {json.dumps(list(UNBEWERTETE_STATUSWERTE))};\n"
+        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};"
+    )
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Suchbegriff-Whitelist – Titel ohne Treffer</title>
+    <style>{CSS}</style>
+    <script>{status_js_konstanten}</script>
+    <script>{JS}</script>
+</head>
+<body>
+    <h1>🔍 Titel ohne Suchbegriff-Treffer ({gesamt})</h1>
+    <p><a href="/">← Zurück zum Report</a></p>
+    <p style="color:#666; font-size:0.9em;">Diese Titel sind schon an der Whitelist [suchbegriffe] gescheitert und
+    stehen deshalb nicht im normalen Report. Begriffe, die du hier vormerkst, landen in
+    <code>neue_suchbegriffe.json</code> zur späteren Durchsicht - nicht direkt in <code>config.txt</code>.</p>
+    {erstelle_kein_treffer_html(kein_treffer)}
+</body>
+</html>"""
+
+
+def erstelle_kein_treffer_html(kein_treffer: dict) -> str:
+    """Baut die Liste der Titel ohne Suchbegriff-Treffer je Firma - lebt auf einer
+    eigenen Seite (kein_treffer.html), nicht im Haupt-Report, damit das
+    Produktivsystem (Bewerbungs-Tracking) sauber von dieser Whitelist-Diagnose
+    getrennt bleibt."""
+    if not kein_treffer:
+        return "<p>Keine Titel ohne Suchbegriff-Treffer.</p>"
+    zeilen = []
+    for name in sorted(kein_treffer.keys()):
+        eintraege = kein_treffer.get(name) or []
+        if not eintraege:
+            continue
+        items = []
+        for e in eintraege:
+            titel = e.get("titel", "")
+            url   = e.get("url", "")
+            items.append(f"""
+            <li class="kt-eintrag" data-url="{_html.escape(url, quote=True)}"
+                data-firma="{_html.escape(name, quote=True)}" data-titel="{_html.escape(titel, quote=True)}">
+                <div><a href="{_html.escape(url, quote=True)}" target="_blank" style="color:#2980b9; text-decoration:none;">{_html.escape(titel)} ↗</a></div>
+                <div class="kt-chips">{_titel_chips_html(titel)}</div>
+                <div style="margin-top:4px;">
+                    <input type="text" class="kt-freitext" placeholder="eigener Begriff..." style="width:160px;">
+                    <button type="button" class="kt-btn" onclick="suchbegriffHinzufuegen(this)">+ Als Suchbegriff vormerken</button>
+                    <button type="button" class="kt-btn" onclick="stelleAusKeinTrefferAufnehmen(this)">📥 In Pipeline aufnehmen</button>
+                    <button type="button" class="kt-btn" onclick="stellentextVorschau(this)">👁 Stellentext anzeigen</button>
+                    <span class="kt-status" style="margin-left:6px; color:#888; font-size:0.85em;"></span>
+                </div>
+                <div class="kt-vorschau" style="display:none;"></div>
+            </li>""")
+        zeilen.append(
+            f'<details style="margin-top:6px;"><summary style="cursor:pointer;">{name}: '
+            f'{len(eintraege)} ohne Suchbegriff-Treffer</summary>'
+            f'<ul class="kt-liste" style="margin:6px 0 0 0; padding-left:16px; list-style:none;">{"".join(items)}</ul>'
+            f'</details>\n'
+        )
+    return "".join(zeilen) or "<p>Keine Titel ohne Suchbegriff-Treffer.</p>"
 
 
 def _scan_status_html(stellen: list | None = None) -> str:
@@ -56,8 +145,19 @@ def _scan_status_html(stellen: list | None = None) -> str:
     if not status:
         return ""
 
+    kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
+    kein_treffer_gesamt = sum(len(v) for v in kein_treffer.values())
+
     fehler = {name: info for name, info in status.items() if not info.get("ok")}
     letzter_stand = max((info.get("zeitpunkt", "") for info in status.values()), default="")
+
+    def _kein_treffer_link() -> str:
+        if not kein_treffer_gesamt:
+            return ""
+        return (
+            f'<div style="margin-top:6px;">ℹ️ {kein_treffer_gesamt} Titel ohne Suchbegriff-Treffer '
+            f'(Whitelist evtl. zu eng) – <a href="/kein-treffer" target="_blank">Details &amp; Vorschläge ansehen →</a></div>\n'
+        )
 
     # Reine Sichtbarkeits-Info (kein Alarm): passend/ausgeschlossen je Firma, damit
     # auffällt, wenn z.B. plötzlich gar keine Ausschluss-Treffer (Praktikum,
@@ -65,7 +165,7 @@ def _scan_status_html(stellen: list | None = None) -> str:
     # Hinweis auf zu enge/falsche Links, ohne dass es hart als Fehler gilt.
     def _firmen_details_html() -> str:
         if not stellen:
-            return ""
+            return _kein_treffer_link()
         zeilen = []
         for name in sorted(status.keys()):
             firmen_stellen = [s for s in stellen if s.get("firma") == name and not s.get("geloescht_am")]
@@ -73,12 +173,14 @@ def _scan_status_html(stellen: list | None = None) -> str:
                 continue
             passend      = sum(1 for s in firmen_stellen if not s.get("nicht_passend"))
             ausgeschlossen = sum(1 for s in firmen_stellen if s.get("nicht_passend"))
-            zeilen.append(f'<li>{name}: {passend} passend, {ausgeschlossen} ausgeschlossen</li>')
+            ohne_treffer   = len(kein_treffer.get(name) or [])
+            zeilen.append(f'<li>{name}: {passend} passend, {ausgeschlossen} ausgeschlossen, {ohne_treffer} ohne Treffer</li>')
         if not zeilen:
-            return ""
+            return _kein_treffer_link()
         return (
             '<details style="margin-top:6px;"><summary style="cursor:pointer;">Details je Firma</summary>'
             f'<ul style="margin:6px 0 0 0;">{"".join(zeilen)}</ul></details>\n'
+            f'{_kein_treffer_link()}'
         )
 
     if not fehler:
@@ -1331,6 +1433,10 @@ def main():
     report_html = erstelle_report(stellen, config)
     REPORT_PFAD.write_text(report_html, encoding="utf-8")
     print(f"  ✅ Report gespeichert: {REPORT_PFAD}")
+
+    kein_treffer_html = erstelle_kein_treffer_seite()
+    KEIN_TREFFER_HTML.write_text(kein_treffer_html, encoding="utf-8")
+    print(f"  ✅ Whitelist-Diagnose gespeichert: {KEIN_TREFFER_HTML}")
 
     # E-Mail bei Änderungen ODER wenn eine Firma beim letzten Scan keine Stellen mehr lieferte
     neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]

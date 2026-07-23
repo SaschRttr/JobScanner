@@ -62,14 +62,26 @@ STELLEN_JSON    = BASIS_PFAD / "stellen.json"
 BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 STRUKTUREN_JSON = BASIS_PFAD / "strukturen.json"
 SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
+KEIN_TREFFER_JSON = BASIS_PFAD / "kein_treffer.json"
 
 # Pro Firma: {"ok": bool, "fehler": str|None, "zeitpunkt": "YYYY-MM-DD HH:MM"}
 # Wird am Ende von main() nach SCAN_STATUS_JSON geschrieben, report.py zeigt es an.
 SCAN_STATUS: dict = {}
 
+# Pro Firma: Liste von {"titel": str, "url": str} für Stellen, die keinen
+# Suchbegriff-Treffer hatten (anders als Ausschlussbegriffe/Standort landen die
+# nirgends in stellen.json - hier bleibt zumindest sichtbar, was der Whitelist-
+# Filter verwirft, damit man [suchbegriffe] bei Bedarf gezielt erweitern kann).
+# Wird am Ende von main() nach KEIN_TREFFER_JSON geschrieben, report.py zeigt es an.
+KEIN_TREFFER: dict = {}
+
 
 def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
+
+
+def kein_treffer_merken(name: str, titel: str, url: str):
+    KEIN_TREFFER.setdefault(name, []).append({"titel": titel, "url": url})
 
 
 class SessionGesperrtFehler(Exception):
@@ -358,6 +370,10 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
 
             treffer = text_matched(titel, config["suchbegriffe"])
 
+            if not treffer:
+                kein_treffer_merken(name, titel, url)
+                continue
+
             if treffer:
                 _np_grund = ablehnungsgrund(titel, standort, config)
                 if _np_grund:
@@ -486,6 +502,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
 
             treffer = text_matched(titel, config["suchbegriffe"])
             if not treffer:
+                kein_treffer_merken(name, titel, url)
                 continue
 
             _np_grund = ablehnungsgrund(titel, standort, config)
@@ -599,6 +616,10 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             gesehen.add(titel)
 
             treffer  = text_matched(titel, config["suchbegriffe"])
+
+            if not treffer:
+                kein_treffer_merken(name, titel, url)
+                continue
 
             if treffer:
                 _np_grund = ablehnungsgrund(titel, standort, config)
@@ -854,6 +875,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         treffer = text_matched(titel, config["suchbegriffe"])
 
         if not treffer and not ist_pdf_link:
+            kein_treffer_merken(name, titel, href)
             continue
         if not treffer:
             treffer = ["pdf"]
@@ -1183,6 +1205,10 @@ def main():
     gesamt_status = lade_json(SCAN_STATUS_JSON, {})
     gesamt_status.update(SCAN_STATUS)
     speichere_json(SCAN_STATUS_JSON, gesamt_status)
+
+    gesamt_kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
+    gesamt_kein_treffer.update(KEIN_TREFFER)
+    speichere_json(KEIN_TREFFER_JSON, gesamt_kein_treffer)
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
     # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.

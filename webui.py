@@ -34,8 +34,10 @@ print("WEBUI GESTARTET - Version mit manuell-stream")
 
 BASIS_PFAD   = Path(__file__).parent
 REPORT_HTML  = BASIS_PFAD / "report.html"
+KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
 LOG_DATEI    = BASIS_PFAD / "scan.log"
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
+NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
 PORT         = 5000
 
 # Globaler Status: läuft gerade ein Scan?
@@ -94,6 +96,14 @@ def index():
     if REPORT_HTML.exists():
         return send_file(REPORT_HTML)
     return "<h2>⚠️ Noch kein Report vorhanden. Bitte zuerst einen Scan starten.</h2>", 404
+
+
+@app.route("/kein-treffer")
+def kein_treffer_seite():
+    """Liefert die eigene Whitelist-Diagnose-Seite aus (getrennt vom Haupt-Report)."""
+    if KEIN_TREFFER_HTML.exists():
+        return send_file(KEIN_TREFFER_HTML)
+    return "<h2>⚠️ Noch keine Whitelist-Diagnose vorhanden. Bitte zuerst report.py laufen lassen.</h2>", 404
 
 
 def pipeline_im_hintergrund():
@@ -1119,6 +1129,105 @@ def firmen_testen_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/kein-treffer-vorschau", methods=["POST"])
+def kein_treffer_vorschau():
+    """
+    Lädt den Rohtext einer Stelle live per Playwright, ohne sie in stellen.json/DB
+    einzutragen - für die schnelle Sichtprüfung bei Titeln ohne Suchbegriff-Treffer,
+    bevor man sich für "In Pipeline aufnehmen" entscheidet.
+    Erwartet JSON: { url }
+    """
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "url erforderlich"}), 400
+
+    url = data["url"].strip()
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        from playwright.sync_api import sync_playwright
+        from rohtext_holen import lade_rohtext_playwright
+        from browser import starte_browser, neuer_context, neue_seite
+
+        with sync_playwright() as p:
+            browser = starte_browser(p)
+            context = neuer_context(browser)
+            page = neue_seite(context)
+            try:
+                rohtext, status = lade_rohtext_playwright(page, url)
+            finally:
+                browser.close()
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+
+    if not rohtext:
+        fehler = f"Kein Inhalt geladen (HTTP {status})" if status else "Kein Inhalt geladen"
+        return jsonify({"ok": False, "fehler": fehler}), 502
+
+    return jsonify({"ok": True, "text": rohtext[:6000]})
+
+
+@app.route("/suchbegriff-hinzufuegen", methods=["POST"])
+def suchbegriff_hinzufuegen():
+    """
+    Speichert einen Suchbegriff-Vorschlag in neue_suchbegriffe.json zur späteren
+    manuellen Durchsicht - schreibt bewusst NICHT direkt in config.txt, damit
+    ungeprüfte Begriffe nicht sofort den Live-Filter verändern. Nach ein paar
+    Wochen wird die Liste durchgesehen und die brauchbaren Begriffe werden von
+    Hand in [suchbegriffe] übernommen.
+    Stellentext wird nur mitgespeichert, wenn er in der DB schon vorhanden ist
+    (Stelle wurde also schon über "In Pipeline aufnehmen" extrahiert) - sonst
+    würde ein Nachladen hier zusätzliche LLM-Tokens kosten, nur fürs Protokoll.
+    Erwartet JSON: { begriffe: [...], url, firma, titel }
+    """
+    data = request.get_json()
+    begriffe = data.get("begriffe") if data else None
+    if not begriffe or not isinstance(begriffe, list):
+        return jsonify({"ok": False, "fehler": "begriffe (Liste) erforderlich"}), 400
+
+    begriffe = [b.strip() for b in begriffe if isinstance(b, str) and b.strip()]
+    if not begriffe:
+        return jsonify({"ok": False, "fehler": "Keine gültigen Begriffe übergeben"}), 400
+
+    url   = (data.get("url") or "").strip()
+    firma = (data.get("firma") or "").strip()
+    titel = (data.get("titel") or "").strip()
+
+    stellentext = None
+    if url:
+        try:
+            sys.path.insert(0, str(BASIS_PFAD))
+            import db as _db
+            with _db.verbindung() as con:
+                row = con.execute("SELECT stellentext FROM stellen WHERE url = ?", (url,)).fetchone()
+            if row and row["stellentext"]:
+                stellentext = row["stellentext"]
+        except Exception:
+            pass  # Vorschlag trotzdem speichern, nur ohne Stellentext
+
+    eintrag = {
+        "begriffe": begriffe,
+        "stellenbezeichnung": titel,
+        "firma": firma,
+        "url": url,
+        "datum": jetzt(),
+    }
+    if stellentext:
+        eintrag["stellentext"] = stellentext
+
+    try:
+        vorschlaege = []
+        if NEUE_SUCHBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_SUCHBEGRIFFE_JSON.read_text(encoding="utf-8"))
+        vorschlaege.append(eintrag)
+        NEUE_SUCHBEGRIFFE_JSON.write_text(
+            json.dumps(vorschlaege, ensure_ascii=False, indent=2), encoding="utf-8")
+        return jsonify({"ok": True, "hinzugefuegt": begriffe, "stellentext_dabei": bool(stellentext)})
+
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
 
 
 @app.route("/firmen-config-hinzufuegen", methods=["POST"])
