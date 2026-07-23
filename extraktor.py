@@ -104,14 +104,20 @@ Wenn wirklich keine Stadt erkennbar ist, antworte exakt: UNBEKANNT
         return ""
 
 
-def extrahiere_mit_markern(rohtext: str, start_marker: str, ende_marker: str) -> str:
+def extrahiere_mit_markern(rohtext: str, start_marker: str, ende_marker: str) -> tuple[str, bool]:
+    """Schneidet rohtext[start_marker:ende_marker] aus. Gibt zusätzlich zurück,
+    ob der start_marker tatsächlich gefunden wurde – wenn nicht, ist das
+    Ergebnis der komplette unbereinigte rohtext (Cookie-Banner, Navigation,
+    Footer inklusive), was der Aufrufer als Fehlschlag behandeln muss, statt
+    ihn fälschlich als sauber extrahierten (nur zufällig langen) Stellentext
+    zu übernehmen."""
     start = rohtext.find(start_marker)
     if start == -1:
-        return rohtext
+        return rohtext, False
     ende = rohtext.find(ende_marker, start)
     if ende == -1:
-        return rohtext[start:]
-    return rohtext[start:ende]
+        return rohtext[start:], True
+    return rohtext[start:ende], True
 
 
 def ki_extrahiere_und_lerne(rohtext: str, dom: str, client) -> tuple[str, dict | None]:
@@ -263,10 +269,12 @@ def main():
 
         if start and ende:
             print(f"  ✂️  Bekannte Marker – extrahiere direkt...")
-            stellentext = extrahiere_mit_markern(rohtext, start, ende)
-            print(f"  ✅ {len(stellentext)} Zeichen extrahiert")
-            if len(stellentext) < 100:
-                print(f"  ⚠️  Marker-Ergebnis zu kurz – KI extrahiert als Fallback...")
+            stellentext, marker_gefunden = extrahiere_mit_markern(rohtext, start, ende)
+            if marker_gefunden:
+                print(f"  ✅ {len(stellentext)} Zeichen extrahiert")
+            if not marker_gefunden or len(stellentext) < 100:
+                grund = "Start-Marker nicht gefunden" if not marker_gefunden else "Marker-Ergebnis zu kurz"
+                print(f"  ⚠️  {grund} – KI extrahiert als Fallback...")
                 strukturen.pop(dom, None)
                 stellentext, arbeitsort_neu, neue_struktur = ki_extrahiere_und_lerne(rohtext, dom, client)
                 if arbeitsort_neu and not arbeitsort:

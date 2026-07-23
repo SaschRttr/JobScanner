@@ -538,6 +538,7 @@
     }
 
     async function neuLadenUndBewerten(btn, stellenUrl) {
+        const _originalLabel = btn.textContent;
         btn.disabled = true;
         btn.textContent = '⏳ Vorbereitung...';
         try {
@@ -549,13 +550,13 @@
             const data = await res.json();
             if (!data.ok) {
                 btn.disabled = false;
-                btn.textContent = '🔄 Neu laden & bewerten';
+                btn.textContent = _originalLabel;
                 alert('Fehler: ' + (data.fehler || 'Unbekannt'));
                 return;
             }
         } catch(e) {
             btn.disabled = false;
-            btn.textContent = '🔄 Neu laden & bewerten';
+            btn.textContent = _originalLabel;
             alert('Server nicht erreichbar');
             return;
         }

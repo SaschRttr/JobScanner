@@ -523,7 +523,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         bewertung_btn = f'<button class="steckbrief-btn" onclick="bewertungStarten(this, \'{url_js}\')">{_bew_label}</button>'
     else:
         bewertung_btn = ""
-    neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_js}\')">🔄 Neu laden &amp; bewerten</button>' if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else ""
+    _neu_laden_label = "🔄 Neu laden &amp; bewerten" if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else "🔄 Rohtext neu laden"
+    neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_js}\')">{_neu_laden_label}</button>'
     vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
     pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_js}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
     nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_js}\')">🚫 Nicht beworben</button>'
