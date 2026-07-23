@@ -326,7 +326,10 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
                 pfad_ok = False
                 jobs = []
                 break
-        if not pfad_ok:
+        if not pfad_ok and gesamt_jobs_gesehen == 0:
+            # Nur als Fehler werten, wenn noch nie Jobs gefunden wurden – manche APIs
+            # (z.B. TE Connectivity) liefern nach der letzten Seite nur noch
+            # {"totalJobs": n} ohne die Job-Liste, das ist normales Paginierungsende.
             struktur_fehler = True
         if not jobs:
             print(f"  ℹ️  Keine weiteren Jobs auf Seite {seite+1}")
