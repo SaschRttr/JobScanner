@@ -525,7 +525,7 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         bewertung_btn = ""
     _neu_laden_label = "🔄 Neu laden &amp; bewerten" if not s.get("stellentext") and not s.get("rohtext") and not s.get("bewertung") else "🔄 Rohtext neu laden"
     neu_laden_btn   = f'<button class="steckbrief-btn" onclick="neuLadenUndBewerten(this, \'{url_js}\')">{_neu_laden_label}</button>'
-    vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") else ""
+    vormerken_badge = '<span class="pruef-vormerken-badge">⏳ Verfügbarkeit unsicher – beim nächsten Lauf bestätigt</span>' if s.get("pruef_vormerken") and not ausgeschlossen and scanner_status in (4, 6) else ""
     pruef_btn           = f'<button class="pruef-btn" onclick="stellePruefen(this, \'{url_js}\')">🔍 Neu prüfen</button><span class="pruef-ergebnis"></span>'
     nicht_beworben_btn  = f'<button class="pruef-btn" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="nichtBeworben(this, \'{url_js}\')">🚫 Nicht beworben</button>'
     if scanner_status == 4:
@@ -557,7 +557,8 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
 
     _gm_attr = ' data-geringer-match="1"' if geringer_match else ''
     _zw_attr = ' data-zu-weit="1"' if zu_weit else ''
-    _vm_attr = ' data-vorgemerkt="1"' if s.get("pruef_vormerken") else ''
+    _vm_relevant = s.get("pruef_vormerken") and not ausgeschlossen and scanner_status in (4, 6)
+    _vm_attr = ' data-vorgemerkt="1"' if _vm_relevant else ''
     _gemerkt_attr = ' data-gemerkt="1"' if s.get("gemerkt") else ''
     _ausg_attr = ' data-ausgeschlossen="1"' if ausgeschlossen else ''
     if zu_weit:
@@ -705,7 +706,11 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 
     # Vorgemerkte Stellen (1. fehlgeschlagener Erreichbarkeits-Check, werden beim
     # nächsten vergaben_check-Lauf endgültig als vergeben markiert)
-    vorgemerkt_count = sum(1 for s in stellen if s.get("pruef_vormerken") and not s.get("geloescht_am"))
+    vorgemerkt_count = sum(
+        1 for s in stellen
+        if s.get("pruef_vormerken") and not s.get("geloescht_am") and not s.get("nicht_passend")
+        and bekannte_status.get(s["url"]) in (4, 6)
+    )
     if vorgemerkt_count:
         status_zeilen += (
             ' &nbsp;|&nbsp;\n        '

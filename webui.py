@@ -542,6 +542,11 @@ def api_pruefe_stelle():
         ergebnis = "vergaben"
     elif code == 200:
         ergebnis = "aktiv"
+        import db as _db
+        alle = _db.lade_alle_stellen()
+        stelle = next((s for s in alle if s["url"] == url), None)
+        if stelle and stelle.get("pruef_vormerken"):
+            _db.upsert_stelle({"url": url, "pruef_vormerken": None})
     else:
         ergebnis = "unklar"
 
