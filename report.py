@@ -226,7 +226,7 @@ def aktualisiere_fahrzeit_fuer_stelle(url: str, firma: str, arbeitsort: str, con
 # HTML-BAUSTEINE
 # =============================================================================
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False) -> str:
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False, ausgeschlossen: bool = False) -> str:
     import html as _html
     ist_neu       = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
@@ -559,11 +559,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     _zw_attr = ' data-zu-weit="1"' if zu_weit else ''
     _vm_attr = ' data-vorgemerkt="1"' if s.get("pruef_vormerken") else ''
     _gemerkt_attr = ' data-gemerkt="1"' if s.get("gemerkt") else ''
+    _ausg_attr = ' data-ausgeschlossen="1"' if ausgeschlossen else ''
     if zu_weit:
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr}{_gemerkt_attr} data-scanner-status="{_scanner_status_attr}">
+    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr}{_gemerkt_attr}{_ausg_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{url_attr}" target="_blank">{_html.escape(s['titel'])}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
@@ -598,11 +599,11 @@ JS  = (ASSETS_DIR / "report.js").read_text(encoding="utf-8")
 GERINGER_MATCH_SCHWELLE = 65
 FAHRZEIT_MAX_AUTO_MIN   = 60
 
-def _hat_geringen_score(s: dict) -> bool:
+def _hat_geringen_score(s: dict, status: int | None = None) -> bool:
     b = s.get("bewertung")
-    if not b:
-        return False
-    return effektiver_score(b) <= GERINGER_MATCH_SCHWELLE
+    if b and effektiver_score(b) <= GERINGER_MATCH_SCHWELLE:
+        return True
+    return status == 5
 
 
 def erstelle_report(stellen: list, config: dict | None = None) -> str:
@@ -681,7 +682,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
     absagen          = [s for s in aktive  if s["url"] in absage_urls]
     entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
-    geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
+    geringer_match = [s for s in aktive if _hat_geringen_score(s, bekannte_status.get(s["url"])) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
 
@@ -965,7 +966,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         )
         html += f'<div id="geringer-match-section" style="display:none; margin:15px 0;">\n'
         html += f'<div class="firma-block">\n'
-        html += f'<h2>📉 Geringer Match – Score ≤ {GERINGER_MATCH_SCHWELLE}% ({len(geringer_match)})</h2>\n'
+        html += f'<h2>📉 Geringer Match / nicht bewerben ({len(geringer_match)})</h2>\n'
         for s in geringer_match_sorted:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), geringer_match=True, scanner_status=_st(s))
         html += '</div>\n</div>\n'
@@ -1012,7 +1013,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in nicht_passend:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</details>\n'
 
     if nicht_passend_standort:
@@ -1023,7 +1024,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     </summary>
     <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
         for s in nicht_passend_standort:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</details>\n'
 
     if ohne_standort:

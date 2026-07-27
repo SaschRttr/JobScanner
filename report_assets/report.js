@@ -701,6 +701,10 @@
             if (el.parentNode === fa) fa.removeChild(el);
         });
         let gefiltert = _stellenUrsprung.map(o => o.el);
+        // Bereits als "nicht passend" aussortierte Stellen (Ausschlusskriterium,
+        // Standort außerhalb/verboten) sollen nie in der Flach-/Sortier-Ansicht
+        // auftauchen – dafür gibt es keine Einblenden-Checkbox.
+        gefiltert = gefiltert.filter(el => !el.dataset.ausgeschlossen);
         if (_aktiverFirmaFilter !== null) {
             gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
         }
@@ -742,14 +746,17 @@
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     parseInt(b.dataset.score || '0') - parseInt(a.dataset.score || '0'));
         } else if (_aktiveSortierung === 'auto') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.autoMin) || 9999) - (parseInt(b.dataset.autoMin) || 9999));
         } else if (_aktiveSortierung === 'transit') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.transitMin) || 9999) - (parseInt(b.dataset.transitMin) || 9999));
         }
