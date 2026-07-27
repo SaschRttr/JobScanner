@@ -206,6 +206,21 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
             page.wait_for_timeout(6000)
             rohtext = page.inner_text("body")
 
+        # jobware.net rendert den eigentlichen Stellentext in einem
+        # separaten <iframe src="/jobsearch/embed/job/...">, nicht im
+        # Haupt-Dokument – body-Text ist dort nur die Seiten-Hülle
+        # (Cookie-Banner, Titel, "Ähnliche Anzeigen").
+        if "jobware.net" in lade_url:
+            for frame in page.frames:
+                if "embed/job" in frame.url:
+                    try:
+                        iframe_text = frame.locator("body").inner_text()
+                        if iframe_text and len(iframe_text.strip()) > 200:
+                            rohtext = iframe_text
+                    except Exception:
+                        pass
+                    break
+
         if not rohtext or len(rohtext.strip()) < 100:
             return None, status
 

@@ -27,6 +27,7 @@ import gzip
 from pathlib import Path
 from flask import Flask, Response, send_file, request, jsonify, redirect
 from utils import lade_config, berechne_standort, standort_ablehnungsgrund, jetzt, effektiver_score
+from browser import MIN_ROHTEXT_LAENGE
 print("WEBUI GESTARTET - Version mit manuell-stream")
 # =============================================================================
 # KONFIGURATION
@@ -626,6 +627,9 @@ def bewertung_erstellen():
     stellentext = stelle.get("stellentext") or stelle.get("rohtext") or ""
     if not stellentext:
         return jsonify({"fehler": "Kein Stellentext vorhanden"}), 400
+    if len(stellentext.strip()) < MIN_ROHTEXT_LAENGE:
+        return jsonify({"fehler": f"Stellentext zu kurz ({len(stellentext.strip())} Zeichen) – "
+                                   f"vermutlich nicht vollständig geladen. Bitte Rohtext neu laden."}), 400
 
     _cfg = lade_config()
     api_key = _cfg["api_key"]
