@@ -270,6 +270,7 @@ AP Sensing           | https://www.apsensing.com/de/unternehmen/karriere
 Nokia                | https://jobs.nokia.com/en/sites/CX_1/jobs?location=Stuttgart%2C+Baden-Wuerttemberg%2C+Germany&locationId=100000032414417&locationLevel=city&mode=location&radius=25&radiusUnit=KM
 q.ant                | https://q-ant-gmbh.jobs.personio.de/?language=en
 IMS Chips            | https://k33469.coveto.de/public/jobs/
+Renesas              | https://jobs.renesas.com/jobs?options=19%2C27%2C47%2C646&page=1
 [\firmen]
 
 # -----------------------------------------------------------------------------
