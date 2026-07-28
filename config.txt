@@ -271,6 +271,7 @@ Nokia                | https://jobs.nokia.com/en/sites/CX_1/jobs?location=Stuttg
 q.ant                | https://q-ant-gmbh.jobs.personio.de/?language=en
 IMS Chips            | https://k33469.coveto.de/public/jobs/
 Renesas              | https://jobs.renesas.com/jobs?options=19%2C27%2C47%2C646&page=1
+Advantest Software | https://jobs.advantest-career.de/software-development?utm_source=karriereseite&utm_medium=button&utm_campaign=jobshop
 [\firmen]
 
 # -----------------------------------------------------------------------------
