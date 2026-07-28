@@ -730,6 +730,11 @@
         if (section) section.style.display = checked ? '' : 'none';
         if (_flatAktiv) _aktualisiereFlach();
     }
+    function toggleStandortAusserhalb(checked) {
+        const section = document.getElementById('standort-ausserhalb-section');
+        if (section) section.style.display = checked ? '' : 'none';
+        if (_flatAktiv) _aktualisiereFlach();
+    }
     function toggleNichtBewertet(checked) {
         _nurNichtBewertet = checked;
         _aktualisiere();

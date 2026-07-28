@@ -33,6 +33,7 @@ from utils import (lade_config, lade_json, ist_ausgeschlossen, text_matched,
                    standort_ablehnungsgrund, sicherer_pfadname, effektiver_score)
 from status_def import (STATUS_LABELS, STATUS_EMOJIS, INAKTIVE_STATUSWERTE,
                         UNBEWERTETE_STATUSWERTE, FILTER_STATUS_VALS)
+from bewertung import empfehlung_fuer_score
 
 
 # =============================================================================
@@ -429,7 +430,13 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         score      = b.get("score", 0)
         score_pot  = b.get("score_potenzial")
         score_na   = b.get("score_nach_anpassung")
-        empf  = b.get("empfehlung", "?")
+        # Live aus dem aktuellen Score neu berechnen statt das gespeicherte
+        # empfehlung-Feld zu vertrauen: dieselbe Rechnung bestimmt auch den
+        # Scanner-Status-Badge (Grenzfall/bewerben/nicht bewerben) - nach einer
+        # Neubewertung (score_nach_anpassung geändert, Status neu berechnet)
+        # blieb das gespeicherte empfehlung-Feld sonst auf dem alten Wert stehen
+        # und widersprach dem Badge (z.B. Badge "Grenzfall", Text "BEWERBEN").
+        empf  = empfehlung_fuer_score(effektiver_score(b))
         def _farbe(v: float) -> str:
             return "#27ae60" if v >= 70 else "#f39c12" if v >= 40 else "#e74c3c"
         empf_farbe  = "#27ae60" if empf == "bewerben" else "#8e44ad" if empf == "unsicher" else "#e74c3c"
@@ -749,10 +756,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             elif not arbeitsort and not firma_adressen.get(s.get("firma", "")):
                 fahrzeit_daten[url] = {"kein_ziel": True}
 
-    # Fahrzeit-Filter nur anwenden wenn keine Whitelist aktiv ist: ein Ort auf der
-    # Whitelist ist explizit gewollt (z.B. Apple München trotz >60min), die
-    # Whitelist soll den Fahrzeit-Filter nicht nur ergänzen, sondern übersteuern.
-    zu_weit_urls = set() if (config or {}).get("erlaubte_standorte") else {
+    zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
     }
@@ -975,6 +979,12 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         </div>
         <div class="filter-gruppe">
             <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-standort-ausserhalb" onchange="toggleStandortAusserhalb(this.checked)">
+                📍 Standort außerhalb/verboten einblenden
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
                 <input type="checkbox" id="cb-nicht-bewertet" onchange="toggleNichtBewertet(this.checked)">
                 ❓ Nur nicht bewertet
             </label>
@@ -1126,17 +1136,6 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</details>\n'
 
-    if nicht_passend_standort:
-        html += f'''<details style="margin: 15px 0;">
-    <summary style="cursor:pointer; background:#fdebd0; padding:12px 20px;
-        border-radius:8px; font-weight:bold; font-size:1.05em;">
-        📍 Nicht passend – Standort außerhalb/verboten ({len(nicht_passend_standort)})
-    </summary>
-    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
-        for s in nicht_passend_standort:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
-        html += '</div>\n</details>\n'
-
     if ohne_standort:
         html += f'''<details open style="margin: 15px 0;">
     <summary style="cursor:pointer; background:#eaf2f8; padding:12px 20px;
@@ -1154,6 +1153,14 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += f'<h2>🚗 Nicht passend – Zu weit (&gt;{FAHRZEIT_MAX_AUTO_MIN} min mit Auto) ({len(zu_weit)})</h2>\n'
         for s in zu_weit:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), zu_weit=True)
+        html += '</div>\n</div>\n'
+
+    if nicht_passend_standort:
+        html += f'<div id="standort-ausserhalb-section" style="display:none; margin:15px 0;">\n'
+        html += f'<div class="firma-block">\n'
+        html += f'<h2>📍 Nicht passend – Standort außerhalb/verboten ({len(nicht_passend_standort)})</h2>\n'
+        for s in nicht_passend_standort:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</div>\n'
 
     html += '</div>\n'  # /hauptansicht
