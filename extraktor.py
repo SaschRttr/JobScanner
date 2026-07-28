@@ -294,7 +294,7 @@ def main():
         else:
             print(f"  🤖 Unbekannte Struktur – KI extrahiert...")
             stellentext, arbeitsort_neu, neue_struktur = ki_extrahiere_und_lerne(rohtext, dom, client)
-            if arbeitsort_neu:
+            if arbeitsort_neu and not arbeitsort:
                 arbeitsort = arbeitsort_neu
             print(f"  ✅ {len(stellentext)} Zeichen extrahiert")
             if arbeitsort:

@@ -412,8 +412,11 @@ def repariere_inkonsistente_status():
             print(f"  🧹 Bestätigt vergebene Stelle war wieder aktiv → Status {neu_st}: {r['url'][:80]}")
 
         # 3+4. Duplikate bereinigen (trailing slash + gleicher Titel+Firma)
+        # Bei allen drei Regeln zählt ein gesetzter arbeitsort immer mehr als
+        # Status/Fund-Datum – sonst kann eine händisch nachgetragene Adresse
+        # durch ein "höher priorisiertes" Duplikat ohne Standort verloren gehen.
         alle = con.execute("""
-            SELECT url, status, geloescht_am, gefunden_am FROM stellen
+            SELECT url, status, geloescht_am, gefunden_am, arbeitsort FROM stellen
         """).fetchall()
 
         # Trailing-Slash-Duplikate
@@ -422,9 +425,9 @@ def repariere_inkonsistente_status():
             url = r["url"]
             alt = url.rstrip("/") if url.endswith("/") else url + "/"
             if alt in url_set and url in url_set:
-                prio_orig = (_STATUS_PRIO.get(r["status"], 0), 0 if r["geloescht_am"] else 1)
+                prio_orig = (1 if r["arbeitsort"] else 0, _STATUS_PRIO.get(r["status"], 0), 0 if r["geloescht_am"] else 1)
                 r_alt = next(x for x in alle if x["url"] == alt)
-                prio_alt  = (_STATUS_PRIO.get(r_alt["status"], 0), 0 if r_alt["geloescht_am"] else 1)
+                prio_alt  = (1 if r_alt["arbeitsort"] else 0, _STATUS_PRIO.get(r_alt["status"], 0), 0 if r_alt["geloescht_am"] else 1)
                 loeschen = url if prio_alt > prio_orig else alt
                 con.execute("DELETE FROM stellen WHERE url = ?", (loeschen,))
                 con.execute("DELETE FROM bewertungen WHERE url = ?", (loeschen,))
@@ -433,7 +436,7 @@ def repariere_inkonsistente_status():
                 url_set.discard(loeschen)
 
         # URL-Encoding-Duplikate (z.B. %28 vs %2528)
-        alle = con.execute("SELECT url, status, geloescht_am, gefunden_am FROM stellen").fetchall()
+        alle = con.execute("SELECT url, status, geloescht_am, gefunden_am, arbeitsort FROM stellen").fetchall()
         norm_gruppen: dict = {}
         for r in alle:
             norm = normalisiere_url(r["url"])
@@ -443,7 +446,8 @@ def repariere_inkonsistente_status():
                 continue
             def _prio(r):
                 live = 1 if not r["geloescht_am"] else 0
-                return (live, _STATUS_PRIO.get(r["status"], 0), r["gefunden_am"] or "")
+                hat_ort = 1 if r["arbeitsort"] else 0
+                return (hat_ort, live, _STATUS_PRIO.get(r["status"], 0), r["gefunden_am"] or "")
             behalten = max(gruppe, key=_prio)
             for r in gruppe:
                 if r["url"] == behalten["url"]:
