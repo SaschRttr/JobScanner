@@ -957,8 +957,16 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
         _nurMerkliste = checked;
         _aktualisiere();
     }
+    // _aktiverFilter (Stufe: kennenlernen/einladung/zusage/absage) und
+    // _aktiverStatusFilter (Scanner-Status: bewerben/beworben/... ) sind zwei
+    // unabhängige Variablen, stellen für den Nutzer aber dieselbe Filterleiste
+    // dar ("welche Stellen will ich sehen?"). Ohne gegenseitiges Zurücksetzen
+    // blieb ein zuvor gewählter Filter im Hintergrund aktiv und wurde mit dem
+    // neuen UND-verknüpft - Stellen verschwanden dadurch scheinbar grundlos
+    // (z.B. eine beworbene Stelle bei noch aktivem Kennenlernen-Filter).
     function setzeFilter(filter) {
         _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
+        _aktiverStatusFilter = null;
         _aktualisiere();
     }
     function setzeSortierung(sort) {
@@ -967,6 +975,7 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
     }
     function setzeStatusFilter(status) {
         _aktiverStatusFilter = (_aktiverStatusFilter === status) ? null : status;
+        _aktiverFilter = null;
         _aktualisiere();
     }
     function setzeFirmaFilter(firma) {
