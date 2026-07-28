@@ -16,13 +16,25 @@
         aktualisiereStatusCounts();
     }
 
+    // Zählt wie viele Stellen je Status im aktuell sichtbaren Ausschnitt liegen.
+    // Ist ein Firma-/Vorgemerkt-/Merkliste-Filter aktiv, werden nur die davon
+    // betroffenen Stellen gezählt - sonst zeigten die Kopfzeilen-Badges immer
+    // die globale Zahl an, während z.B. ein Firma-Filter nur einen Bruchteil
+    // davon sichtbar ließ.
     function aktualisiereStatusCounts() {
         const counts = {};
         const seenUrls = new Set();
-        // data-ausgeschlossen ("nicht passend") wird vom Status-Filter immer
-        // ausgeblendet, egal welcher Status gewählt ist - hier ebenfalls
-        // ausschließen, sonst weicht die Kopfzeile vom Filter-Ergebnis ab.
-        document.querySelectorAll('.stelle[data-scanner-status][data-url]:not([data-ausgeschlossen])').forEach(el => {
+        document.querySelectorAll('.stelle[data-scanner-status][data-url]').forEach(el => {
+            if (_nurVorgemerkt) {
+                if (el.dataset.vorgemerkt !== '1') return;
+            } else {
+                // data-ausgeschlossen ("nicht passend") wird vom Status-Filter immer
+                // ausgeblendet, egal welcher Status gewählt ist - hier ebenfalls
+                // ausschließen, sonst weicht die Kopfzeile vom Filter-Ergebnis ab.
+                if (el.dataset.ausgeschlossen) return;
+                if (_aktiverFirmaFilter !== null && el.dataset.firma !== _aktiverFirmaFilter) return;
+            }
+            if (_nurMerkliste && el.dataset.gemerkt !== '1') return;
             const url = el.dataset.url;
             if (url) {
                 if (seenUrls.has(url)) return;
@@ -198,10 +210,6 @@
                 el.classList.remove('mit-aktivitaet');
             }
         });
-        const statAbsagen = document.getElementById('stat-absagen');
-        if (statAbsagen) {
-            statAbsagen.textContent = document.querySelectorAll('.stelle.absage').length;
-        }
         aktualisiereStatusCounts();
     }
 
@@ -835,6 +843,7 @@
         fa.style.display = 'none';
         fa.innerHTML = '<div id="flat-ansicht-info"></div>';
         ha.style.display = '';
+        aktualisiereStatusCounts();
     }
     function _aktualisiereFlach() {
         const fa = document.getElementById('flat-ansicht');
@@ -936,6 +945,7 @@
         } else {
             gefiltert.forEach(el => fa.appendChild(el));
         }
+        aktualisiereStatusCounts();
     }
 
     async function stellePruefen(btn, url) {

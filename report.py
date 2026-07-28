@@ -978,13 +978,13 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     html += firma_filter_gruppe
     html += status_filter_gruppe
     html += """        <div class="filter-gruppe">
-            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;" title="Bei aktivem Firma- oder Vorgemerkt-/Merkliste-Filter werden geringe Matches immer eingeblendet, unabhängig von dieser Checkbox.">
                 <input type="checkbox" id="cb-geringer-match" onchange="toggleGeringerMatch(this.checked)">
                 📉 Geringen Match einblenden
             </label>
         </div>
         <div class="filter-gruppe">
-            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;" title="Bei aktivem Firma- oder Vorgemerkt-/Merkliste-Filter werden zu weit entfernte Stellen immer eingeblendet, unabhängig von dieser Checkbox.">
                 <input type="checkbox" id="cb-zu-weit" onchange="toggleZuWeit(this.checked)">
                 🚗 Zu weit einblenden (&gt;60 min)
             </label>
