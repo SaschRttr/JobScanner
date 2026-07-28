@@ -4,7 +4,8 @@ vergaben_check.py  –  Schritt 1c: Erreichbarkeits-Prüfung
 Prüft per HTTP ob bekannte aktive Stellen noch aufrufbar sind.
 
 Geprüfte Jobs:
-  • status in (1, 2, 3, 4, 5, 6) AND geloescht_am IS NULL
+  • status in (4, 6) AND geloescht_am IS NULL AND nicht_passend = False
+    (nur Stellen, bei denen "noch verfügbar?" bewerbungsrelevant ist)
   • --alle prüft zusätzlich alle nicht gelöschten Stellen unabhängig vom Status
 
 Ergebnis pro URL:
@@ -331,8 +332,9 @@ def main():
     else:
         kandidaten = [
             url for url, eintrag in bekannte.items()
-            if eintrag.get("status") in (1, 2, 3, 4, 5, 6)
+            if eintrag.get("status") in (4, 6)
             and not eintrag.get("geloescht_am")
+            and not eintrag.get("nicht_passend")
         ]
 
     if args.firma:

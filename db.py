@@ -454,16 +454,19 @@ def repariere_inkonsistente_status():
                 con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (r["url"],))
                 print(f"  🧹 URL-Encoding-Duplikat entfernt: {r['url'][:80]}")
 
-        # Titel+Firma-Duplikate
+        # Titel+Firma-Duplikate (nur wenn zusätzlich der Standort übereinstimmt –
+        # sonst würden z.B. echte Mehrfach-Standort-Ausschreibungen mit
+        # identischem Titel fälschlich als Duplikat gelöscht)
         groups = con.execute("""
-            SELECT lower(titel) as lt, lower(firma) as lf, COUNT(*) as cnt
-            FROM stellen GROUP BY lower(titel), lower(firma) HAVING cnt > 1
+            SELECT lower(titel) as lt, lower(firma) as lf,
+                   lower(coalesce(arbeitsort, '')) as lo, COUNT(*) as cnt
+            FROM stellen GROUP BY lt, lf, lo HAVING cnt > 1
         """).fetchall()
         for g in groups:
             rows = con.execute("""
                 SELECT url, status, geloescht_am, gefunden_am FROM stellen
-                WHERE lower(titel) = ? AND lower(firma) = ?
-            """, (g["lt"], g["lf"])).fetchall()
+                WHERE lower(titel) = ? AND lower(firma) = ? AND lower(coalesce(arbeitsort, '')) = ?
+            """, (g["lt"], g["lf"], g["lo"])).fetchall()
 
             def _prio(r):
                 live = 1 if not r["geloescht_am"] else 0
@@ -489,6 +492,7 @@ def repariere_inkonsistente_status():
                 con.execute("DELETE FROM bewertungen WHERE url = ?", (r["url"],))
                 con.execute("DELETE FROM bewerbungsstatus WHERE url = ?", (r["url"],))
                 con.execute("DELETE FROM fahrzeit_cache WHERE url = ?", (r["url"],))
+                print(f"  🧹 Titel+Firma-Duplikat entfernt (behalten: {behalten['url'][:60]}): {r['url'][:80]}")
 
 
 def neu_flag_zuruecksetzen():

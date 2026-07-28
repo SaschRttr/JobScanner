@@ -63,6 +63,18 @@ def _warte_fuer(url: str) -> int:
     return _WARTE_MS_DEFAULT
 
 
+# Domains, deren Job-Detailseiten nur eine generische Überschrift ("Job
+# Details") statt des echten Jobtitels zeigen. _extrahiere_titel() prüft
+# Kandidaten zwar gegen die URL, fällt aber ohne Treffer auf den ersten
+# (ungeprüften) Kandidaten zurück – bei hitachirail.com enthält die URL nur
+# jobId+Standort statt eines Titel-Slugs, daher kann der Abgleich nie greifen
+# und der generische h1/title überschreibt den korrekten, per API gelieferten
+# Titel. Für diese Domains wird der gescrapte Titel deshalb nie übernommen.
+_KEIN_TITEL_UEBERSCHREIBEN: set[str] = {
+    "hitachirail.com",
+}
+
+
 # Domain-spezifische CSS-Selektoren für den Arbeitsort, wenn er als eigenes
 # Meta-Element im DOM steht statt im Fließtext. Bei Keysight (Phenom-basierte
 # Karriereseite) steht der Ort z.B. in einem eigenen <li id="header-locations">
@@ -193,6 +205,21 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
         if not rohtext or len(rohtext.strip()) < 300:
             page.wait_for_timeout(6000)
             rohtext = page.inner_text("body")
+
+        # jobware.net rendert den eigentlichen Stellentext in einem
+        # separaten <iframe src="/jobsearch/embed/job/...">, nicht im
+        # Haupt-Dokument – body-Text ist dort nur die Seiten-Hülle
+        # (Cookie-Banner, Titel, "Ähnliche Anzeigen").
+        if "jobware.net" in lade_url:
+            for frame in page.frames:
+                if "embed/job" in frame.url:
+                    try:
+                        iframe_text = frame.locator("body").inner_text()
+                        if iframe_text and len(iframe_text.strip()) > 200:
+                            rohtext = iframe_text
+                    except Exception:
+                        pass
+                    break
 
         if not rohtext or len(rohtext.strip()) < 100:
             return None, status
@@ -331,11 +358,14 @@ def main():
                 rohtext, http_status = lade_rohtext_playwright(page, url)
 
             if rohtext and len(rohtext.strip()) >= MIN_ROHTEXT_LAENGE:
-                # Jobtitel direkt von der Seite lesen (genauer als Link-Text)
-                seiten_titel = _extrahiere_titel(page, url)
-                if seiten_titel:
-                    stellen[idx]["titel"] = seiten_titel
-                    print(f"  🏷️  Titel: {seiten_titel[:70]}")
+                # Jobtitel direkt von der Seite lesen (genauer als Link-Text) –
+                # außer bei Domains, wo das bekanntermaßen nur eine generische
+                # Überschrift liefert (siehe _KEIN_TITEL_UEBERSCHREIBEN oben).
+                if not any(d in url for d in _KEIN_TITEL_UEBERSCHREIBEN):
+                    seiten_titel = _extrahiere_titel(page, url)
+                    if seiten_titel:
+                        stellen[idx]["titel"] = seiten_titel
+                        print(f"  🏷️  Titel: {seiten_titel[:70]}")
 
                 stellen[idx]["rohtext"] = rohtext
                 neuer_status = 2 if status <= 2 else status

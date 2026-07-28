@@ -825,23 +825,34 @@
             if (el.parentNode === fa) fa.removeChild(el);
         });
         let gefiltert = _stellenUrsprung.map(o => o.el);
-        if (_aktiverFirmaFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
-        }
-        if (_aktiverFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
-        }
-        if (_aktiverStatusFilter !== null) {
-            gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
+        if (_nurVorgemerkt) {
+            // data-vorgemerkt wird serverseitig nur für bewerbungsrelevante Stellen
+            // gesetzt (Status bewerben/beworben, nicht ausgeschlossen) – hier also
+            // ohne weitere Ausschluss-/Status-Filter übernehmen.
+            gefiltert = gefiltert.filter(el => el.dataset.vorgemerkt === '1');
         } else {
-            // Vergebene/gelöschte/abgesagte Stellen ausschließen, außer ein
-            // konkreter Status wurde explizit ausgewählt (z.B. über den
-            // Status-Filter "Absage erhalten").
-            const _inaktiveStatus = new Set(INAKTIVE_STATUS);
-            gefiltert = gefiltert.filter(el => {
-                const s = parseInt(el.dataset.scannerStatus);
-                return isNaN(s) || !_inaktiveStatus.has(s);
-            });
+            // Bereits als "nicht passend" aussortierte Stellen (Ausschlusskriterium,
+            // Standort außerhalb/verboten) sollen nie in der Flach-/Sortier-Ansicht
+            // auftauchen – dafür gibt es keine Einblenden-Checkbox.
+            gefiltert = gefiltert.filter(el => !el.dataset.ausgeschlossen);
+            if (_aktiverFirmaFilter !== null) {
+                gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
+            }
+            if (_aktiverFilter !== null) {
+                gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
+            }
+            if (_aktiverStatusFilter !== null) {
+                gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
+            } else {
+                // Vergebene/gelöschte/abgesagte Stellen ausschließen, außer ein
+                // konkreter Status wurde explizit ausgewählt (z.B. über den
+                // Status-Filter "Absage erhalten").
+                const _inaktiveStatus = new Set(INAKTIVE_STATUS);
+                gefiltert = gefiltert.filter(el => {
+                    const s = parseInt(el.dataset.scannerStatus);
+                    return isNaN(s) || !_inaktiveStatus.has(s);
+                });
+            }
         }
         // Bei gesetztem Firmen-Filter (oder Vorgemerkt-Ansicht) sollen alle
         // betroffenen Stellen sichtbar sein – Geringer-Match/Zu-weit nur
@@ -858,22 +869,22 @@
             const _unbewerteterStatus = new Set(UNBEWERTETE_STATUS);
             gefiltert = gefiltert.filter(el => _unbewerteterStatus.has(parseInt(el.dataset.scannerStatus)));
         }
-        if (_nurVorgemerkt) {
-            gefiltert = gefiltert.filter(el => el.dataset.vorgemerkt === '1');
-        }
         if (_nurMerkliste) {
             gefiltert = gefiltert.filter(el => el.dataset.gemerkt === '1');
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     parseInt(b.dataset.score || '0') - parseInt(a.dataset.score || '0'));
         } else if (_aktiveSortierung === 'auto') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.autoMin) || 9999) - (parseInt(b.dataset.autoMin) || 9999));
         } else if (_aktiveSortierung === 'transit') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.transitMin) || 9999) - (parseInt(b.dataset.transitMin) || 9999));
         }
