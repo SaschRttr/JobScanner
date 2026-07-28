@@ -538,7 +538,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     # Bewerbungsunterlagen: Checkbox + Download-Links
     firma_safe = sicherer_pfadname(s["firma"])
     titel_safe = sicherer_pfadname(s["titel"])
-    score      = (s.get("bewertung") or {}).get("score", 0)
+    # effektiver_score (Maximum aus Lebenslauf-/Optimierbar-/Profil-Score), NICHT
+    # nur der rohe Lebenslauf-Score – sonst weicht die "Nach Passung"-Sortierung
+    # (nutzt data-score) vom Status ab, der über effektiver_score entschieden wird.
+    score      = effektiver_score(s.get("bewertung") or {})
 
     stelle_dir = BEWERBUNGEN_DIR / firma_safe / titel_safe
     lv_docx = Path(s["lebenslauf_pfad"]) if s.get("lebenslauf_pfad") else None

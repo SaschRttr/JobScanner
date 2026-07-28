@@ -113,6 +113,29 @@
         font-size: 0.82em; color: #555;
     }
     .pruef-btn:hover { background: #eee; }
+    .kt-eintrag {
+        margin-bottom: 10px; padding: 8px; background: #fff;
+        border: 1px solid #eee; border-radius: 4px; font-size: 0.85em;
+    }
+    .kt-chips { margin-top: 4px; }
+    .kt-chip {
+        background: none; border: 1px solid #bbb; border-radius: 10px;
+        padding: 2px 8px; margin: 2px 4px 2px 0; cursor: pointer;
+        font-size: 0.82em; color: #555;
+    }
+    .kt-chip-active { background: #eafaf1; border-color: #27ae60; color: #1e3a2f; }
+    .kt-btn {
+        background: none; border: 1px solid #aaa; border-radius: 4px;
+        padding: 3px 8px; cursor: pointer; font-size: 0.82em; color: #555;
+    }
+    .kt-btn:hover { background: #eee; }
+    .kt-btn:disabled { color: #aaa; cursor: not-allowed; }
+    .kt-vorschau {
+        margin-top: 8px; padding: 10px; background: #fafafa;
+        border: 1px solid #ddd; border-radius: 4px;
+        font-size: 0.82em; line-height: 1.5; color: #333;
+        max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+    }
     .pruef-vormerken-badge {
         display: inline-block; background: #fff3cd; color: #856404;
         border: 1px solid #ffc107; border-radius: 4px;
@@ -143,6 +166,7 @@
     .scanner-status-8 { background: #e74c3c; }
     .scanner-status-9  { background: #7f8c8d; }
     .scanner-status-10 { background: #c0392b; }
+    .scanner-status-11 { background: #8e44ad; }
     .scan-box {
         background: white; border-radius: 8px; padding: 20px;
         margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -674,8 +698,43 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
         }
     }
 
+    // Trägt eine Stelle über /stelle-einfuegen ein und lässt die Teil-Pipeline
+    // (rohtext_holen/extraktor/bewertung/report) über /manuell-stream laufen.
+    // meldung(text, istFehler) zeigt Statustext an; onZeile(text) ist optional
+    // und bekommt jede rohe Log-Zeile (für ein sichtbares Output-Fenster).
+    async function _stelleEinfuegenAusfuehren(url, firma, titel, meldung, onZeile) {
+        const res = await fetch(SERVER + '/stelle-einfuegen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, firma, titel })
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            meldung('Fehler: ' + (data.fehler || 'Unbekannt'), true);
+            return;
+        }
+
+        meldung('Eingetragen - Pipeline laeuft...', false);
+
+        const quelle = new EventSource(SERVER + '/manuell-stream');
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                meldung('Fertig - Seite wird neu geladen...', false);
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+            if (onZeile) onZeile(e.data);
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            meldung('Verbindungsfehler zum Server', true);
+        };
+    }
+
     async function stelleEinfuegen() {
-       const url = document.getElementById('manuell-url').value.trim();
+        const url = document.getElementById('manuell-url').value.trim();
         const firma = document.getElementById('manuell-firma').value.trim();
         const titel = document.getElementById('manuell-titel').value.trim();
         const statusEl = document.getElementById('manuell-status');
@@ -689,43 +748,132 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
 
         statusEl.textContent = 'Stelle wird eingetragen...';
         statusEl.style.color = '#2980b9';
+        output.style.display = 'block';
+        output.textContent = '';
 
-        const server = window.location.origin;
+        await _stelleEinfuegenAusfuehren(url, firma, titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+            },
+            (zeile) => {
+                output.textContent += zeile + '\n';
+                output.scrollTop = output.scrollHeight;
+            }
+        );
+    }
 
-        const res = await fetch(server + '/stelle-einfuegen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, firma, titel })
-        });
-        const data = await res.json();
+    // "In Pipeline aufnehmen"-Button bei einem Titel ohne Suchbegriff-Treffer:
+    // url/firma/titel stehen schon als data-Attribute an der .kt-eintrag-Zeile.
+    async function stelleAusKeinTrefferAufnehmen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
 
-        if (!data.ok) {
-            statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+        btn.disabled = true;
+        statusEl.textContent = 'Wird eingetragen...';
+        statusEl.style.color = '#2980b9';
+
+        await _stelleEinfuegenAusfuehren(zeile.dataset.url, zeile.dataset.firma, zeile.dataset.titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+                if (istFehler) btn.disabled = false;
+            }
+        );
+    }
+
+    // "Stellentext anzeigen"-Button: lädt den Rohtext live per Playwright (ohne
+    // die Stelle zu speichern) und zeigt ihn in der .kt-vorschau-Box darunter an.
+    // Zweiter Klick blendet nur ein/aus, ohne erneut zu laden.
+    async function stellentextVorschau(btn) {
+        const zeile   = btn.closest('.kt-eintrag');
+        const box     = zeile.querySelector('.kt-vorschau');
+        const statusEl = zeile.querySelector('.kt-status');
+
+        if (box.dataset.geladen === '1') {
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+
+        btn.disabled = true;
+        statusEl.textContent = 'Lädt Stellentext...';
+        statusEl.style.color = '#2980b9';
+        box.style.display = 'block';
+        box.textContent = 'Lädt...';
+
+        try {
+            const res = await fetch(SERVER + '/kein-treffer-vorschau', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: zeile.dataset.url })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                box.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.textContent = '';
+                btn.disabled = false;
+                return;
+            }
+            box.textContent = data.text;
+            box.dataset.geladen = '1';
+            statusEl.textContent = '';
+        } catch (e) {
+            box.textContent = 'Server nicht erreichbar';
+            statusEl.textContent = '';
+        }
+        btn.disabled = false;
+    }
+
+    // "Als Suchbegriff vormerken"-Button: übernimmt ausgewählte Wort-Chips
+    // (kt-chip-active) plus optionalen Freitext als Vorschlag in
+    // neue_suchbegriffe.json - landet NICHT direkt in config.txt, sondern wird
+    // erst später gesammelt durchgesehen.
+    async function suchbegriffHinzufuegen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
+        const freitext = zeile.querySelector('.kt-freitext');
+
+        const begriffe = Array.from(zeile.querySelectorAll('.kt-chip-active')).map(c => c.textContent);
+        if (freitext.value.trim()) begriffe.push(freitext.value.trim());
+
+        if (begriffe.length === 0) {
+            statusEl.textContent = 'Bitte mind. einen Begriff wählen oder eingeben.';
             statusEl.style.color = '#e74c3c';
             return;
         }
 
-        statusEl.textContent = 'Eingetragen - Pipeline laeuft...';
-        statusEl.style.color = '#27ae60';
-        output.style.display = 'block';
-        output.textContent = '';
+        btn.disabled = true;
+        statusEl.textContent = 'Wird vorgemerkt...';
+        statusEl.style.color = '#2980b9';
 
-        const quelle = new EventSource(server + '/manuell-stream');
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                statusEl.textContent = 'Fertig - Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
+        try {
+            const res = await fetch(SERVER + '/suchbegriff-hinzufuegen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    begriffe,
+                    url: zeile.dataset.url,
+                    firma: zeile.dataset.firma,
+                    titel: zeile.dataset.titel
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
                 return;
             }
-            output.textContent += e.data + '\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            statusEl.textContent = 'Verbindungsfehler zum Server';
+            const mitText = data.stellentext_dabei ? ' (inkl. Stellentext)' : '';
+            statusEl.textContent = '✅ vorgemerkt: ' + begriffe.join(', ') + mitText;
+            statusEl.style.color = '#27ae60';
+            freitext.value = '';
+            zeile.querySelectorAll('.kt-chip-active').forEach(c => c.classList.remove('kt-chip-active'));
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
             statusEl.style.color = '#e74c3c';
-        };
+            btn.disabled = false;
+        }
     }
 
     async function neuLadenUndBewerten(btn, stellenUrl) {
@@ -892,23 +1040,34 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
             if (el.parentNode === fa) fa.removeChild(el);
         });
         let gefiltert = _stellenUrsprung.map(o => o.el);
-        if (_aktiverFirmaFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
-        }
-        if (_aktiverFilter !== null) {
-            gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
-        }
-        if (_aktiverStatusFilter !== null) {
-            gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
+        if (_nurVorgemerkt) {
+            // data-vorgemerkt wird serverseitig nur für bewerbungsrelevante Stellen
+            // gesetzt (Status bewerben/beworben, nicht ausgeschlossen) – hier also
+            // ohne weitere Ausschluss-/Status-Filter übernehmen.
+            gefiltert = gefiltert.filter(el => el.dataset.vorgemerkt === '1');
         } else {
-            // Vergebene/gelöschte/abgesagte Stellen ausschließen, außer ein
-            // konkreter Status wurde explizit ausgewählt (z.B. über den
-            // Status-Filter "Absage erhalten").
-            const _inaktiveStatus = new Set(INAKTIVE_STATUS);
-            gefiltert = gefiltert.filter(el => {
-                const s = parseInt(el.dataset.scannerStatus);
-                return isNaN(s) || !_inaktiveStatus.has(s);
-            });
+            // Bereits als "nicht passend" aussortierte Stellen (Ausschlusskriterium,
+            // Standort außerhalb/verboten) sollen nie in der Flach-/Sortier-Ansicht
+            // auftauchen – dafür gibt es keine Einblenden-Checkbox.
+            gefiltert = gefiltert.filter(el => !el.dataset.ausgeschlossen);
+            if (_aktiverFirmaFilter !== null) {
+                gefiltert = gefiltert.filter(el => el.dataset.firma === _aktiverFirmaFilter);
+            }
+            if (_aktiverFilter !== null) {
+                gefiltert = gefiltert.filter(el => el.classList.contains(_aktiverFilter));
+            }
+            if (_aktiverStatusFilter !== null) {
+                gefiltert = gefiltert.filter(el => parseInt(el.dataset.scannerStatus) === _aktiverStatusFilter);
+            } else {
+                // Vergebene/gelöschte/abgesagte Stellen ausschließen, außer ein
+                // konkreter Status wurde explizit ausgewählt (z.B. über den
+                // Status-Filter "Absage erhalten").
+                const _inaktiveStatus = new Set(INAKTIVE_STATUS);
+                gefiltert = gefiltert.filter(el => {
+                    const s = parseInt(el.dataset.scannerStatus);
+                    return isNaN(s) || !_inaktiveStatus.has(s);
+                });
+            }
         }
         // Bei gesetztem Firmen-Filter (oder Vorgemerkt-Ansicht) sollen alle
         // betroffenen Stellen sichtbar sein – Geringer-Match/Zu-weit nur
@@ -925,22 +1084,22 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
             const _unbewerteterStatus = new Set(UNBEWERTETE_STATUS);
             gefiltert = gefiltert.filter(el => _unbewerteterStatus.has(parseInt(el.dataset.scannerStatus)));
         }
-        if (_nurVorgemerkt) {
-            gefiltert = gefiltert.filter(el => el.dataset.vorgemerkt === '1');
-        }
         if (_nurMerkliste) {
             gefiltert = gefiltert.filter(el => el.dataset.gemerkt === '1');
         }
         if (_aktiveSortierung === 'score') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     parseInt(b.dataset.score || '0') - parseInt(a.dataset.score || '0'));
         } else if (_aktiveSortierung === 'auto') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.autoMin) || 9999) - (parseInt(b.dataset.autoMin) || 9999));
         } else if (_aktiveSortierung === 'transit') {
             gefiltert = gefiltert
+                .filter(el => !el.classList.contains('stelle-geloescht'))
                 .slice().sort((a, b) =>
                     (parseInt(a.dataset.transitMin) || 9999) - (parseInt(b.dataset.transitMin) || 9999));
         }
@@ -994,6 +1153,9 @@ const FILTER_STATUS = [11, 4, 5, 6, 7, 8, 9, 10];</script>
             } else if (data.ergebnis === 'vergaben') {
                 ergebnisEl.textContent = `❌ Nicht erreichbar (HTTP ${data.code})`;
                 ergebnisEl.style.color = '#e74c3c';
+            } else if (data.ergebnis === 'botschutz') {
+                ergebnisEl.textContent = '🤖 Bot-Schutz erkannt – nicht automatisch prüfbar, bitte manuell im Browser checken';
+                ergebnisEl.style.color = '#888';
             } else {
                 ergebnisEl.textContent = `❓ Unklar (HTTP ${data.code ?? '–'})`;
                 ergebnisEl.style.color = '#888';
