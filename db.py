@@ -187,10 +187,20 @@ def upsert_stelle(s: dict):
             felder = []
             werte  = []
 
-            for feld in ["rohtext", "stellentext"]:
-                if feld in s:
-                    felder.append(f"{feld} = ?")
-                    werte.append(s[feld])
+            if "rohtext" in s:
+                felder.append("rohtext = ?")
+                werte.append(s["rohtext"])
+
+            # COALESCE statt hartem Überschreiben: scanner.py legt beim
+            # erneuten Fund einer bereits bekannten Stelle manchmal einen
+            # Stub-Eintrag ohne stellentext an (z.B. wenn die Stelle nur per
+            # Link-Scan gesehen, aber nicht neu extrahiert wurde) und schreibt
+            # ihn am Ende blind per **s in die DB - ein bereits extrahierter
+            # Text ging dadurch verloren. Ein expliziter leerer String bleibt
+            # weiterhin möglich (COALESCE greift nur bei NULL).
+            if "stellentext" in s:
+                felder.append("stellentext = COALESCE(?, stellentext)")
+                werte.append(s["stellentext"])
 
             if s.get("geloescht_am") is not None:
                 felder.append("geloescht_am = ?")
@@ -203,12 +213,15 @@ def upsert_stelle(s: dict):
                 felder.append("neu = ?")
                 werte.append(1 if s["neu"] else 0)
 
+            # COALESCE aus demselben Grund wie bei stellentext oben: ein
+            # gefundener/nachgetragener arbeitsort darf nicht durch einen
+            # später blind geschriebenen leeren Stub verloren gehen.
             if "arbeitsort" in s:
-                felder.append("arbeitsort = ?")
+                felder.append("arbeitsort = COALESCE(?, arbeitsort)")
                 werte.append(s["arbeitsort"] or None)
 
             if "standort" in s:
-                felder.append("standort = ?")
+                felder.append("standort = COALESCE(?, standort)")
                 werte.append(s["standort"] or None)
 
             if "nicht_passend" in s:

@@ -19,7 +19,10 @@
     function aktualisiereStatusCounts() {
         const counts = {};
         const seenUrls = new Set();
-        document.querySelectorAll('.stelle[data-scanner-status][data-url]').forEach(el => {
+        // data-ausgeschlossen ("nicht passend") wird vom Status-Filter immer
+        // ausgeblendet, egal welcher Status gewählt ist - hier ebenfalls
+        // ausschließen, sonst weicht die Kopfzeile vom Filter-Ergebnis ab.
+        document.querySelectorAll('.stelle[data-scanner-status][data-url]:not([data-ausgeschlossen])').forEach(el => {
             const url = el.dataset.url;
             if (url) {
                 if (seenUrls.has(url)) return;

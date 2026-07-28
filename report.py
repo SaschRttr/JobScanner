@@ -756,9 +756,17 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             elif not arbeitsort and not firma_adressen.get(s.get("firma", "")):
                 fahrzeit_daten[url] = {"kein_ziel": True}
 
+    # Bereits entschiedene Stellen (bewerben/beworben/Ghosting) sollen nicht
+    # in der eingeklappten "Zu weit"-Sektion verschwinden - sonst zählt der
+    # Status-Zähler oben sie mit (data-scanner-status im ganzen Dokument),
+    # aber der "Bewerben"-Filter blendet sie standardmäßig aus (Zu-weit-
+    # Checkbox ist per Default aus), Kopfzeile und Filter-Ergebnis wichen
+    # dadurch voneinander ab.
+    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
     zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
+        and url not in entschieden_urls
     }
 
     # Bewerbungsstatus aus Datenbank laden
@@ -791,14 +799,18 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     geloescht        = [s for s in stellen if s.get("geloescht_am")]
     nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
     absagen          = [s for s in aktive  if s["url"] in absage_urls]
-    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
     geringer_match = [s for s in aktive if _hat_geringen_score(s, bekannte_status.get(s["url"])) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
 
-    # Status-Zähler für Dashboard
+    # Status-Zähler für Dashboard. Als "nicht passend" ausgeschlossene Stellen
+    # zählen hier nicht mit - der Status-Filter blendet sie (data-ausgeschlossen)
+    # immer aus, egal welcher Status gewählt ist. Sonst zeigte die Kopfzeile
+    # z.B. "6 bewerben", der Klick auf den Filter aber nur 5 Stellen.
     status_counts = {}
     for s in stellen:
+        if s.get("nicht_passend"):
+            continue
         sv = bekannte_status.get(s["url"])
         if sv is not None:
             status_counts[sv] = status_counts.get(sv, 0) + 1
