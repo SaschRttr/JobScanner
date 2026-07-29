@@ -756,13 +756,13 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             elif not arbeitsort and not firma_adressen.get(s.get("firma", "")):
                 fahrzeit_daten[url] = {"kein_ziel": True}
 
-    # Bereits entschiedene Stellen (bewerben/beworben/Ghosting) sollen nicht
-    # in der eingeklappten "Zu weit"-Sektion verschwinden - sonst zählt der
-    # Status-Zähler oben sie mit (data-scanner-status im ganzen Dokument),
-    # aber der "Bewerben"-Filter blendet sie standardmäßig aus (Zu-weit-
-    # Checkbox ist per Default aus), Kopfzeile und Filter-Ergebnis wichen
-    # dadurch voneinander ab.
-    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
+    # Bereits entschiedene Stellen (bewerben/beworben/Ghosting) sowie Grenzfälle
+    # (manuell zu prüfen) sollen nicht in der eingeklappten "Zu weit"-Sektion
+    # verschwinden - sonst zählt der Status-Zähler oben sie mit (data-scanner-
+    # status im ganzen Dokument), aber der "Bewerben"-Filter blendet sie
+    # standardmäßig aus (Zu-weit-Checkbox ist per Default aus), Kopfzeile und
+    # Filter-Ergebnis wichen dadurch voneinander ab.
+    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7, 11)}
     zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN

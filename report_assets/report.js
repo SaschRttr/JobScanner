@@ -884,11 +884,15 @@
         // betroffenen Stellen sichtbar sein – Geringer-Match/Zu-weit nur
         // ausblenden, wenn keine Firma gewählt ist.
         const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
+        let ausgeblendetGM = 0;
         if (!zeigeGM) {
+            ausgeblendetGM = gefiltert.filter(el => el.dataset.geringerMatch).length;
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
         }
         const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
+        let ausgeblendetZW = 0;
         if (!zeigeZW) {
+            ausgeblendetZW = gefiltert.filter(el => el.dataset.zuWeit).length;
             gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
         }
         if (_nurNichtBewertet) {
@@ -945,6 +949,27 @@
         } else {
             gefiltert.forEach(el => fa.appendChild(el));
         }
+        // Der aktive Filter (Status/Firma/...) kann Treffer haben, die zusätzlich
+        // per Geringer-Match- oder Zu-weit-Checkbox ausgeblendet sind - ohne
+        // Hinweis wirkte die Liste dann unvollständig oder fälschlich leer
+        // (siehe Grenzfall-Zähler-Bug: Kopfzeile zeigte mehr als sichtbar war).
+        // Klick blendet die jeweilige Gruppe dauerhaft ein (dieselbe Checkbox
+        // wie oben in der Filterleiste).
+        [
+            { count: ausgeblendetGM, label: 'Geringer Match', cbId: 'cb-geringer-match', fn: toggleGeringerMatch },
+            { count: ausgeblendetZW, label: 'Zu weit',        cbId: 'cb-zu-weit',        fn: toggleZuWeit },
+        ].forEach(({count, label, cbId, fn}) => {
+            if (count === 0) return;
+            const p = document.createElement('p');
+            p.className = 'ausblende-hinweis';
+            p.textContent = `▾ ${count} weitere ausgeblendet (${label}) – anzeigen`;
+            p.onclick = () => {
+                const cb = document.getElementById(cbId);
+                if (cb) cb.checked = true;
+                fn(true);
+            };
+            fa.appendChild(p);
+        });
         aktualisiereStatusCounts();
     }
 
