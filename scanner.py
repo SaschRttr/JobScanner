@@ -33,6 +33,7 @@ from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
     berechne_standort, standort_ablehnungsgrund, ablehnungsgrund,
     text_matched, klick_cookie_banner, normalisiere_ort, effektiver_score,
+    ist_ausgeschlossen,
 )
 from bewertung import status_fuer_score
 from browser import (
@@ -546,6 +547,92 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
     return stellen, ausgeschlossen
 
 
+def scanne_html_tabelle_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
+    """Scannt eine serverseitig gerenderte HTML-Tabelle (eine <tr> je Stelle, Titel-Link
+    in der ersten Zelle, Land/Standort in den folgenden Zellen) ohne Playwright.
+    Für Erbe Elektromedizin: die weltweite Job-Übersicht auf de.erbegroup.com liefert Land
+    und Standort direkt als eigene Spalten statt im Linktext – die generische Link-Heuristik
+    des Playwright-Scanners (die Standort aus dem Linktext rät) findet sie deshalb nicht,
+    und auf recruiting.ultipro.com (US-Bewerberportal, vorher konfiguriert) tauchen die
+    deutschen Stellen gar nicht erst auf."""
+    import html as _html
+    name      = api_config["name"]
+    url       = api_config["url"]
+    basis_url = api_config.get("basis_url", "").rstrip("/")
+    zeilen_muster = api_config.get("zeilen_muster", r'<tr class="job-row[^>]*>(.*?)</tr>')
+
+    print(f"\n{'='*60}")
+    print(f"  Scanne: {name} (HTML-Tabelle)")
+    print(f"{'='*60}")
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            seite_html = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"  ❌ Fehler: {e}")
+        status_merken(name, False, f"Fehler: {e}")
+        return [], []
+
+    stellen = []
+    ausgeschlossen = []
+    gesehen = set()
+
+    zeilen = re.findall(zeilen_muster, seite_html, re.DOTALL)
+    print(f"  📋 {len(zeilen)} Zeilen")
+
+    for zeile in zeilen:
+        link_m = re.search(r'<a[^>]*class="job-title"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', zeile, re.DOTALL)
+        if not link_m:
+            continue
+        href    = link_m.group(1)
+        titel   = _html.unescape(re.sub(r'<[^>]+>', '', link_m.group(2)).strip())
+        url_job = href if href.startswith("http") else f"{basis_url}{href}"
+
+        if url_job in gesehen:
+            continue
+        gesehen.add(url_job)
+
+        tds      = re.findall(r'<td\b[^>]*>(.*?)</td>', zeile, re.DOTALL)
+        orte     = [_html.unescape(re.sub(r'<[^>]+>', '', t).strip()) for t in tds[1:]]
+        standort = ", ".join(o for o in orte if o)
+
+        treffer = text_matched(titel, config["suchbegriffe"])
+        if not treffer:
+            kein_treffer_merken(name, titel, url_job)
+            continue
+
+        _np_grund = ablehnungsgrund(titel, standort, config)
+        if _np_grund:
+            ausgeschlossen.append({"firma": name, "titel": titel, "url": url_job,
+                                   "treffer": treffer, "nicht_passend_grund": _np_grund})
+            print(f"  🚫 Nicht passend: {titel[:70]}")
+            continue
+
+        stellen.append({
+            "firma": name, "titel": titel, "url": url_job,
+            "arbeitsort": standort,
+            "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
+            "treffer": treffer,
+            "neu": url_job not in bekannte_urls, "rohtext": None,
+        })
+        print(f"  ✅ {titel[:70]}")
+        if standort:
+            print(f"     📍 {standort}")
+        print(f"     Treffer: {', '.join(treffer)}")
+
+    if not stellen and not ausgeschlossen:
+        print(f"  ℹ️  Keine passenden Stellen bei {name}")
+        if not zeilen:
+            status_merken(name, False, "0 Zeilen gefunden (Struktur evtl. geändert)")
+        else:
+            status_merken(name, True)
+    else:
+        status_merken(name, True)
+
+    return stellen, ausgeschlossen
+
+
 def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> tuple[list, list]:
     name    = api_config["name"]
     tenant  = api_config["tenant"]
@@ -691,8 +778,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     page.wait_for_timeout(3000)
     klick_cookie_banner(page)
 
-    if any(d in url_boerse for d in ("nokia.com", "oraclecloud.com")):
-        print("  ⏳ Oracle CX – warte auf Netzwerk-Idle...")
+    if any(d in url_boerse for d in ("nokia.com", "oraclecloud.com", "ultipro.com")):
+        print("  ⏳ Oracle CX / UltiPro – warte auf Netzwerk-Idle...")
         try:
             page.wait_for_load_state("networkidle", timeout=20000)
         except Exception:
@@ -779,10 +866,17 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     muster = strukturen.get(dom, {}).get("link_muster")
 
     def muster_trifft(href: str, m: str) -> bool:
+        # Von der KI gelernte Muster sind als wörtlicher Teilstring gedacht,
+        # können aber zufällig Regex-Sonderzeichen enthalten (z.B. "?" vor
+        # einem Query-String wie "OpportunityDetail?opportunityId="). Als
+        # Regex interpretiert würde das die Bedeutung verändern und nie
+        # matchen – daher zuerst als literaler Substring prüfen.
+        if m in href:
+            return True
         try:
             return bool(re.search(m, href))
         except re.error:
-            return m in href
+            return False
 
     if muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
@@ -955,6 +1049,49 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, erlaubte: list,
     return len(zu_entfernen)
 
 
+def bereinige_ausschlussbegriffe(stellen: list, bekannte: dict, begriffe: list) -> int:
+    """Entfernt bereits gespeicherte Stellen, deren Titel einen Ausschlussbegriff
+    enthält. Fängt Fälle ab, in denen ein Begriff erst nachträglich zur
+    config.txt hinzugefügt wurde, nachdem die Stelle schon gefunden war.
+    Markiert den bekannte-Eintrag als nicht_passend (statt löschen), damit die
+    Stelle im selben Scan-Lauf nicht neu hinzugefügt wird.
+    Gibt die Anzahl entfernter Stellen zurück."""
+    if not begriffe:
+        return 0
+
+    zu_entfernen = []
+    gruende = {}
+    for stelle in stellen:
+        titel = stelle.get("titel") or ""
+        if not titel or not ist_ausgeschlossen(titel, begriffe):
+            continue
+        for b in begriffe:
+            t = titel.lower()
+            if (all(teil in t for teil in b.split("+")) if "+" in b else b in t):
+                zu_entfernen.append(stelle)
+                gruende[stelle.get("url")] = f"Ausschlussbegriff: '{b}'"
+                break
+
+    if zu_entfernen:
+        print(f"\n🧹 {len(zu_entfernen)} Stelle(n) wegen Ausschlussbegriff entfernt:")
+        for s in zu_entfernen:
+            print(f"   🗑️  {s.get('firma', '?')} – {s.get('titel', '?')}")
+            url = s.get("url")
+            grund = gruende.get(url, "")
+            if url:
+                if url in bekannte:
+                    bekannte[url]["nicht_passend"] = True
+                    bekannte[url]["nicht_passend_grund"] = grund
+                else:
+                    bekannte[url] = {"status": 0, "nicht_passend": True,
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
+
+        entfernte_urls = {s.get("url") for s in zu_entfernen}
+        stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
+
+    return len(zu_entfernen)
+
+
 # =============================================================================
 # HAUPTPROGRAMM
 # =============================================================================
@@ -990,6 +1127,7 @@ def main():
     print(f"  📂 Stellen geladen: {len(stellen)}")
 
     bereinige_verbotene_standorte(stellen, bekannte, config["erlaubte_standorte"], config["verbotene_standorte"])
+    bereinige_ausschlussbegriffe(stellen, bekannte, config["ausschlussbegriffe"])
 
     stellen_index: dict = {s["url"]: i for i, s in enumerate(stellen)}
     gesehen_urls:  set  = set()
@@ -1123,6 +1261,9 @@ def main():
             elif api_firma.get("typ") == "hr4you":
                 treffer_liste, ausgeschlossen_liste = scanne_hr4you_firma(
                     api_firma, set(bekannte.keys()), config)
+            elif api_firma.get("typ") == "html_tabelle":
+                treffer_liste, ausgeschlossen_liste = scanne_html_tabelle_firma(
+                    api_firma, set(bekannte.keys()), config)
             else:
                 treffer_liste, ausgeschlossen_liste = scanne_api_firma(
                     api_firma, set(bekannte.keys()), config)
@@ -1216,6 +1357,7 @@ def main():
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
     # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.
     bereinige_verbotene_standorte(stellen, bekannte, config["erlaubte_standorte"], config["verbotene_standorte"])
+    bereinige_ausschlussbegriffe(stellen, bekannte, config["ausschlussbegriffe"])
 
     # ------------------------------------------------------------------
     # Duplikate entfernen
