@@ -131,6 +131,7 @@ Electrical
 # -----------------------------------------------------------------------------
 
 [ausschlussbegriffe]
+duales studium
 praxissemester
 auszubildender
 thesis
