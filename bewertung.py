@@ -24,7 +24,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, standort_verboten, effektiver_score
+from utils import lade_config, standort_ablehnungsgrund, effektiver_score
 
 
 # =============================================================================
@@ -258,29 +258,33 @@ def main():
         print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
+    erlaubte  = config["erlaubte_standorte"]
     verbotene = config["verbotene_standorte"]
 
-    def standort_ok(s: dict) -> bool:
+    def standort_grund(s: dict) -> str:
+        # Deckt beide Fälle ab: Blacklist-Treffer UND (bekannter) Standort
+        # außerhalb der Whitelist – nicht nur die Blacklist wie zuvor. Sonst
+        # bewertet die KI Stellen, deren Arbeitsort erst hier (durch
+        # extraktor.py) bekannt wird und außerhalb des Umkreises liegt.
         arbeitsort = s.get("arbeitsort") or ""
         if not arbeitsort:
-            return True
-        # standort_verboten normalisiert Umlaute (München == Muenchen)
-        return not standort_verboten(arbeitsort, verbotene)
+            return ""
+        return standort_ablehnungsgrund(arbeitsort, erlaubte, verbotene)
 
-    # Stellen mit verbotenem Standort explizit als nicht_passend markieren
+    # Stellen mit Standort außerhalb Whitelist/Blacklist explizit als nicht_passend markieren
     zu_markieren = [
         (i, s) for i, s in enumerate(stellen)
         if s.get("status") == 3
         and s.get("stellentext")
-        and not standort_ok(s)
+        and standort_grund(s)
         and not s.get("nicht_passend")
         and (args.firma is None or s.get("firma") == args.firma)
     ]
     if zu_markieren:
-        print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
+        print(f"  {len(zu_markieren)} Stellen wegen Standort außerhalb/verboten → nicht_passend:")
         for idx, stelle in zu_markieren:
             stellen[idx]["nicht_passend"] = True
-            np_grund = f"Verbotener Standort: {stelle.get('arbeitsort', '?')}"
+            np_grund = standort_grund(stelle)
             stellen[idx]["nicht_passend_grund"] = np_grund
             upsert_stelle({"url": stelle["url"], "nicht_passend": True, "nicht_passend_grund": np_grund})
             print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('arbeitsort','')})")
@@ -297,7 +301,7 @@ def main():
         (i, s) for i, s in enumerate(stellen)
         if s.get("status") == 3
         and s.get("stellentext")
-        and standort_ok(s)
+        and not standort_grund(s)
         and not s.get("nicht_passend")
         and (args.url is None or s["url"] == args.url)
         and (args.firma is None or s.get("firma") == args.firma)
