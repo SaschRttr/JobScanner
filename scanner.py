@@ -106,6 +106,12 @@ JOB_LINK_MUSTER = [
 
 _FORM_MUSTER = [r'-de-f\d+', r'/apply/', r'/bewerben$', r'/application/']
 
+# Externe Bewerberportale (ATS), die Firmen-Karriereseiten für die eigentlichen
+# Stellen einbinden. Solche Links liegen auf einer anderen Root-Domain als die
+# Börsen-Seite und würden sonst vom Domain-Filter verworfen; ihr Pfad enthält
+# oft auch kein Standard-Job-Muster (z.B. mhm.jobs: /<id>-<slug>/job.html).
+_ATS_HOSTS = {"mhm.jobs"}
+
 _BUTTON_TEXTE = {
     "jetzt bewerben", "bewerben", "drucken", "drucken / weiterempfehlen",
     "zurück", "zurück zur übersicht", "zur initiativbewerbung",
@@ -120,6 +126,10 @@ _BUTTON_TEXTE = {
 def root_domain(url: str) -> str:
     teile = urlparse(url).netloc.replace("www.", "").split(".")
     return ".".join(teile[-2:]) if len(teile) >= 2 else teile[0]
+
+
+def ist_ats_host(href: str) -> bool:
+    return root_domain(href) in _ATS_HOSTS
 
 
 def ist_job_link(href: str) -> bool:
@@ -882,7 +892,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         print(f"  ✅ Bekanntes Muster: '{muster}'")
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
     else:
-        kandidaten = [l for l in alle_links if ist_job_link(l["href"])]
+        kandidaten = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
         if kandidaten:
             print(f"  ✅ Heuristik: {len(kandidaten)} Job-Links erkannt")
         else:
@@ -901,7 +911,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
     rd = root_domain(url_boerse)
     vor_filter = len(kandidaten)
-    kandidaten = [l for l in kandidaten if root_domain(l["href"]) == rd]
+    kandidaten = [l for l in kandidaten
+                  if root_domain(l["href"]) == rd or ist_ats_host(l["href"])]
     if len(kandidaten) < vor_filter:
         print(f"  🔒 Domain-Filter: {vor_filter - len(kandidaten)} Fremd-Links entfernt")
 

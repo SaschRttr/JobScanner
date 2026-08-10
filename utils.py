@@ -9,6 +9,18 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+# Konsolen-Ausgabe auf UTF-8 zwingen. Die Skripte geben reichlich Emojis aus
+# (✅ 🔗 📋 …); unter Windows ist stdout aber standardmäßig cp1252 und wirft dann
+# beim ersten Emoji einen UnicodeEncodeError, der die ganze Pipeline abbricht.
+# errors="replace" stellt sicher, dass eine Konsole ohne Emoji-Unterstützung
+# ein Ersatzzeichen zeigt statt zu crashen. Auf Linux/UTF-8 ist das ein No-Op.
+# Wird hier beim Import erledigt, weil alle Einstiegs-Skripte utils importieren.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # z.B. umgeleiteter/ersetzter Stream ohne reconfigure()
+
 CONFIG_PFAD = Path(__file__).parent / "config.txt"
 CONFIG_SECRETS_PFAD = Path(__file__).parent / "config_secrets.txt"
 WHITELIST_PFAD = Path(__file__).parent / "whitelist_standorte.txt"
