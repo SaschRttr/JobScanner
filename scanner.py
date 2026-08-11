@@ -1340,6 +1340,28 @@ def main_vorschau(nur_firma: str | None = None, direkt_url: str | None = None,
                 sammle(treffer_liste)
             browser.close()
 
+    # Fahrzeit für Kandidaten mit bekanntem Ort direkt mitberechnen – bei der
+    # breiten Suche ist die Entfernung das zentrale Entscheidungskriterium. Wird
+    # direkt im Kandidaten gespeichert (kein DB-Cache, die Stelle ist noch nicht
+    # in der DB). Kandidaten ohne Ort (Ort erst nach Extraktion bekannt, z.B.
+    # Liebherr) bleiben ohne Fahrzeit.
+    api_key    = config.get("google_maps_key", "")
+    startpunkt = config.get("fahrzeit_startpunkt", "")
+    firma_adressen = config.get("firma_adressen", {})
+    mit_ort = [k for k in kandidaten
+               if firma_adressen.get(k.get("firma", "")) or k.get("arbeitsort")]
+    if mit_ort and api_key and startpunkt and api_key != "DEIN_GOOGLE_MAPS_API_KEY":
+        try:
+            from report import hole_fahrzeit_daten
+            print(f"  🚗 Berechne Fahrzeit für {len(mit_ort)} Kandidat(en)...")
+            for k in mit_ort:
+                ziel = firma_adressen.get(k.get("firma", "")) or k.get("arbeitsort") or ""
+                fz = hole_fahrzeit_daten(ziel, api_key, startpunkt)
+                if fz:
+                    k["fahrzeit"] = fz
+        except Exception as e:
+            print(f"  ⚠️  Fahrzeit-Berechnung übersprungen: {e}")
+
     speichere_json(VORSCHAU_JSON, kandidaten)
 
     print(f"\n{'='*60}")

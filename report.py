@@ -732,18 +732,31 @@ def _vorschau_html() -> str:
     if not kandidaten:
         return ""
 
+    def _fahrzeit_text(k: dict) -> str:
+        fz = k.get("fahrzeit") or {}
+        teile = []
+        if fz.get("auto_min") is not None:
+            km = f" ({fz['auto_km']} km)" if fz.get("auto_km") is not None else ""
+            teile.append(f"🚗 {fz['auto_min']} min{km}")
+        if fz.get("transit_min") is not None:
+            teile.append(f"🚆 {fz['transit_min']} min")
+        return " · ".join(teile) if teile else ""
+
     zeilen = []
     for k in kandidaten:
         url   = _html.escape(k.get("url", ""), quote=True)
         titel = _html.escape(k.get("titel", "") or "(ohne Titel)")
         firma = _html.escape(k.get("firma", ""))
         ort   = _html.escape(k.get("arbeitsort", "") or "–")
+        fahrzeit = _html.escape(_fahrzeit_text(k))
+        fahrzeit_html = f'<div style="flex:1; color:#666;">{fahrzeit}</div>' if fahrzeit else '<div style="flex:1;"></div>'
         zeilen.append(
             f'<div class="vorschau-zeile" data-url="{url}" '
             f'style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid #eee;">'
             f'<div style="flex:2; min-width:200px;"><a href="{url}" target="_blank">{titel} ↗</a></div>'
             f'<div style="flex:1; color:#666;">{firma}</div>'
             f'<div style="flex:1; color:#666;">📍 {ort}</div>'
+            f'{fahrzeit_html}'
             f'<button class="scan-btn" onclick="vorschauBewerten(this)">🔍 Bewerten</button>'
             f'<button class="scan-btn" style="background:#e74c3c;" onclick="vorschauVerwerfen(this)">🗑️</button>'
             f'</div>'
@@ -776,12 +789,21 @@ def _provisorisch_html(stellen_prov: list) -> str:
     (gleiche Karte wie normale Stellen) plus Übernehmen/Verwerfen-Buttons."""
     if not stellen_prov:
         return ""
+    # Fahrzeit aus dem Cache nachreichen – provisorische Stellen sind früh aus der
+    # normalen stellen-Liste ausgeklammert und damit nicht in fahrzeit_daten. Der
+    # extraktor hat sie beim Bewerten aber berechnet und gecacht.
+    try:
+        from db import hole_fahrzeit_cache
+    except Exception:
+        def hole_fahrzeit_cache(_u):
+            return None
     karten = []
     for s in stellen_prov:
         url = _html.escape(s.get("url", ""), quote=True)
         # scanner_status=None unterdrückt die normalen Passend-/Vergeben-Buttons;
         # hier zählen nur Übernehmen/Verwerfen.
-        karte = stelle_zu_html(s, zeige_firma=True, scanner_status=None)
+        karte = stelle_zu_html(s, zeige_firma=True, scanner_status=None,
+                               fahrzeit=hole_fahrzeit_cache(s.get("url", "")))
         karten.append(
             f'<div class="vorschau-prov" data-url="{url}" style="border:2px solid #f0ad4e; border-radius:6px; margin-bottom:12px; padding:6px;">'
             f'<div style="display:flex; gap:8px; margin-bottom:6px;">'

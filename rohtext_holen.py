@@ -23,6 +23,7 @@ Status-Übergänge:
 import argparse
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 BASIS_PFAD   = Path(__file__).parent
@@ -105,10 +106,15 @@ def _extrahiere_ort(page, url: str) -> str | None:
 
 def _url_anpassen(url: str) -> str:
     """Domain-spezifische URL-Umschreibungen für bessere Inhalte."""
-    # Bertrandt onlyfy: Volltext-URL statt Detail-URL
+    # onlyfy-Widget-Job → Volltext-Detailseite. Wichtig: den KORREKTEN Firmen-
+    # Subdomain beibehalten (früher hart bertrandtgroup → 404 bei anderen Firmen
+    # wie Dürr Dental) und die Job-ID ohne Query-Parameter nehmen.
     if "onlyfy.jobs" in url:
-        job_id = url.rstrip("/").split("/")[-1]
-        return f"https://bertrandtgroup.onlyfy.jobs/job/show/{job_id}/full?lang=de&mode=candidate"
+        pfad = url.split("?")[0]
+        m = re.search(r'/job/([a-z0-9]{16,})', pfad)
+        host_m = re.match(r'(https?://[^/]+)', url)
+        if m and host_m:
+            return f"{host_m.group(1)}/job/show/{m.group(1)}/full?lang=de&mode=candidate"
     return url
 
 
@@ -217,6 +223,28 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
         if not schnell:
             klick_cookie_banner(page)
         page.wait_for_timeout(2000)
+
+        # onlyfy-Wrapper mit ?jh=<jobid>: der Hash IST die onlyfy-Job-ID. Der
+        # richtige onlyfy-Subdomain steckt im eingebetteten Widget-iframe – von
+        # dort holen und direkt die Volltext-Detailseite laden (sonst bekäme man
+        # nur die Wrapper-Hülle ohne Stellentext). Generisch für jede onlyfy-Firma.
+        if "jh=" in lade_url and "onlyfy.jobs" not in lade_url:
+            jh = urllib.parse.parse_qs(urllib.parse.urlparse(lade_url).query).get("jh", [""])[0]
+            onlyfy_host = ""
+            for f in page.frames:
+                if "onlyfy.jobs" in (f.url or ""):
+                    mo = re.match(r'(https?://[^/]+)', f.url)
+                    onlyfy_host = mo.group(1) if mo else ""
+                    break
+            if jh and onlyfy_host:
+                detail = f"{onlyfy_host}/job/show/{jh}/full?lang=de&mode=candidate"
+                print(f"  🔎 onlyfy-Wrapper (?jh=) → Detailseite: {detail[:70]}")
+                try:
+                    antwort = page.goto(detail, wait_until="domcontentloaded", timeout=40000)
+                    status = antwort.status if antwort else status
+                    page.wait_for_timeout(2500)
+                except Exception as e:
+                    print(f"  ⚠️  onlyfy-Detailseite nicht ladbar: {e}")
 
         rohtext = page.inner_text("body")
 

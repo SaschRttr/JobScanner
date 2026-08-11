@@ -418,6 +418,19 @@ def vorschau_bewerten():
             })
             _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
             _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+            # Im breiten Scan schon berechnete Fahrzeit in den Cache übernehmen,
+            # damit sie in der Detailansicht sofort da ist (der extraktor
+            # überschreibt sie ggf. mit einem exakteren Wert).
+            fz = kandidat.get("fahrzeit")
+            if fz:
+                _db.speichere_fahrzeit_cache(url, {
+                    "ziel":        kandidat.get("arbeitsort", ""),
+                    "genau":       False,
+                    "auto_min":    fz.get("auto_min"),
+                    "auto_km":     fz.get("auto_km"),
+                    "transit_min": fz.get("transit_min"),
+                    "abgerufen_am": jetzt_str,
+                })
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
