@@ -807,6 +807,34 @@ def _klick_naechste_seite_shadow(page) -> bool:
         return False
 
 
+# Firmen-Karriereseiten binden ihre Stellen oft über ein iframe-Widget eines
+# externen ATS ein (z.B. onlyfy bei Dürr Dental / Bertrandt). Der eigentliche
+# Stellen-Content liegt dann im iframe, nicht auf der Wrapper-Seite. Wird ein
+# solches Widget erkannt, scannt scanne_boerse direkt dessen URL. Erweiterbar.
+_ATS_WIDGET_MUSTER = ("onlyfy.jobs/candidate/widget",)
+
+
+def _finde_ats_widget(page) -> str:
+    """URL eines eingebetteten ATS-Widget-iframes, oder '' wenn keins da ist."""
+    for f in page.frames:
+        u = f.url or ""
+        if any(m in u for m in _ATS_WIDGET_MUSTER):
+            return u
+    return ""
+
+
+def _onlyfy_alle_url(widget_url: str) -> str:
+    """Schreibt eine onlyfy-Widget-URL auf den ajax_list-Endpoint um, der ALLE
+    Stellen auf einmal liefert (display_length hoch) – spart das wiederholte
+    Klicken auf 'WEITERE ANZEIGEN' (onlyfy zeigt sonst nur 10 pro Seite)."""
+    m = re.search(r'(https?://[^/]+)/candidate/widget/([a-z0-9]+)', widget_url)
+    if not m:
+        return widget_url
+    host, cfg = m.group(1), m.group(2)
+    return (f"{host}/candidate/job/ajax_list?widgetConfig={cfg}"
+            f"&display_length=200&page=1&sort=matching&sort_dir=DESC&search=")
+
+
 def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
     name       = firma["name"]
     url_boerse = firma["url"]
@@ -828,6 +856,26 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
     page.wait_for_timeout(3000)
     klick_cookie_banner(page)
+
+    # Eingebettetes ATS-Widget (iframe) automatisch erkennen und direkt dessen
+    # Stellen scannen – die Wrapper-Seite selbst listet keine Stellen (z.B. onlyfy).
+    # Greift auch, wenn direkt die Widget-URL eingegeben wurde (dann alle Stellen
+    # über den ajax_list-Endpoint statt nur die ersten 10).
+    widget_url = url_boerse if any(m in url_boerse for m in _ATS_WIDGET_MUSTER) \
+        else _finde_ats_widget(page)
+    if widget_url:
+        scan_url = _onlyfy_alle_url(widget_url)
+        if scan_url != url_boerse:
+            print(f"  🔎 onlyfy-Widget – scanne alle Stellen direkt: {scan_url[:75]}")
+            try:
+                page.goto(scan_url, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(2500)
+                klick_cookie_banner(page)
+            except Exception as e:
+                print(f"  ⚠️  Widget-URL nicht ladbar, bleibe auf Wrapper-Seite: {e}")
+                scan_url = url_boerse
+        url_boerse = scan_url
+        dom = domain(scan_url)
 
     if any(d in url_boerse for d in ("nokia.com", "oraclecloud.com", "ultipro.com")):
         print("  ⏳ Oracle CX / UltiPro – warte auf Netzwerk-Idle...")
