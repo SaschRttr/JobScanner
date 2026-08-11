@@ -1071,6 +1071,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     ausgeschlossen = []
     gesehen_urls = set()
     gesehen_titel = set()
+    roh = 0               # echte Stellen (eindeutiger Titel) VOR allen Inhalts-Filtern
+    ohne_suchbegriff = 0  # davon wegen fehlendem Suchbegriff verworfen
 
     for link in kandidaten:
         href = link["href"].split("#")[0].rstrip("/") or link["href"]
@@ -1095,6 +1097,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             continue
         gesehen_urls.add(href)
         gesehen_titel.add(titel)
+        roh += 1
 
         standort_aus_text = standort_aus_linktext(zeilen_roh, titel, config)
 
@@ -1102,6 +1105,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
         if not treffer and not ist_pdf_link:
             kein_treffer_merken(name, titel, href)
+            ohne_suchbegriff += 1
             continue
         if not treffer:
             treffer = ["pdf"]
@@ -1119,6 +1123,12 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                          "standort": berechne_standort(standort_aus_text, config["erlaubte_standorte"], config["verbotene_standorte"])})
         print(f"  ✅ {titel[:70]}")
         print(f"     Treffer: {', '.join(treffer)}")
+
+    # Debug-Aufschlüsselung: was findet der Scanner roh, und wie stark filtern
+    # Suchbegriffe bzw. Ausschluss/Standort? (roh = echte Stellen vor allen Filtern)
+    print(f"  📊 [{name}] roh gefunden: {roh}  |  ohne Suchbegriff: {ohne_suchbegriff}"
+          f"  |  ausgeschlossen (Ausschluss/Standort): {len(ausgeschlossen)}"
+          f"  |  passend: {len(gefunden)}")
 
     if not gefunden and not ausgeschlossen:
         print(f"  ℹ️  Keine passenden Stellen.")
