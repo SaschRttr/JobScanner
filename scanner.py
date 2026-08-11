@@ -844,6 +844,20 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     print(f"  Scanne: {name}")
     print(f"{'='*60}")
 
+    # b-ite-ATS (z.B. Vincorion, eta plus) lädt die Stellen per API-Call an
+    # jobs.b-ite.com – nicht im DOM. Die Antwort abfangen und daraus später
+    # direkt die Kandidaten bauen (statt DOM-Links zu scrapen).
+    bite_jobs: list = []
+    def _b_ite_capture(resp):
+        try:
+            if "b-ite.com" in resp.url and "postings/search" in resp.url:
+                jp = (resp.json() or {}).get("jobPostings") or []
+                if jp:
+                    bite_jobs[:] = jp
+        except Exception:
+            pass
+    page.on("response", _b_ite_capture)
+
     try:
         antwort = page.goto(url_boerse, wait_until="domcontentloaded", timeout=45000)
     except Exception as e:
@@ -981,7 +995,15 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         except re.error:
             return False
 
-    if muster:
+    if bite_jobs:
+        # b-ite-API erkannt: Stellen direkt aus der Antwort (Titel + echte Job-URL),
+        # unabhängig von DOM/Heuristik. jobSite (Standort) ist oft leer.
+        kandidaten = [{"href": j.get("url", ""),
+                       "text": j.get("title", ""),
+                       "arbeitsort": j.get("jobSite") or ""}
+                      for j in bite_jobs if j.get("url") and j.get("title")]
+        print(f"  🔎 b-ite-API erkannt – {len(kandidaten)} Stellen direkt aus der API")
+    elif muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
     else:
