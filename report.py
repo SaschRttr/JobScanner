@@ -244,6 +244,9 @@ def _rohtext_fehler_html(stellen: list) -> str:
 # FAHRZEIT (Google Distance Matrix API)
 # =============================================================================
 
+_MAPS_FEHLER_GEZEIGT = False
+
+
 def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None:
     """Fragt Google Distance Matrix API ab (driving + transit). Kein Caching — nur reiner API-Call."""
     if not api_key or not ziel or not startpunkt or api_key == "DEIN_GOOGLE_MAPS_API_KEY":
@@ -262,6 +265,16 @@ def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None
             req = urllib.request.Request(api_url, headers={"User-Agent": "JobScanner/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+            # Top-Level-Fehler (z.B. REQUEST_DENIED bei fehlendem Billing) einmalig
+            # sichtbar machen – sonst verschwindet die Fahrzeit kommentarlos.
+            top = data.get("status")
+            if top and top != "OK":
+                global _MAPS_FEHLER_GEZEIGT
+                if not _MAPS_FEHLER_GEZEIGT:
+                    print(f"  ⚠️  Google Maps API: {top} – {data.get('error_message', '')} "
+                          f"→ Fahrzeit wird nicht angezeigt (Billing/API-Key prüfen)")
+                    _MAPS_FEHLER_GEZEIGT = True
+                return None
             rows = data.get("rows", [])
             if not rows:
                 return None

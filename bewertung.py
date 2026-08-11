@@ -362,6 +362,32 @@ def main():
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
 
+    # Fahrzeit-Backfill: bei einem VOLLEN Lauf (kein --url/--firma) für alle aktiven
+    # Stellen mit Arbeitsort, aber ohne gecachte Fahrzeit nachtragen. Fängt Stellen
+    # nach, deren Google-Abfrage beim Erstfund fehlschlug (z.B. Billing war aus).
+    # Report-Rebuilds rechnen bewusst keine Fahrzeit – daher hier im Scan-Lauf.
+    if args.url is None and args.firma is None:
+        try:
+            from report import aktualisiere_fahrzeit_fuer_stelle
+            from db import hole_fahrzeit_cache
+            firma_adressen = config.get("firma_adressen", {})
+            nachgetragen = 0
+            for s in stellen:
+                if s.get("geloescht_am") or s.get("nicht_passend"):
+                    continue
+                arbeitsort = s.get("arbeitsort") or ""
+                firma = s.get("firma", "")
+                if not arbeitsort and not firma_adressen.get(firma):
+                    continue
+                if hole_fahrzeit_cache(s["url"]) is not None:
+                    continue
+                if aktualisiere_fahrzeit_fuer_stelle(s["url"], firma, arbeitsort, config):
+                    nachgetragen += 1
+            if nachgetragen:
+                print(f"  🚗 Fahrzeit nachgetragen für {nachgetragen} Stelle(n)")
+        except Exception as e:
+            print(f"  ⚠️  Fahrzeit-Backfill fehlgeschlagen: {e}")
+
     print(f"\n{'='*60}")
     print(f"  FERTIG")
     print(f"  Stellen bewertet: {bewertet}")
