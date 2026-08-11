@@ -801,8 +801,11 @@ def _provisorisch_html(stellen_prov: list) -> str:
     for s in stellen_prov:
         url = _html.escape(s.get("url", ""), quote=True)
         # scanner_status=None unterdrückt die normalen Passend-/Vergeben-Buttons;
-        # hier zählen nur Übernehmen/Verwerfen.
-        karte = stelle_zu_html(s, zeige_firma=True, scanner_status=None,
+        # hier zählen nur Übernehmen/Verwerfen. Den "Außerhalb Umkreis"-Grund
+        # ausblenden – breit gesuchte Stellen sind bewusst out-of-area; relevant
+        # sind Fahrzeit + Bewertung, nicht der Standort-Ablehnungsgrund.
+        s_disp = {**s, "nicht_passend": False, "nicht_passend_grund": ""}
+        karte = stelle_zu_html(s_disp, zeige_firma=True, scanner_status=None,
                                fahrzeit=hole_fahrzeit_cache(s.get("url", "")))
         karten.append(
             f'<div class="vorschau-prov" data-url="{url}" style="border:2px solid #f0ad4e; border-radius:6px; margin-bottom:12px; padding:6px;">'

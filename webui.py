@@ -459,6 +459,26 @@ def vorschau_uebernehmen():
     if url not in ausnahme:
         ausnahme.append(url)
         _speichere_ausnahme(ausnahme)
+    # nicht_passend/Standort-Grund aufräumen – die Stelle wird bewusst behalten,
+    # soll also nicht mehr als "außerhalb Umkreis" markiert im Report auftauchen.
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.upsert_stelle({"url": url, "nicht_passend": False, "nicht_passend_grund": ""})
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception:
+        pass
+    # Report neu bauen, damit die übernommene Stelle aus der Provisorisch-Sektion
+    # verschwindet und in der Sammlung erscheint. location.reload() lädt nur die
+    # statische report.html – ohne Rebuild bliebe die Stelle sonst sichtbar.
+    try:
+        import subprocess, os
+        subprocess.run([sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+                       cwd=str(BASIS_PFAD), timeout=180,
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
