@@ -889,10 +889,18 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     # standardmäßig aus (Zu-weit-Checkbox ist per Default aus), Kopfzeile und
     # Filter-Ergebnis wichen dadurch voneinander ab.
     entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7, 11)}
+    # Bewusst übernommene out-of-area-Stellen (Standort-Ausnahme) NICHT in "Zu weit"
+    # verstecken – der Nutzer kennt die Entfernung und will sie trotzdem sehen.
+    try:
+        from utils import standort_ausnahme_urls
+        ausnahme_urls = standort_ausnahme_urls()
+    except Exception:
+        ausnahme_urls = set()
     zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
         and url not in entschieden_urls
+        and url not in ausnahme_urls
     }
 
     # Bewerbungsstatus aus Datenbank laden
