@@ -27,7 +27,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, lade_json, speichere_json, jetzt, domain, berechne_standort, standort_ablehnungsgrund, standort_aus_url
+from utils import lade_config, lade_json, speichere_json, jetzt, domain, berechne_standort, standort_ablehnungsgrund, standort_aus_url, standort_ignoriert_urls
 
 
 # =============================================================================
@@ -216,6 +216,7 @@ def main():
     config         = lade_config()
     erlaubte_orte  = config["erlaubte_standorte"]
     verbotene_orte = config["verbotene_standorte"]
+    provisorisch_urls = standort_ignoriert_urls()
     if not config["api_key"]:
         print("❌ Kein API-Key in config.txt")
         sys.exit(1)
@@ -323,7 +324,12 @@ def main():
         # Linktext lesen) und liegt außerhalb Whitelist/Blacklist → sofort als
         # nicht_passend markieren, statt noch KI-Bewertung dafür zu verschwenden.
         # bewertung.py holt Alt-Fälle zusätzlich nach (Reparatur bei Whitelist-Änderung).
-        np_grund = standort_ablehnungsgrund(arbeitsort, erlaubte_orte, verbotene_orte) if arbeitsort else ""
+        # Provisorische Vorschau-Stellen (breite DE-Suche) dürfen out-of-area sein –
+        # der Standort-Filter wird für sie übersprungen, damit sie bewertet werden.
+        if url in provisorisch_urls:
+            np_grund = ""
+        else:
+            np_grund = standort_ablehnungsgrund(arbeitsort, erlaubte_orte, verbotene_orte) if arbeitsort else ""
         stellen[idx]["nicht_passend"] = bool(np_grund)
         stellen[idx]["nicht_passend_grund"] = np_grund
         if np_grund:

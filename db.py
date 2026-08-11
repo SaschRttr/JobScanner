@@ -356,6 +356,15 @@ def reset_stelle_fuer_neuverarbeitung(url: str):
         """, (url,))
 
 
+def loesche_stelle(url: str) -> None:
+    """Entfernt eine Stelle und alle zugehörigen Datensätze vollständig aus der DB.
+    Genutzt z.B. beim Verwerfen einer provisorisch bewerteten Vorschau-Stelle."""
+    with verbindung() as con:
+        for tabelle in ("stellen", "bewertungen", "bewerbungsstatus",
+                        "status_historie", "fahrzeit_cache"):
+            con.execute(f"DELETE FROM {tabelle} WHERE url = ?", (url,))
+
+
 def status_bei_vergabe(url: str, con) -> int:
     """Bestimmt den korrekten Vergabe-Status anhand der Bewerbungsstufe."""
     row = con.execute(

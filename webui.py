@@ -38,6 +38,7 @@ REPORT_HTML  = BASIS_PFAD / "report.html"
 KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
 LOG_DATEI    = BASIS_PFAD / "scan.log"
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
+VORSCHAU_JSON = BASIS_PFAD / "vorschau_kandidaten.json"
 NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
 PORT         = 5000
 
@@ -279,21 +280,34 @@ def firmen_liste():
 
 @app.route("/firma-testen")
 def firma_testen():
-    """Startet scanner.py --firma <name> und streamt den Output per SSE."""
+    """Startet scanner.py --firma <name> und streamt den Output per SSE.
+
+    Mit ?breit=1: breiter Vorschau-Scan (ganz Deutschland). Läuft NICHT die volle
+    Pipeline, sondern nur scanner.py --vorschau (schreibt vorschau_kandidaten.json,
+    keine DB, keine KI) + report.py, damit die Kandidaten in der Vorschau-Sektion
+    erscheinen. Von dort einzeln per "Übernehmen" in die echte Pipeline.
+    """
     firma = request.args.get("firma", "").strip()
+    breit = request.args.get("breit") == "1"
     if not firma:
         return "Kein firma-Parameter", 400
 
     def stream_firma():
         import subprocess, os
-        pipeline = [
-            [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "vergaben_check.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "extraktor.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "bewertung.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
-        ]
+        if breit:
+            pipeline = [
+                [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma, "--vorschau"],
+                [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+            ]
+        else:
+            pipeline = [
+                [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "vergaben_check.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "extraktor.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "bewertung.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+            ]
         for cmd in pipeline:
             prozess = subprocess.Popen(
                 cmd,
@@ -316,6 +330,192 @@ def firma_testen():
         yield "data: FERTIG\n\n"
 
     return Response(stream_firma(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# =============================================================================
+# BREITE VORSCHAU (ganz Deutschland)
+# =============================================================================
+
+VORSCHAU_PROVISORISCH_JSON = BASIS_PFAD / "vorschau_provisorisch.json"
+STANDORT_AUSNAHME_JSON = BASIS_PFAD / "standort_ausnahme.json"
+
+
+def _lade_ausnahme() -> list:
+    if not STANDORT_AUSNAHME_JSON.exists():
+        return []
+    try:
+        return json.loads(STANDORT_AUSNAHME_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_ausnahme(urls: list) -> None:
+    STANDORT_AUSNAHME_JSON.write_text(
+        json.dumps(urls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _lade_vorschau() -> list:
+    if not VORSCHAU_JSON.exists():
+        return []
+    try:
+        return json.loads(VORSCHAU_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_vorschau(kandidaten: list) -> None:
+    VORSCHAU_JSON.write_text(
+        json.dumps(kandidaten, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _lade_provisorisch() -> list:
+    if not VORSCHAU_PROVISORISCH_JSON.exists():
+        return []
+    try:
+        return json.loads(VORSCHAU_PROVISORISCH_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_provisorisch(urls: list) -> None:
+    VORSCHAU_PROVISORISCH_JSON.write_text(
+        json.dumps(urls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.route("/vorschau-bewerten", methods=["POST"])
+def vorschau_bewerten():
+    """Legt einen Vorschau-Kandidaten PROVISORISCH in der DB an (Status 1) und merkt
+    ihn als provisorisch vor. Die eigentliche Bewertung (Rohtext→Extraktion→Bewertung)
+    startet das Frontend danach über /stelle-einzeln-stream. Provisorische Stellen
+    bleiben aus den Normalsektionen des Reports ausgeblendet, bis sie übernommen werden."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+
+    kandidaten = _lade_vorschau()
+    kandidat = next((k for k in kandidaten if k.get("url") == url), None)
+    if not kandidat:
+        return jsonify({"ok": False, "fehler": "Kandidat nicht in Vorschau"}), 404
+
+    from datetime import datetime
+    jetzt_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.erstelle_schema()
+        if not any(s.get("url") == url for s in _db.lade_alle_stellen()):
+            _db.upsert_stelle({
+                "url":         url,
+                "firma":       kandidat.get("firma", "") or "Unbekannt",
+                "titel":       kandidat.get("titel", "") or "(Vorschau)",
+                "treffer":     kandidat.get("treffer", []),
+                "arbeitsort":  kandidat.get("arbeitsort", ""),
+                "gefunden_am": jetzt_str,
+                "neu":         True,
+                "status":      1,
+            })
+            _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+            _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    prov = _lade_provisorisch()
+    if url not in prov:
+        prov.append(url)
+        _speichere_provisorisch(prov)
+    _speichere_vorschau([k for k in kandidaten if k.get("url") != url])
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-uebernehmen", methods=["POST"])
+def vorschau_uebernehmen():
+    """Übernimmt eine provisorisch bewertete Stelle endgültig: entfernt nur die
+    provisorisch-Markierung, sodass sie zur normalen Stelle wird. Die bereits
+    berechnete Bewertung bleibt erhalten – es wird NICHT neu bewertet."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+    prov = _lade_provisorisch()
+    _speichere_provisorisch([u for u in prov if u != url])
+    # Dauerhafte Standort-Ausnahme setzen, damit der nächste Scan die (out-of-area)
+    # Stelle nicht wieder wegen des Standorts ausblendet (bereinige_verbotene_standorte).
+    ausnahme = _lade_ausnahme()
+    if url not in ausnahme:
+        ausnahme.append(url)
+        _speichere_ausnahme(ausnahme)
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-verwerfen", methods=["POST"])
+def vorschau_verwerfen():
+    """Verwirft einen Kandidaten oder eine provisorisch bewertete Stelle:
+    - Kandidat (noch nicht in DB): nur aus der Vorschau-Liste entfernen.
+    - Provisorisch bewertete Stelle: aus der DB löschen + Markierung entfernen."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+
+    _speichere_vorschau([k for k in _lade_vorschau() if k.get("url") != url])
+
+    prov = _lade_provisorisch()
+    if url in prov:
+        _speichere_provisorisch([u for u in prov if u != url])
+        try:
+            sys.path.insert(0, str(BASIS_PFAD))
+            import db as _db
+            _db.loesche_stelle(url)
+            _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+            _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+        except Exception as e:
+            return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-leeren", methods=["POST"])
+def vorschau_leeren():
+    """Leert die komplette Vorschau-Kandidatenliste (nicht die provisorisch bewerteten)."""
+    _speichere_vorschau([])
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-scannen")
+def vorschau_scannen():
+    """Breiter Vorschau-Scan (ganz Deutschland) für eine FREI EINGEGEBENE Karriere-URL.
+    Nutzt bewusst nicht die config-URL (die oft Standort-Parameter enthält), sondern
+    genau die eingegebene URL. Streamt den Output per SSE."""
+    url  = request.args.get("url", "").strip()
+    name = request.args.get("name", "").strip() or "Manuell"
+    if not url:
+        return "Kein url-Parameter", 400
+
+    def stream():
+        import subprocess, os
+        pipeline = [
+            [sys.executable, str(BASIS_PFAD / "scanner.py"), "--vorschau",
+             "--vorschau-url", url, "--vorschau-name", name],
+            [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        ]
+        for cmd in pipeline:
+            prozess = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", cwd=str(BASIS_PFAD),
+                env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+            )
+            for zeile in prozess.stdout:
+                zeile = zeile.rstrip("\n")
+                if zeile:
+                    yield f"data: {zeile}\n\n"
+            prozess.wait()
+            if prozess.returncode != 0:
+                yield f"data: ❌ {cmd[1]} fehlgeschlagen (Code {prozess.returncode})\n\n"
+                break
+        yield "data: FERTIG\n\n"
+
+    return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
@@ -730,6 +930,13 @@ def stelle_einfuegen():
         _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    # Bewusst manuell hinzugefügte Stellen dauerhaft vom Standortfilter ausnehmen –
+    # sie sollen immer durch die Pipeline laufen und bleiben, egal wo sie liegen.
+    ausnahme = _lade_ausnahme()
+    if stellen_url not in ausnahme:
+        ausnahme.append(stellen_url)
+        _speichere_ausnahme(ausnahme)
 
     return jsonify({"ok": True})
 

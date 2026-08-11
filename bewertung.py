@@ -24,7 +24,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, standort_ablehnungsgrund, effektiver_score
+from utils import lade_config, standort_ablehnungsgrund, effektiver_score, standort_ignoriert_urls
 
 
 # =============================================================================
@@ -260,12 +260,17 @@ def main():
 
     erlaubte  = config["erlaubte_standorte"]
     verbotene = config["verbotene_standorte"]
+    provisorisch_urls = standort_ignoriert_urls()
 
     def standort_grund(s: dict) -> str:
         # Deckt beide Fälle ab: Blacklist-Treffer UND (bekannter) Standort
         # außerhalb der Whitelist – nicht nur die Blacklist wie zuvor. Sonst
         # bewertet die KI Stellen, deren Arbeitsort erst hier (durch
         # extraktor.py) bekannt wird und außerhalb des Umkreises liegt.
+        # Provisorische Vorschau-Stellen (breite DE-Suche) sind ausgenommen –
+        # sie sollen ja gerade out-of-area bewertet werden.
+        if s.get("url") in provisorisch_urls:
+            return ""
         arbeitsort = s.get("arbeitsort") or ""
         if not arbeitsort:
             return ""

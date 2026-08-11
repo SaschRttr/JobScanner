@@ -258,6 +258,150 @@
         };
     }
 
+    // Breite Suche (ganz Deutschland) über eine frei eingegebene Karriere-URL.
+    function breitScannen() {
+        const urlEl  = document.getElementById('breit-url');
+        const nameEl = document.getElementById('breit-name');
+        const status = document.getElementById('breit-status');
+        const output = document.getElementById('breit-output');
+        const url    = urlEl ? urlEl.value.trim() : '';
+        const name   = nameEl ? nameEl.value.trim() : '';
+        if (!url) { if (status) status.textContent = '⚠️ Bitte eine Karriere-URL eingeben'; return; }
+
+        if (status) status.textContent = '⏳ Breite Suche (ganz Deutschland)... das kann etwas dauern.';
+        if (output) { output.style.display = 'block'; output.textContent = ''; }
+
+        let ziel = '/vorschau-scannen?url=' + encodeURIComponent(url);
+        if (name) ziel += '&name=' + encodeURIComponent(name);
+        const quelle = new EventSource(ziel);
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                if (status) status.textContent = '✅ Fertig – lade Vorschau...';
+                setTimeout(() => location.reload(), 700);
+                return;
+            }
+            if (output) { output.textContent += e.data + '\n'; output.scrollTop = output.scrollHeight; }
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            if (status) status.textContent = '❌ Verbindungsfehler';
+        };
+    }
+
+    // --- Breite Vorschau (ganz Deutschland) -------------------------------
+    // "Bewerten": Kandidat provisorisch in die DB legen und die Pipeline
+    // (Rohtext→Extraktion→KI) starten. Danach erscheint er als provisorisch
+    // bewertete Stelle mit voller Detailansicht (Übernehmen/Verwerfen).
+    async function vorschauBewerten(btn) {
+        const zeile  = btn.closest('.vorschau-zeile');
+        const url    = zeile ? zeile.getAttribute('data-url') : null;
+        const status = document.getElementById('vorschau-status');
+        if (!url) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/vorschau-bewerten', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                btn.disabled = false; btn.textContent = '🔍 Bewerten';
+                return;
+            }
+            if (zeile) zeile.remove();
+            // Live-Log sichtbar machen, damit man den Fortschritt sieht.
+            let log = document.getElementById('vorschau-log');
+            if (!log && status) {
+                status.innerHTML = '<div style="font-weight:bold; margin-bottom:4px;">⏳ Bewerte Stelle (Rohtext → Extraktion → KI)...</div>'
+                    + '<pre id="vorschau-log" style="max-height:220px; overflow-y:auto; background:#111; color:#0f0; padding:8px; border-radius:4px; font-size:0.8em; white-space:pre-wrap;"></pre>';
+                log = document.getElementById('vorschau-log');
+            }
+            const quelle = new EventSource('/stelle-einzeln-stream?url=' + encodeURIComponent(url));
+            quelle.onmessage = function(e) {
+                if (e.data === 'FERTIG') {
+                    quelle.close();
+                    if (log) log.textContent += '\n✅ Fertig – lade Detailansicht...\n';
+                    setTimeout(() => location.reload(), 900);
+                    return;
+                }
+                if (log) { log.textContent += e.data + '\n'; log.scrollTop = log.scrollHeight; }
+            };
+            quelle.onerror = function() {
+                quelle.close();
+                if (log) log.textContent += '\n⚠️ Verbindung zur Pipeline unterbrochen.\n';
+            };
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            btn.disabled = false; btn.textContent = '🔍 Bewerten';
+        }
+    }
+
+    // "Übernehmen": provisorische Stelle endgültig behalten (nur Markierung
+    // entfernen, KEINE zweite Bewertung).
+    async function vorschauUebernehmen(btn) {
+        const karte = btn.closest('.vorschau-prov');
+        const url   = karte ? karte.getAttribute('data-url') : null;
+        if (!url) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/vorschau-uebernehmen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                btn.disabled = false; btn.textContent = '✅ Übernehmen';
+                return;
+            }
+            location.reload();
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            btn.disabled = false; btn.textContent = '✅ Übernehmen';
+        }
+    }
+
+    // "Verwerfen": Kandidat (nur aus Liste) ODER provisorische Stelle (aus DB löschen).
+    async function vorschauVerwerfen(btn) {
+        const el  = btn.closest('.vorschau-zeile') || btn.closest('.vorschau-prov');
+        const url = el ? el.getAttribute('data-url') : null;
+        if (!url) return;
+        const istProv = el.classList.contains('vorschau-prov');
+        if (istProv && !confirm('Provisorisch bewertete Stelle verwerfen? Sie wird aus der Datenbank gelöscht.')) return;
+        try {
+            const res = await fetch(SERVER + '/vorschau-verwerfen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (data.ok && el) el.remove();
+            else if (!data.ok) alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+        } catch(e) { alert('Server nicht erreichbar'); }
+    }
+
+    async function vorschauLeeren() {
+        if (!confirm('Komplette Vorschau leeren?')) return;
+        try {
+            const res = await fetch(SERVER + '/vorschau-leeren', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const data = await res.json();
+            if (data.ok) {
+                const box = document.getElementById('vorschau-box');
+                if (box) box.remove();
+            }
+        } catch(e) { alert('Server nicht erreichbar'); }
+    }
+
     function scanStarten() {
         const btn     = document.getElementById('scan-start-btn');
         const stopBtn = document.getElementById('scan-stop-btn');

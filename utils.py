@@ -111,6 +111,40 @@ def lade_json(pfad: Path, standard):
     return standard
 
 
+_VORSCHAU_PROVISORISCH_PFAD = Path(__file__).parent / "vorschau_provisorisch.json"
+_STANDORT_AUSNAHME_PFAD     = Path(__file__).parent / "standort_ausnahme.json"
+
+
+def provisorische_vorschau_urls() -> set:
+    """URLs der provisorisch bewerteten Vorschau-Stellen (breite DE-Suche). Diese
+    umgehen den Standort-Filter in extraktor.py/bewertung.py – sie sollen ja gerade
+    außerhalb des Umkreises bewertet werden können."""
+    if not _VORSCHAU_PROVISORISCH_PFAD.exists():
+        return set()
+    try:
+        return set(json.loads(_VORSCHAU_PROVISORISCH_PFAD.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def standort_ausnahme_urls() -> set:
+    """URLs übernommener out-of-area-Stellen, die DAUERHAFT vom Standortfilter
+    ausgenommen sind (beim Übernehmen einer provisorischen Vorschau-Stelle gesetzt).
+    Ohne diese Ausnahme würde scanner.py sie beim nächsten Scan wieder ausblenden."""
+    if not _STANDORT_AUSNAHME_PFAD.exists():
+        return set()
+    try:
+        return set(json.loads(_STANDORT_AUSNAHME_PFAD.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def standort_ignoriert_urls() -> set:
+    """Alle URLs, für die der Standortfilter übersprungen wird: provisorisch
+    bewertete Vorschau-Stellen UND dauerhaft übernommene Ausnahmen."""
+    return provisorische_vorschau_urls() | standort_ausnahme_urls()
+
+
 def speichere_json(pfad: Path, daten):
     pfad.parent.mkdir(parents=True, exist_ok=True)
     pfad.write_text(json.dumps(daten, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -147,6 +181,50 @@ def text_matched(text: str, begriffe: list) -> list:
 
 def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
     return bool(text_matched(titel, begriffe))
+
+
+# Auslands-Marker für den "ganz Deutschland"-Modus des breiten Firmen-Scans.
+# Anders als die config-Blacklist (die auch deutsche Städte wie Hamburg wegen
+# Entfernung sperrt) fängt diese Liste NUR Ausland ab – deutsche Orte passieren.
+# Bewusst unscharf (Städte nur mit Land im Text erkennbar); der Mensch hakt die
+# Vorschau in Stufe 2 nach. Alle Einträge in normalisierter Form (siehe
+# normalisiere_ort: lowercase + ä->ae/ö->oe/ü->ue/ß->ss). Erweiterbar.
+AUSLAND_MARKER = [
+    # Länder (mehrsprachig)
+    "frankreich", "france",
+    "schweiz", "switzerland", "suisse", "svizzera",
+    "oesterreich", "austria",
+    "italien", "italy", "italia",
+    "spanien", "spain", "espana",
+    "niederlande", "netherlands", "nederland", "holland",
+    "belgien", "belgium", "belgique",
+    "polen", "poland", "polska",
+    "tschechien", "czech", "czechia",
+    "ungarn", "hungary",
+    "rumaenien", "romania",
+    "schweden", "sweden",
+    "daenemark", "denmark",
+    "norwegen", "norway",
+    "finnland", "finland",
+    "portugal",
+    "griechenland", "greece",
+    "irland", "ireland",
+    "vereinigtes koenigreich", "united kingdom", "great britain",
+    "england", "scotland", "wales",
+    "usa", "united states", "vereinigte staaten",
+    "kanada", "canada",
+    "china", "shanghai", "shenzhen", "beijing",
+    "indien", "india", "bangalore", "bengaluru", "pune", "hyderabad", "chennai",
+    "japan", "korea", "singapur", "singapore", "malaysia", "thailand",
+    "brasilien", "brazil", "mexiko", "mexico",
+    "tuerkei", "turkey", "turkiye",
+    "slowakei", "slovakia", "slowenien", "slovenia",
+    "kroatien", "croatia", "bulgarien", "bulgaria",
+    "luxemburg", "luxembourg",
+    "russland", "russia",
+    # Einzelne, eindeutig ausländische Städte (z.B. bekannte Auslandsstandorte)
+    "santa rosa", "glattbrugg", "bulle", "colmar", "ensisheim", "nussbaumen",
+]
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:

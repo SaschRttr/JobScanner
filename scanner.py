@@ -33,7 +33,7 @@ from utils import (
     lade_config, lade_json, speichere_json, jetzt, domain,
     berechne_standort, standort_ablehnungsgrund, ablehnungsgrund,
     text_matched, klick_cookie_banner, normalisiere_ort, effektiver_score,
-    ist_ausgeschlossen,
+    ist_ausgeschlossen, AUSLAND_MARKER, standort_ignoriert_urls,
 )
 from bewertung import status_fuer_score
 from browser import (
@@ -64,6 +64,7 @@ BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 STRUKTUREN_JSON = BASIS_PFAD / "strukturen.json"
 SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
 KEIN_TREFFER_JSON = BASIS_PFAD / "kein_treffer.json"
+VORSCHAU_JSON   = BASIS_PFAD / "vorschau_kandidaten.json"
 
 # Pro Firma: {"ok": bool, "fehler": str|None, "zeitpunkt": "YYYY-MM-DD HH:MM"}
 # Wird am Ende von main() nach SCAN_STATUS_JSON geschrieben, report.py zeigt es an.
@@ -95,6 +96,12 @@ class SessionGesperrtFehler(Exception):
 
 MIN_TITEL_LAENGE = 10
 
+# Findet die Link-Heuristik weniger als so viele Job-Links, wird zusätzlich die
+# KI um ein Muster gebeten (eine Karriereseite listet praktisch immer mehr
+# Stellen; wenige Treffer heißen meist, dass die Heuristik nur beiläufige Links
+# erwischt und die echten Stellen ein anderes Muster haben).
+MIN_HEURISTIK_LINKS = 5
+
 JOB_LINK_MUSTER = [
     "/job/", "/jobs/", "/job-", "/offer/", "/offer-redirect/",
     "/details/", "/jobboerse/", "/job-detail/", "/stelle/", "/stellen/",
@@ -102,6 +109,7 @@ JOB_LINK_MUSTER = [
     "/karriere/lesen/", "/FolderDetail/", "ac=jobad", "jobId=",
     "/R0", "251563-", "ashbyhq.com/sereact/", "dvinci-hr.com/de/jobs/",
     "zsw-bw-jobs.de/job-", "/careers/job/", "/career/job/",
+    "/j/karriere/offene-stellen/", "/j/careers/job-vacancies/",
 ]
 
 _FORM_MUSTER = [r'-de-f\d+', r'/apply/', r'/bewerben$', r'/application/']
@@ -766,6 +774,39 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
 # PLAYWRIGHT SCANNER
 # =============================================================================
 
+# Klickt die "nächste Seite" einer Sitecore-patternlib-Paginierung. Deren
+# Controls liegen in einem Shadow-Root (Web-Component) und sind für Playwright
+# zwar auffindbar, aber nicht klickbar (Actionability-Timeout) – daher der
+# JS-Klick. Sucht die aktive Seitenzahl und klickt die nächsthöhere. Sprach-
+# unabhängig (arbeitet über die Zahlen, nicht über "Weiter"/"Next"-Labels).
+_SHADOW_NEXT_JS = r"""() => {
+    let active = null;
+    const items = [];
+    function walk(root) {
+        root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) walk(el.shadowRoot); });
+        root.querySelectorAll('a.pagination-item, a[class*="pagination-item"]').forEach(a => {
+            const n = parseInt((a.innerText || '').trim(), 10);
+            if (!isNaN(n)) {
+                items.push([n, a]);
+                if ((a.className || '').includes('active')) active = n;
+            }
+        });
+    }
+    walk(document);
+    if (active === null) return false;
+    const naechste = items.find(([n]) => n === active + 1);
+    if (naechste) { naechste[1].click(); return true; }
+    return false;
+}"""
+
+
+def _klick_naechste_seite_shadow(page) -> bool:
+    try:
+        return bool(page.evaluate(_SHADOW_NEXT_JS))
+    except Exception:
+        return False
+
+
 def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
     name       = firma["name"]
     url_boerse = firma["url"]
@@ -852,9 +893,13 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     while seite < MAX_SEITEN:
         try:
             next_el = page.query_selector(_NEXT_SELECTOR)
-            if not next_el or not next_el.is_visible() or not next_el.is_enabled():
+            if next_el and next_el.is_visible() and next_el.is_enabled():
+                next_el.click()
+            elif not _klick_naechste_seite_shadow(page):
+                # Weder Standard-"nächste"-Button noch Shadow-DOM-Paginierung
+                # (z.B. Sitecore-patternlib, deren Controls in einem Shadow-Root
+                # liegen und nicht klickbar sind – daher JS-Klick) → Ende.
                 break
-            next_el.click()
             page.wait_for_timeout(2500)
             for _ in range(3):
                 page.evaluate("window.scrollBy(0, 1200)")
@@ -893,21 +938,46 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
     else:
         kandidaten = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
-        if kandidaten:
+        schon_ki_geprueft = bool(strukturen.get(dom, {}).get("ki_geprueft"))
+
+        if len(kandidaten) >= MIN_HEURISTIK_LINKS or (kandidaten and schon_ki_geprueft):
             print(f"  ✅ Heuristik: {len(kandidaten)} Job-Links erkannt")
+        elif schon_ki_geprueft:
+            # Domain wurde schon einmal ergebnislos der KI vorgelegt → nicht erneut
+            # fragen (spart Tokens); nichts gefunden heißt hier wirklich nichts.
+            print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
+            status_merken(name, False, "Kein Job-Link-Muster erkannt")
+            return [], []
         else:
-            print(f"  🤖 Unbekannte Domain – frage KI...")
+            # Heuristik findet verdächtig wenig (oder nichts) → KI um ein Muster
+            # bitten und nur das STRIKT bessere Ergebnis übernehmen. Das fängt
+            # Seiten ab, auf denen ein paar beiläufige Links die Heuristik "erfüllen",
+            # die echten Stellen aber ein anderes Muster haben. Der >-Vergleich
+            # schützt eine funktionierende Heuristik, die 0.6-Grenze vor zu breiten
+            # (Navigation mitfangenden) KI-Mustern.
+            print(f"  🤖 Heuristik nur {len(kandidaten)} Link(s) – frage KI...")
             alle_hrefs = list({l["href"] for l in alle_links if len(l["href"]) > 30})
-            muster = ki_lerne_muster(dom, alle_hrefs, config["api_key"])
-            if muster:
-                print(f"  ✅ KI-Muster gelernt: '{muster}'")
-                strukturen.setdefault(dom, {})["link_muster"] = muster
+            ki_muster = ki_lerne_muster(dom, alle_hrefs, config["api_key"])
+            ki_kandidaten = ([l for l in alle_links if muster_trifft(l["href"], ki_muster)]
+                             if ki_muster else [])
+            zu_breit = len(ki_kandidaten) > 0.6 * max(len(alle_links), 1)
+            if ki_muster and len(ki_kandidaten) > len(kandidaten) and not zu_breit:
+                print(f"  ✅ KI-Muster gelernt: '{ki_muster}' ({len(ki_kandidaten)} Links)")
+                strukturen.setdefault(dom, {})["link_muster"] = ki_muster
                 strukturen.setdefault(dom, {})["gelernt_am"] = jetzt()
-                kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
+                kandidaten = ki_kandidaten
             else:
-                print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
-                status_merken(name, False, "Kein Job-Link-Muster erkannt")
-                return [], []
+                # Kein besseres KI-Muster. Domain merken (nur wenn die Seite geladen
+                # war, sonst könnte ein transienter Fehler die KI dauerhaft aussperren),
+                # damit wir nicht bei jedem Lauf erneut die KI bemühen.
+                if len(alle_links) >= 20:
+                    strukturen.setdefault(dom, {})["ki_geprueft"] = jetzt()
+                if kandidaten:
+                    print(f"  ✅ Heuristik: {len(kandidaten)} Job-Links (KI kein besseres Muster)")
+                else:
+                    print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
+                    status_merken(name, False, "Kein Job-Link-Muster erkannt")
+                    return [], []
 
     rd = root_domain(url_boerse)
     vor_filter = len(kandidaten)
@@ -1028,9 +1098,15 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, erlaubte: list,
     if not erlaubte and not verbotene:
         return 0
 
+    ignoriert = standort_ignoriert_urls()
     zu_entfernen = []
     gruende = {}
     for stelle in stellen:
+        # Übernommene out-of-area-Stellen (Standort-Ausnahme) sowie provisorische
+        # Vorschau-Stellen dauerhaft durchlassen – sie sollen ja gerade außerhalb
+        # des Umkreises bleiben.
+        if stelle.get("url") in ignoriert:
+            continue
         arbeitsort = stelle.get("arbeitsort") or ""
         if not arbeitsort:
             # Kein Arbeitsort bekannt → kein Filter (sicher durchlassen)
@@ -1107,11 +1183,141 @@ def bereinige_ausschlussbegriffe(stellen: list, bekannte: dict, begriffe: list) 
 # HAUPTPROGRAMM
 # =============================================================================
 
+def main_vorschau(nur_firma: str | None = None, direkt_url: str | None = None,
+                  direkt_name: str | None = None):
+    """Breiter Scan (ganz Deutschland).
+
+    Findet Stellen wie der normale Scan, aber:
+    - Standort-Regel = "ganz Deutschland" (Whitelist aus, nur Ausland raus),
+    - schreibt NICHT in die DB, sondern nach VORSCHAU_JSON,
+    - keine KI, keine Pipeline. Bereits bekannte URLs werden ausgefiltert.
+    Die Vorschau-Datei wird bei jedem Lauf komplett neu geschrieben.
+
+    Mit ``direkt_url`` wird genau diese (frei eingegebene) Karriere-URL per
+    Playwright gescannt – NICHT die config-URL der Firma. Das ist der Normalfall
+    für die breite Suche, weil config-URLs oft Standort-Parameter (z.B. nur
+    Stuttgart) enthalten, die "ganz Deutschland" aushebeln würden.
+    """
+    print("\n" + "=" * 60)
+    print("  SCANNER  –  Breiter Vorschau-Scan (ganz Deutschland)")
+    if direkt_url:
+        print(f"  Direkt-URL: {direkt_url[:70]}")
+    elif nur_firma:
+        print(f"  Filter: nur '{nur_firma}'")
+    print("=" * 60)
+
+    config = lade_config()
+    # "Ganz Deutschland": Whitelist ignorieren, nur Ausland als verboten werten.
+    config["erlaubte_standorte"] = []
+    config["verbotene_standorte"] = list(AUSLAND_MARKER)
+
+    if direkt_url:
+        # Freie URL direkt scannen (Playwright), config-Firmen ignorieren.
+        api_firmen = []
+        config["firmen"] = [{"name": (direkt_name or "Manuell").strip() or "Manuell",
+                             "url": direkt_url}]
+    else:
+        api_firmen = lade_api_firmen(config)
+        if nur_firma:
+            api_firmen       = [f for f in api_firmen        if f["name"].lower() == nur_firma.lower()]
+            config["firmen"] = [f for f in config["firmen"]  if f["name"].strip().lower() == nur_firma.lower()]
+
+    strukturen: dict = lade_json(STRUKTUREN_JSON, {})
+
+    sys.path.insert(0, str(BASIS_PFAD))
+    from db import lade_bekannte_dict
+    bekannte_urls = set(lade_bekannte_dict().keys())
+
+    kandidaten: list = []
+    gesehen: set = set()
+    ts = jetzt()
+
+    def sammle(treffer_liste: list):
+        for t in treffer_liste:
+            url = t.get("url")
+            if not url or url in gesehen or url in bekannte_urls:
+                continue
+            gesehen.add(url)
+            kandidaten.append({
+                "firma":       t.get("firma", ""),
+                "titel":       t.get("titel", ""),
+                "url":         url,
+                "arbeitsort":  t.get("arbeitsort", ""),
+                "treffer":     t.get("treffer", []),
+                "gefunden_am": ts,
+            })
+
+    # API-Firmen
+    for api_firma in api_firmen:
+        try:
+            if api_firma.get("typ") == "workday":
+                treffer_liste, _ = scanne_workday_firma(api_firma, bekannte_urls, config)
+            elif api_firma.get("typ") == "hr4you":
+                treffer_liste, _ = scanne_hr4you_firma(api_firma, bekannte_urls, config)
+            elif api_firma.get("typ") == "html_tabelle":
+                treffer_liste, _ = scanne_html_tabelle_firma(api_firma, bekannte_urls, config)
+            else:
+                treffer_liste, _ = scanne_api_firma(api_firma, bekannte_urls, config)
+        except Exception as e:
+            print(f"\n❌ API-Fehler bei {api_firma['name']}: {e}")
+            continue
+        sammle(treffer_liste)
+
+    # Playwright-Firmen
+    if config["firmen"]:
+        with sync_playwright() as p:
+            browser = starte_browser(p)
+            context = neuer_context(browser)
+            for firma in config["firmen"]:
+                page = neue_seite(context)
+                try:
+                    treffer_liste, _ = scanne_boerse(page, firma, strukturen, config)
+                except SessionGesperrtFehler as e:
+                    print(f"  🔄 HTTP {e.status} – frische Session, zweiter Versuch...")
+                    page.close()
+                    context.close()
+                    context = neuer_context(browser)
+                    page = neue_seite(context)
+                    try:
+                        treffer_liste, _ = scanne_boerse(page, firma, strukturen, config)
+                    except Exception as e2:
+                        print(f"\n❌ Fehler bei {firma['name']}: {e2}")
+                        page.close()
+                        continue
+                except Exception as e:
+                    print(f"\n❌ Fehler bei {firma['name']}: {e}")
+                    page.close()
+                    continue
+                page.close()
+                sammle(treffer_liste)
+            browser.close()
+
+    speichere_json(VORSCHAU_JSON, kandidaten)
+
+    print(f"\n{'='*60}")
+    print(f"  FERTIG (Vorschau)")
+    print(f"  Kandidaten (neu, DE): {len(kandidaten)}")
+    print(f"  Geschrieben nach:     {VORSCHAU_JSON.name}")
+    print(f"{'='*60}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Job-URLs entdecken (Schritt 1a)")
     parser.add_argument("--firma", default=None, help="Nur diese Firma scannen (Name)")
+    parser.add_argument("--vorschau", action="store_true",
+                        help="Breiter Vorschau-Scan (ganz Deutschland), schreibt nur "
+                             "vorschau_kandidaten.json statt in die DB.")
+    parser.add_argument("--vorschau-url", default=None,
+                        help="Freie Karriere-URL für den breiten Vorschau-Scan "
+                             "(statt der config-URL einer Firma).")
+    parser.add_argument("--vorschau-name", default=None,
+                        help="Firmenname für die Direkt-URL des breiten Vorschau-Scans.")
     args = parser.parse_args()
     nur_firma = args.firma.strip() if args.firma else None
+
+    if args.vorschau:
+        main_vorschau(nur_firma, args.vorschau_url, args.vorschau_name)
+        return
 
     print("\n" + "=" * 60)
     print("  SCANNER  –  Schritt 1a: Job-URLs entdecken")

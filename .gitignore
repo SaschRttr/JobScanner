@@ -12,6 +12,9 @@ report.html
 kein_treffer.html
 kein_treffer.json
 neue_suchbegriffe.json
+vorschau_kandidaten.json
+vorschau_provisorisch.json
+standort_ausnahme.json
 jobscanner.db
 log.txt
 

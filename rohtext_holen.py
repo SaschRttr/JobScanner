@@ -52,8 +52,14 @@ _WARTE_MS: dict[str, int] = {
     "jobs.infineon.com":         6000,
     "careers.te.com":            5000,
     "wd3.myworkdayjobs.com":     6000,
+    "liebherr.com":              1500,
 }
 _WARTE_MS_DEFAULT = 4000
+
+# Domains, die serverseitig gerendert werden, aber Tracking (usercentrics o.ä.)
+# haben, das networkidle nie erreichen lässt. Für sie: direkt domcontentloaded,
+# kein Cookie-Banner-Loop (der Text steht ohnehin im DOM). Spart ~20 s pro Seite.
+_SCHNELL_LADEN_DOMAINS = ("liebherr.com",)
 
 
 def _warte_fuer(url: str) -> int:
@@ -181,13 +187,25 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
     lade_url = _url_anpassen(url)
     warte_ms  = _warte_fuer(lade_url)
 
+    schnell = any(d in lade_url for d in _SCHNELL_LADEN_DOMAINS)
+
     try:
         antwort = None
-        try:
-            antwort = page.goto(lade_url, wait_until="networkidle", timeout=45000)
-        except Exception:
+        if schnell:
+            # SSR-Seiten mit Tracking (z.B. Liebherr/usercentrics): networkidle wird
+            # NIE erreicht und der Cookie-Banner blockiert den body-Text nicht (der
+            # Stellentext ist serverseitig schon im DOM). Direkt domcontentloaded,
+            # kurze Wartezeit, KEIN Cookie-Banner-Loop → spart ~20 s pro Seite.
             antwort = page.goto(lade_url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(4000)
+        else:
+            try:
+                # Kurzes networkidle-Timeout: tracking-lastige Seiten erreichen
+                # networkidle NIE und würden sonst die vollen Sekunden warten (sieht
+                # eingefroren aus). Nach 12 s auf domcontentloaded zurückfallen.
+                antwort = page.goto(lade_url, wait_until="networkidle", timeout=12000)
+            except Exception:
+                antwort = page.goto(lade_url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(4000)
 
         status = antwort.status if antwort else None
 
@@ -196,7 +214,8 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
             return None, status
 
         page.wait_for_timeout(warte_ms)
-        klick_cookie_banner(page)
+        if not schnell:
+            klick_cookie_banner(page)
         page.wait_for_timeout(2000)
 
         rohtext = page.inner_text("body")

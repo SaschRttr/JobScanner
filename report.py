@@ -42,6 +42,8 @@ from bewertung import empfehlung_fuer_score
 
 BASIS_PFAD      = Path(__file__).parent
 STELLEN_JSON    = BASIS_PFAD / "stellen.json"
+VORSCHAU_JSON   = BASIS_PFAD / "vorschau_kandidaten.json"
+VORSCHAU_PROVISORISCH_JSON = BASIS_PFAD / "vorschau_provisorisch.json"
 BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 REPORT_PFAD     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
@@ -705,6 +707,85 @@ CSS = (ASSETS_DIR / "report.css").read_text(encoding="utf-8")
 JS  = (ASSETS_DIR / "report.js").read_text(encoding="utf-8")
 
 
+def _vorschau_html() -> str:
+    """Rendert die Sektion 'Breit gefunden (DE) – Vorschau' aus vorschau_kandidaten.json.
+    Diese Kandidaten sind noch NICHT in der DB; per Button einzeln übernehmbar."""
+    if not VORSCHAU_JSON.exists():
+        return ""
+    try:
+        kandidaten = json.loads(VORSCHAU_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not kandidaten:
+        return ""
+
+    zeilen = []
+    for k in kandidaten:
+        url   = _html.escape(k.get("url", ""), quote=True)
+        titel = _html.escape(k.get("titel", "") or "(ohne Titel)")
+        firma = _html.escape(k.get("firma", ""))
+        ort   = _html.escape(k.get("arbeitsort", "") or "–")
+        zeilen.append(
+            f'<div class="vorschau-zeile" data-url="{url}" '
+            f'style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid #eee;">'
+            f'<div style="flex:2; min-width:200px;"><a href="{url}" target="_blank">{titel} ↗</a></div>'
+            f'<div style="flex:1; color:#666;">{firma}</div>'
+            f'<div style="flex:1; color:#666;">📍 {ort}</div>'
+            f'<button class="scan-btn" onclick="vorschauBewerten(this)">🔍 Bewerten</button>'
+            f'<button class="scan-btn" style="background:#e74c3c;" onclick="vorschauVerwerfen(this)">🗑️</button>'
+            f'</div>'
+        )
+
+    return (
+        '<div class="scan-box" id="vorschau-box">'
+        f'<h3 style="margin-top:0;">🌍 Breit gefunden (ganz Deutschland) – Vorschau ({len(kandidaten)})</h3>'
+        '<p style="margin:4px 0; color:#666; font-size:0.9em;">Noch NICHT in der Datenbank. '
+        '„Bewerten" holt Stellentext + KI-Bewertung und zeigt die Detailansicht – danach '
+        'kannst du übernehmen oder verwerfen.</p>'
+        '<button class="scan-btn" style="background:#888;" onclick="vorschauLeeren()">🧹 Vorschau leeren</button>'
+        f'<div id="vorschau-liste">{"".join(zeilen)}</div>'
+        '<div id="vorschau-status"></div>'
+        '</div>'
+    )
+
+
+def _lade_provisorisch_urls() -> set:
+    if not VORSCHAU_PROVISORISCH_JSON.exists():
+        return set()
+    try:
+        return set(json.loads(VORSCHAU_PROVISORISCH_JSON.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def _provisorisch_html(stellen_prov: list) -> str:
+    """Rendert die provisorisch bewerteten Vorschau-Stellen mit voller Detailansicht
+    (gleiche Karte wie normale Stellen) plus Übernehmen/Verwerfen-Buttons."""
+    if not stellen_prov:
+        return ""
+    karten = []
+    for s in stellen_prov:
+        url = _html.escape(s.get("url", ""), quote=True)
+        # scanner_status=None unterdrückt die normalen Passend-/Vergeben-Buttons;
+        # hier zählen nur Übernehmen/Verwerfen.
+        karte = stelle_zu_html(s, zeige_firma=True, scanner_status=None)
+        karten.append(
+            f'<div class="vorschau-prov" data-url="{url}" style="border:2px solid #f0ad4e; border-radius:6px; margin-bottom:12px; padding:6px;">'
+            f'<div style="display:flex; gap:8px; margin-bottom:6px;">'
+            f'<button class="scan-btn" onclick="vorschauUebernehmen(this)">✅ Übernehmen</button>'
+            f'<button class="scan-btn" style="background:#e74c3c;" onclick="vorschauVerwerfen(this)">🗑️ Verwerfen</button>'
+            f'<span style="align-self:center; color:#946c00; font-size:0.9em;">provisorisch bewertet – noch nicht in der Sammlung</span>'
+            f'</div>{karte}</div>'
+        )
+    return (
+        '<div class="scan-box" id="vorschau-prov-box">'
+        f'<h3 style="margin-top:0;">🔍 Provisorisch bewertet ({len(stellen_prov)}) – übernehmen oder verwerfen</h3>'
+        f'{"".join(karten)}'
+        '<div id="vorschau-prov-status"></div>'
+        '</div>'
+    )
+
+
 # =============================================================================
 # REPORT ERSTELLEN
 # =============================================================================
@@ -721,6 +802,13 @@ def _hat_geringen_score(s: dict, status: int | None = None) -> bool:
 
 def erstelle_report(stellen: list, config: dict | None = None) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Provisorisch bewertete Vorschau-Stellen aus den Normalsektionen herausnehmen –
+    # sie erscheinen in einer eigenen Sektion (Übernehmen/Verwerfen) und zählen noch
+    # nicht zur Sammlung, bis sie übernommen werden.
+    _prov_urls = _lade_provisorisch_urls()
+    provisorisch_stellen = [s for s in stellen if s.get("url") in _prov_urls]
+    stellen = [s for s in stellen if s.get("url") not in _prov_urls]
 
     # Fahrzeit-Daten vorberechnen (cached in DB, max 1 API-Call pro Zieladresse)
     api_key    = (config or {}).get("google_maps_key", "")
@@ -896,6 +984,22 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         <div id="firma-status"></div>
         <pre id="firma-output" style="display:none; max-height:300px; overflow-y:auto;"></pre>
         </div>
+
+       <div class="scan-box">
+        <h3 style="margin-top:0;">🌍 Breit suchen (ganz Deutschland)</h3>
+        <p style="margin:4px 0 8px; color:#666; font-size:0.9em;">Karriere-URL einfügen – am besten die Stellen-Übersicht OHNE Standort-Filter im Link. Findet alle deutschen Stellen als Vorschau; nichts wird automatisch bewertet.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="url" id="breit-url" placeholder="https://www.firma.com/karriere/stellen"
+                style="flex:2; min-width:220px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <input type="text" id="breit-name" placeholder="Firmenname"
+                style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <button class="scan-btn" onclick="breitScannen()">🌍 Breit scannen</button>
+        </div>
+        <div id="breit-status"></div>
+        <pre id="breit-output" style="display:none; max-height:300px; overflow-y:auto;"></pre>
+       </div>
+
+       """ + _vorschau_html() + _provisorisch_html(provisorisch_stellen) + """
 
        <div class="scan-box">
         <h3 style="margin-top:0;">📎 Stelle manuell einfügen</h3>
