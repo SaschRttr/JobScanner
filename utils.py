@@ -307,14 +307,18 @@ def ersetze_abschnitt(text: str, marker: str, neuer_inhalt: str) -> str:
 # COOKIE-BANNER (Playwright)
 # =============================================================================
 
+# Text-Selektoren MÜSSEN exakt matchen (Anführungszeichen). Ohne sie macht
+# Playwright bei "text=OK" einen case-insensitiven Teilstring-Match und klickt
+# jeden Job-Link, dessen Titel zufällig "ok" enthält (z.B. "Fokus") – das
+# navigiert auf die Detailseite und leert die komplette Stellenliste.
 COOKIE_SELEKTOREN = [
-    "text=ALLES AKZEPTIEREN", "text=Alles akzeptieren",
-    "text=Alle akzeptieren", "text=Alle Cookies akzeptieren",
-    "text=Akzeptieren", "text=ABLEHNEN", "text=Ablehnen",
-    "text=Nur notwendige", "text=Nur erforderliche",
-    "text=Accept All", "text=Accept all", "text=Accept all cookies",
-    "text=Accept Cookies", "text=Reject All", "text=Reject all",
-    "text=I Accept", "text=Got it", "text=OK",
+    'text="ALLES AKZEPTIEREN"', 'text="Alles akzeptieren"',
+    'text="Alle akzeptieren"', 'text="Alle Cookies akzeptieren"',
+    'text="Akzeptieren"', 'text="ABLEHNEN"', 'text="Ablehnen"',
+    'text="Nur notwendige"', 'text="Nur erforderliche"',
+    'text="Accept All"', 'text="Accept all"', 'text="Accept all cookies"',
+    'text="Accept Cookies"', 'text="Reject All"', 'text="Reject all"',
+    'text="I Accept"', 'text="Got it"', 'text="OK"',
     "#onetrust-accept-btn-handler",
     "button[id*='cookie-accept']", "button[id*='accept-all']",
     "button[id*='onetrust-accept']",

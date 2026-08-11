@@ -278,6 +278,7 @@ Advantest Software | https://jobs.advantest-career.de/software-development?utm_s
 Instagrid            | https://careers.instagrid.co/l/de?_gl=1*8651mv*_gcl_au*OTAxMTQzNTE5LjE3ODUzMDg3ODE.*FPAU*OTAxMTQzNTE5LjE3ODUzMDg3ODE.*_ga*MTM3Njk0MjM2Ny4xNzg1MzA4Nzgy*_ga_RPDTWZJD0B*czE3ODUzMDg3ODIkbzEkZzAkdDE3ODUzMDg3ODIkajYwJGwwJGgxNDExMDQ0OTEz*_fplc*UkZvdm5YMVJvYXUwNnFTSnNxNGFvazJMVlhKVnl6V0RvaHF5a3pHemE4ZmtjcHd3VTZKZllPM2NrOEtHUG94c0VjVmpYSDZWUWhXMnJpendtR1VsS3R2S3NDaXlTOEt5YTZBM1ZENEF0c0olMkJtd3RTZlN2c0ZPWHJ5RGlQdkElM0QlM0Q.
 Elring Klinger       | https://elringklinger.de/karriere/stellenangebote?entry=%22FuncArea_Manufacturing,FuncArea_Manufacturing_Technology%22,FuncArea_Research_and_Development,FuncArea_Other,EntryLevel_Professional,EntryLevel_Graduate,EntryLevel_Experienced,EntryLevel_Management
 Pfisterer            | https://www.pfisterer.com/de/stellenangebote
+Kärcher              | https://careers.kaercher.com/search/?searchby=location&createNewAlert=false&q=&locationsearch=&geolocation=&optionsFacetsDD_department=Fach-+%26+F%C3%BChrungsposition&optionsFacetsDD_customfield3=Forschung+und+Entwicklung&optionsFacetsDD_country=DE&optionsFacetsDD_facility=
 [\firmen]
 
 # -----------------------------------------------------------------------------

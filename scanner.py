@@ -114,6 +114,12 @@ JOB_LINK_MUSTER = [
 
 _FORM_MUSTER = [r'-de-f\d+', r'/apply/', r'/bewerben$', r'/application/']
 
+# rexx systems (z.B. Würth Elektronik, jobs.we-online.com): Job-Detailseiten
+# enden auf "-<sprache>-j<nummer>.html" (z.B. "...-eng-j5226.html"), die
+# Bewerbungsformulare auf "-f<nummer>" (s. _FORM_MUSTER). Substring-Muster
+# reichen hier nicht, weil "-j" allein zu breit wäre – daher als Regex.
+_JOB_LINK_REGEX = [re.compile(r'-j\d+\.html', re.IGNORECASE)]
+
 # Externe Bewerberportale (ATS), die Firmen-Karriereseiten für die eigentlichen
 # Stellen einbinden. Solche Links liegen auf einer anderen Root-Domain als die
 # Börsen-Seite und würden sonst vom Domain-Filter verworfen; ihr Pfad enthält
@@ -141,7 +147,8 @@ def ist_ats_host(href: str) -> bool:
 
 
 def ist_job_link(href: str) -> bool:
-    return any(m in href for m in JOB_LINK_MUSTER)
+    return (any(m in href for m in JOB_LINK_MUSTER)
+            or any(r.search(href) for r in _JOB_LINK_REGEX))
 
 
 def ist_bewerbungslink(href: str) -> bool:
@@ -774,25 +781,55 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
 # PLAYWRIGHT SCANNER
 # =============================================================================
 
-# Klickt die "nächste Seite" einer Sitecore-patternlib-Paginierung. Deren
-# Controls liegen in einem Shadow-Root (Web-Component) und sind für Playwright
-# zwar auffindbar, aber nicht klickbar (Actionability-Timeout) – daher der
-# JS-Klick. Sucht die aktive Seitenzahl und klickt die nächsthöhere. Sprach-
-# unabhängig (arbeitet über die Zahlen, nicht über "Weiter"/"Next"-Labels).
-_SHADOW_NEXT_JS = r"""() => {
-    let active = null;
-    const items = [];
-    function walk(root) {
-        root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) walk(el.shadowRoot); });
-        root.querySelectorAll('a.pagination-item, a[class*="pagination-item"]').forEach(a => {
-            const n = parseInt((a.innerText || '').trim(), 10);
-            if (!isNaN(n)) {
-                items.push([n, a]);
-                if ((a.className || '').includes('active')) active = n;
-            }
-        });
+# Gemeinsame Paginierungs-Erkennung (Light- + Shadow-DOM), sprach- und
+# framework-unabhängig über die Seitenzahlen. Statt "Geschwister unter demselben
+# Eltern-Knoten" (scheitert, wenn jede Zahl einzeln in <li>/<span> gewrappt ist,
+# z.B. Rheinmetall) wird von einer Zahl aus der nächste Vorfahr gesucht, der >=3
+# nummerierte a/button enthält – das ist die Paginierungsleiste. Die >=3-Schwelle
+# schützt vor einzelnen Jahreszahlen o.Ä. in Job-Karten.
+_PAGINATION_HELPER_JS = r"""
+    function _klasse(el) {
+        return (typeof el.className === 'string')
+            ? el.className : ((el.className && el.className.baseVal) || '');
     }
-    walk(document);
+    function _sammleNums() {
+        const nums = [];
+        function walk(root) {
+            root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) walk(el.shadowRoot); });
+            root.querySelectorAll('a,button').forEach(el => {
+                if (/^\d{1,4}$/.test((el.innerText || '').trim())) nums.push(el);
+            });
+        }
+        walk(document);
+        return nums;
+    }
+    function _container(nums) {
+        function anzahl(anc) { let c = 0; for (const x of nums) if (anc.contains(x)) c++; return c; }
+        let cur = nums[0] && nums[0].parentElement, tiefe = 0;
+        while (cur && tiefe < 6) { if (anzahl(cur) >= 3) return cur; cur = cur.parentElement; tiefe++; }
+        return null;
+    }
+    function _paginationItems() {
+        const nums = _sammleNums();
+        if (nums.length < 3) return [];
+        const c = _container(nums);
+        if (!c) return [];
+        return nums.filter(el => c.contains(el))
+                   .map(el => [parseInt(el.innerText.trim(), 10), el]);
+    }
+"""
+
+# Klickt die "nächste Seite" einer nummerierten Paginierung per JS – für Fälle,
+# in denen der "Weiter"-Button für Playwright nicht klickbar ist (z.B. Sitecore-
+# patternlib-Controls in einem Shadow-Root, Actionability-Timeout). Aktive Seite
+# aus aria-current oder Klasse active/current/selected, dann active+1 klicken.
+_SHADOW_NEXT_JS = "() => {" + _PAGINATION_HELPER_JS + r"""
+    const items = _paginationItems();
+    if (!items.length) return false;
+    let active = null;
+    for (const [n, el] of items)
+        if (el.getAttribute('aria-current')
+            || /(^|\s)(active|current|selected)(\s|$)/i.test(_klasse(el))) { active = n; break; }
     if (active === null) return false;
     const naechste = items.find(([n]) => n === active + 1);
     if (naechste) { naechste[1].click(); return true; }
@@ -805,6 +842,137 @@ def _klick_naechste_seite_shadow(page) -> bool:
         return bool(page.evaluate(_SHADOW_NEXT_JS))
     except Exception:
         return False
+
+
+# Liefert die höchste Seitenzahl aus der Paginierungsleiste, oder 0. Damit wissen
+# wir bei der URL-Paginierung, bis zu welcher Seite es sich zu blättern lohnt.
+_MAX_SEITE_JS = "() => {" + _PAGINATION_HELPER_JS + r"""
+    const items = _paginationItems();
+    return items.length ? Math.max(...items.map(([n]) => n)) : 0;
+}"""
+
+# Gängige Query-Parameter für die Seitennummer (in Reihenfolge des Ausprobierens).
+_URL_SEITEN_PARAM = ("page", "p", "pageNumber", "seite", "pg")
+_URL_PAGINATION_CAP = 100  # harte Obergrenze an Seiten (Laufzeit-Schutz)
+
+# Auf der Trefferliste genannte Gesamtzahl ("69 Ergebnisse"), um unvollständige
+# Paginierung zu erkennen. Bewusst breit (mehrsprachig), Zahl darf Tausender-
+# Punkt/Komma enthalten (z.B. "1.234 Treffer").
+_TREFFER_RE = re.compile(
+    r'([\d.,]{1,7})\s*(?:ergebnis|treffer|stellen|result|jobs?\b|vacan|position|offene)',
+    re.IGNORECASE)
+
+
+def _sxa_signatur(url_boerse: str) -> str:
+    """32-stellige Hex-Signatur, die Sitecore SXA seinen Query-Parametern
+    voranstellt (z.B. '<sig>term=', '<sig>filter='). Der zugehörige Seiten-
+    Parameter ist dann '<sig>page'. Leerer String, wenn keine Signatur da ist."""
+    for teil in urlparse(url_boerse).query.split("&"):
+        m = re.match(r'^([0-9a-f]{32})', teil.split("=", 1)[0])
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _gesamt_treffer(page) -> int:
+    """Liest die auf der Seite genannte Gesamt-Trefferzahl aus (für die
+    Abdeckungs-Warnung), oder 0 wenn keine gefunden wird."""
+    try:
+        txt = page.inner_text("body")[:20000]
+    except Exception:
+        return 0
+    zahlen = []
+    for m in _TREFFER_RE.finditer(txt):
+        try:
+            zahlen.append(int(m.group(1).replace(".", "").replace(",", "")))
+        except ValueError:
+            pass
+    # größte plausible Zahl (die Trefferzahl steht meist prominent, andere Zahlen
+    # sind kleiner); unrealistisch große Werte ignorieren.
+    zahlen = [z for z in zahlen if 0 < z < 100000]
+    return max(zahlen) if zahlen else 0
+
+
+def _paginiere_per_url(page, url_boerse: str, alle_links: list,
+                       gesehene_hrefs: set, links_js: str) -> int:
+    """Blättert über einen URL-Query-Parameter (?page=N) statt per Klick.
+
+    Für Portale, deren nummerierte Paginierung nur JS-Klick-Handler ohne echtes
+    href hat und deshalb im Headless-Browser nicht nachlädt (z.B. Rheinmetall /
+    Sitecore SXA: ?page=N liefert serverseitig die nächsten Treffer). Läuft nur
+    als Fallback, wenn die Klick-Paginierung nichts gebracht hat, und nur wenn
+    eine nummerierte Paginierungsleiste erkannt wird. Portal- und sprach-
+    unabhängig: bevorzugt bei Sitecore SXA den signatur-präfixierten Parameter,
+    sonst gängige Namen, und übernimmt den, dessen Seite 2 neue Job-Links liefert.
+    Blättert bis zur letzten Seite (zwei leere Seiten = Ende) und warnt, wenn
+    weniger Stellen erfasst wurden als die Seite als Gesamtzahl nennt (manche
+    Portale liefern über den URL-Parameter nicht zuverlässig alle Treffer).
+    Gibt die Zahl zusätzlich geladener Seiten zurück."""
+    max_seite = 0
+    try:
+        max_seite = int(page.evaluate(_MAX_SEITE_JS) or 0)
+    except Exception:
+        pass
+    if max_seite < 2:
+        return 0
+    gesamt = _gesamt_treffer(page)  # vor dem Wegnavigieren von Seite 1 lesen
+    trenn = "&" if "?" in url_boerse else "?"
+
+    def lade(param: str, n: int) -> list:
+        try:
+            page.goto(f"{url_boerse}{trenn}{param}={n}",
+                      wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(2000)
+            return page.evaluate(links_js)
+        except Exception:
+            return []
+
+    # Parameter bestimmen: Seite 2 muss neue, nach Job aussehende Links liefern.
+    # Bei SXA zuerst den korrekten '<sig>page'-Parameter probieren.
+    sig = _sxa_signatur(url_boerse)
+    kandidaten_param = ([f"{sig}page"] if sig else []) + list(_URL_SEITEN_PARAM)
+    param = None
+    seite2_links: list = []
+    for kandidat in kandidaten_param:
+        links = lade(kandidat, 2)
+        if any(l["href"] not in gesehene_hrefs and ist_job_link(l["href"]) for l in links):
+            param, seite2_links = kandidat, links
+            break
+    if not param:
+        return 0
+
+    print(f"  🔢 URL-Paginierung erkannt (?{param}=N, bis Seite {max_seite})")
+    zusatz = 0
+    leer_folge = 0
+    aktuelle = seite2_links
+    n = 2
+    while n <= min(max_seite, _URL_PAGINATION_CAP):
+        # Nicht beim ersten überlappenden (0-neuen) Seite abbrechen – manche
+        # Portale (Rheinmetall) liefern überlappende Seiten; erst zwei leere
+        # Seiten hintereinander gelten als Listenende.
+        if not any(ist_job_link(l["href"]) for l in aktuelle):
+            leer_folge += 1
+            if leer_folge >= 2:
+                break
+        else:
+            leer_folge = 0
+        neue_hrefs = {l["href"] for l in aktuelle} - gesehene_hrefs
+        if neue_hrefs:
+            alle_links.extend(l for l in aktuelle if l["href"] in neue_hrefs)
+            gesehene_hrefs |= neue_hrefs
+            zusatz += 1
+        n += 1
+        if n <= min(max_seite, _URL_PAGINATION_CAP):
+            aktuelle = lade(param, n)
+    if zusatz:
+        print(f"  🔢 URL-Paginierung: +{zusatz} Seite(n), {len(alle_links)} Links gesamt")
+    if gesamt:
+        erfasst = len({l["href"] for l in alle_links if ist_job_link(l["href"])})
+        if erfasst < gesamt * 0.95:
+            print(f"  ⚠️  Nur {erfasst} von {gesamt} Stellen erfasst – das Portal "
+                  f"liefert über die URL-Paginierung nicht alle Treffer. Für "
+                  f"vollständige Ergebnisse enger filtern (Stadt/Bereich).")
+    return zusatz
 
 
 # Firmen-Karriereseiten binden ihre Stellen oft über ein iframe-Widget eines
@@ -943,11 +1111,23 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     # Seiten-Paginierung folgen (statt nur Infinite-Scroll): manche Portale
     # (z.B. umantis, festool-group.com) zeigen nur ~10 Treffer pro Seite und
     # brauchen einen Klick auf "nächste Seite" statt Scrollen.
+    # Neben aria-label auch das Standard-rel="next" sowie Klassen-Marker
+    # abdecken: manche Portale (z.B. Rheinmetall, Sitecore SXA) haben einen
+    # "nächste"-Button ganz ohne aria-label – nur Klasse "anchor-next" bzw. ein
+    # eigenes Token "next". [class~='next'] matcht nur das ganze Token "next"
+    # (nicht "context" o.Ä.); Playwright klickt real (kümmert sich um Sichtbar-
+    # keit/Scroll), was zuverlässiger ist als ein synthetischer JS-Klick.
     _NEXT_SELECTOR = (
+        "a[rel='next']:not([aria-disabled='true']), "
+        "button[rel='next']:not([disabled]), "
         "a[aria-label*='nächste' i]:not([aria-disabled='true']), "
         "a[aria-label*='next' i]:not([aria-disabled='true']), "
         "button[aria-label*='nächste' i]:not([disabled]), "
-        "button[aria-label*='next' i]:not([disabled])"
+        "button[aria-label*='next' i]:not([disabled]), "
+        "a[class~='next']:not([aria-disabled='true']):not(.disabled), "
+        "button[class~='next']:not([disabled]):not(.disabled), "
+        "a[class*='anchor-next']:not([aria-disabled='true']):not(.disabled), "
+        "button[class*='anchor-next']:not([disabled]):not(.disabled)"
     )
     MAX_SEITEN = 15
     gesehene_hrefs = {l["href"] for l in alle_links}
@@ -977,6 +1157,12 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         gesehene_hrefs |= neue_hrefs
         seite += 1
         print(f"  🔗 Seite {seite}: {len(neue_hrefs)} neue Links ({len(alle_links)} gesamt)")
+
+    # Hat die Klick-Paginierung keine weitere Seite gebracht, als Fallback über
+    # einen URL-Query-Parameter blättern (nummerierte Leisten ohne echtes href,
+    # deren JS-Klick im Headless nicht nachlädt – z.B. Rheinmetall).
+    if seite == 1:
+        _paginiere_per_url(page, url_boerse, alle_links, gesehene_hrefs, _LINKS_JS)
 
     print(f"  🔗 {len(alle_links)} Links gesamt")
 
@@ -1540,11 +1726,22 @@ def main():
                     bekannte[url]["status"] = 2
         return False
 
+    # Übernommene (Standort-Ausnahme) und provisorische Vorschau-Stellen einmal
+    # laden – sie dürfen wegen des Standorts NICHT wieder versteckt werden.
+    standort_ignoriert = standort_ignoriert_urls()
+
     def markiere_nicht_passend(t: dict):
         url   = t["url"]
         gesehen_urls.add(url)
         idx   = stellen_index.get(url)
         grund = t.get("nicht_passend_grund", "")
+
+        # Bewusst behaltene out-of-area-Stellen nicht erneut wegen des Standorts
+        # als "nicht passend" markieren (der Nutzer kennt die Entfernung). Andere
+        # Ausschlussgründe (z.B. Ausschlussbegriff) greifen weiterhin.
+        if url in standort_ignoriert and (
+                grund.startswith("Außerhalb Umkreis") or grund.startswith("Verbotener Standort")):
+            return
 
         if url not in bekannte:
             bekannte[url] = {"status": 1, "gefunden_am": ts, "geloescht_am": None,

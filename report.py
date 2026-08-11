@@ -848,6 +848,23 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     provisorisch_stellen = [s for s in stellen if s.get("url") in _prov_urls]
     stellen = [s for s in stellen if s.get("url") not in _prov_urls]
 
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) bereinigen, BEVOR die
+    # Fahrzeit geladen und die Sektionen gebildet werden: der Nutzer hat sie
+    # bewusst behalten, also den Standort-Ablehnungsgrund + das nicht_passend-Flag
+    # entfernen (heilt auch Altbestände, die ein Scan noch als nicht_passend
+    # markiert hatte). Muss vor dem Fahrzeit-Block stehen, sonst werden sie dort
+    # als nicht_passend übersprungen und bekämen keine Fahrzeit angezeigt.
+    try:
+        from utils import standort_ausnahme_urls
+        ausnahme_urls = standort_ausnahme_urls()
+    except Exception:
+        ausnahme_urls = set()
+    for _s in stellen:
+        if _s.get("url") in ausnahme_urls and (_s.get("nicht_passend_grund") or "").startswith(
+                ("Außerhalb Umkreis", "Verbotener Standort")):
+            _s["nicht_passend"] = False
+            _s["nicht_passend_grund"] = ""
+
     # Fahrzeit-Daten vorberechnen (cached in DB, max 1 API-Call pro Zieladresse)
     api_key    = (config or {}).get("google_maps_key", "")
     startpunkt = (config or {}).get("fahrzeit_startpunkt", "")
@@ -889,13 +906,9 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     # standardmäßig aus (Zu-weit-Checkbox ist per Default aus), Kopfzeile und
     # Filter-Ergebnis wichen dadurch voneinander ab.
     entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7, 11)}
-    # Bewusst übernommene out-of-area-Stellen (Standort-Ausnahme) NICHT in "Zu weit"
-    # verstecken – der Nutzer kennt die Entfernung und will sie trotzdem sehen.
-    try:
-        from utils import standort_ausnahme_urls
-        ausnahme_urls = standort_ausnahme_urls()
-    except Exception:
-        ausnahme_urls = set()
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) sind bereits oben
+    # bereinigt und NICHT in "Zu weit" zu verstecken – der Nutzer kennt die
+    # Entfernung und will sie trotzdem sehen.
     zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
@@ -919,13 +932,19 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         s["url"] for s in stellen
         if not s.get("arbeitsort") and not s.get("nicht_passend") and not s.get("geloescht_am")
     }
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls and s["url"] not in ohne_standort_urls]
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) gelten als aktiv, auch
+    # wenn ein späterer Scan sie (fälschlich) noch als nicht_passend markiert hat –
+    # der Nutzer hat sie bewusst behalten und will sie in der Sammlung sehen.
+    def _sichtbar(s: dict) -> bool:
+        return not s.get("nicht_passend") or s["url"] in ausnahme_urls
+
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and _sichtbar(s) and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls and s["url"] not in ohne_standort_urls]
     zu_weit       = [s for s in stellen if s["url"] in zu_weit_urls and not s.get("geloescht_am")]
 
     def _ist_standort_grund(grund: str) -> bool:
         return grund.startswith("Außerhalb Umkreis") or grund.startswith("Verbotener Standort")
 
-    nicht_passend_alle     = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    nicht_passend_alle     = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am") and s["url"] not in ausnahme_urls]
     nicht_passend_standort = [s for s in nicht_passend_alle if _ist_standort_grund(s.get("nicht_passend_grund") or "")]
     nicht_passend_standort_urls = {s["url"] for s in nicht_passend_standort}
     nicht_passend = [s for s in nicht_passend_alle if s["url"] not in nicht_passend_standort_urls]
