@@ -115,6 +115,16 @@ def _url_anpassen(url: str) -> str:
         host_m = re.match(r'(https?://[^/]+)', url)
         if m and host_m:
             return f"{host_m.group(1)}/job/show/{m.group(1)}/full?lang=de&mode=candidate"
+
+    # Query-Parameter mit Wert "apply" entfernen: sie öffnen bei vielen ATS
+    # (z.B. Phenom ?tcsource=apply) direkt das Bewerbungsformular statt der
+    # Stellenbeschreibung. Generisch, plattformunabhängig.
+    pr = urllib.parse.urlparse(url)
+    if pr.query and "apply" in pr.query.lower():
+        params = [(k, v) for k, v in urllib.parse.parse_qsl(pr.query, keep_blank_values=True)
+                  if v.strip().lower() != "apply"]
+        url = urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(params)))
+
     return url
 
 

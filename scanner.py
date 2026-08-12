@@ -181,6 +181,23 @@ def _ist_uebersichts_link(href: str, url_boerse: str) -> bool:
     return segmente[-1].lower() in _JOB_SEKTION_WORTE
 
 
+def _split_standorte(text: str) -> list:
+    """Zerlegt eine Standort-Angabe mit mehreren Orten (z.B. 'München, Stuttgart,
+    Frankfurt') in Einzelorte. Für die Fahrzeit-Berechnung, damit der nächst-
+    gelegene Ort gewählt werden kann statt irgendeines."""
+    teile = re.split(r"[,;/|\n]|\bund\b|\boder\b|\bor\b", text or "", flags=re.IGNORECASE)
+    orte, gesehen = [], set()
+    for t in teile:
+        t = t.strip(" \t-–—•").strip()
+        if len(t) < 2:
+            continue
+        key = t.lower()
+        if key not in gesehen:
+            gesehen.add(key)
+            orte.append(t)
+    return orte
+
+
 def _echte_job_links(kandidaten: list, url_boerse: str) -> list:
     """Reduziert Heuristik-Kandidaten auf plausible Stellen-Detail-Links: dedupe
     nach normalisierter href, ohne Seite-selbst und ohne reine Übersichtsseiten.
@@ -209,13 +226,32 @@ def _echte_job_links(kandidaten: list, url_boerse: str) -> list:
 # DOM zu scheitern. Bewusst generisch (Feldnamen breit), kein Firmen-Sonderfall.
 _API_TITEL_FELDER = ("title", "jobtitle", "name", "positiontitle", "jobposting",
                      "displayname", "titel", "bezeichnung", "postingtitle")
-_API_URL_FELDER   = ("externalapplyurl", "externalurl", "applyurl", "joburl",
-                     "url", "externalpath", "canonicalurl", "detailurl", "link",
-                     "jobdetailurl", "absoluteurl", "href", "permalink", "path",
-                     "apply_job_url", "wp_url", "job_url", "apply_url", "slug")
+# Reihenfolge = Priorität: Beschreibungs-/Detail-URLs zuerst, apply-URLs zuletzt
+# (ein apply-Link öffnet oft direkt das Bewerbungsformular statt der Beschreibung).
+_API_URL_FELDER   = ("joburl", "job_url", "url", "detailurl", "jobdetailurl",
+                     "canonicalurl", "permalink", "wp_url", "externalurl",
+                     "externalpath", "absoluteurl", "href", "link", "path", "slug",
+                     "externalapplyurl", "applyurl", "apply_job_url", "apply_url")
 _API_ORT_FELDER   = ("primarylocation", "locationstext", "location", "city",
                      "arbeitsort", "ort", "standort", "locationcountry",
                      "locationname", "workplace")
+
+
+def _bereinige_job_url(href: str) -> str:
+    """Entfernt Query-Parameter, die statt der Stellenbeschreibung direkt das
+    Bewerbungsformular öffnen. Generisch: jeder Parameter mit Wert 'apply'
+    (z.B. ?tcsource=apply, ?mode=apply, ?action=apply) – plattformunabhängig."""
+    try:
+        pr = urlparse(href)
+        if not pr.query:
+            return href
+        params = urllib.parse.parse_qsl(pr.query, keep_blank_values=True)
+        gefiltert = [(k, v) for k, v in params if v.strip().lower() != "apply"]
+        if len(gefiltert) == len(params):
+            return href
+        return urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(gefiltert)))
+    except Exception:
+        return href
 
 
 def _finde_job_liste(obj, tiefe: int = 0) -> list:
@@ -267,6 +303,7 @@ def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
                 href = urllib.parse.urljoin(basis_url, href)
             if not href.startswith("http"):
                 continue
+            href = _bereinige_job_url(href)
             if href in gesehen:
                 continue
             gesehen.add(href)
@@ -1882,11 +1919,41 @@ def main_vorschau(nur_firma: str | None = None, direkt_url: str | None = None,
         try:
             from report import hole_fahrzeit_daten
             print(f"  🚗 Berechne Fahrzeit für {len(mit_ort)} Kandidat(en)...")
+            fz_cache: dict = {}
+
+            def _fz(ort: str):
+                key = ort.strip().lower()
+                if key not in fz_cache:
+                    fz_cache[key] = hole_fahrzeit_daten(ort, api_key, startpunkt)
+                return fz_cache[key]
+
+            def _minuten(fz) -> int | None:
+                if not fz:
+                    return None
+                return fz["auto_min"] if fz.get("auto_min") is not None else fz.get("transit_min")
+
             for k in mit_ort:
-                ziel = firma_adressen.get(k.get("firma", "")) or k.get("arbeitsort") or ""
-                fz = hole_fahrzeit_daten(ziel, api_key, startpunkt)
-                if fz:
-                    k["fahrzeit"] = fz
+                firma_adr = firma_adressen.get(k.get("firma", ""))
+                if firma_adr:
+                    fz = _fz(firma_adr)
+                    if fz:
+                        k["fahrzeit"] = fz
+                    continue
+                # Mehrere Standorte (z.B. "München, Stuttgart, ...") → für jeden die
+                # Fahrzeit holen und den NÄCHSTGELEGENEN nehmen, nicht irgendeinen.
+                # Der gewählte Ort wird als arbeitsort gesetzt, damit Anzeige und
+                # Fahrzeit-Cache denselben (relevanten) Ort verwenden.
+                beste_fz, bester_ort, beste_min = None, None, None
+                for ort in _split_standorte(k.get("arbeitsort", ""))[:12]:
+                    fz = _fz(ort)
+                    m = _minuten(fz)
+                    if m is None:
+                        continue
+                    if beste_min is None or m < beste_min:
+                        beste_fz, bester_ort, beste_min = fz, ort, m
+                if beste_fz:
+                    k["fahrzeit"] = beste_fz
+                    k["arbeitsort"] = bester_ort
         except Exception as e:
             print(f"  ⚠️  Fahrzeit-Berechnung übersprungen: {e}")
 
