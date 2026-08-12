@@ -254,6 +254,39 @@ def _bereinige_job_url(href: str) -> str:
         return href
 
 
+def _ist_successfactors(url: str) -> bool:
+    """Erkennt SAP-SuccessFactors-Karriereseiten (z.B. DEKRA, Festo, Kärcher)
+    domänenunabhängig: Pfad endet auf '/search/' und die Query trägt einen
+    für SuccessFactors typischen Parameter (searchby oder optionsFacetsDD_...)."""
+    try:
+        pr = urlparse(url)
+        if not pr.path.rstrip("/").endswith("/search"):
+            return False
+        q = pr.query.lower()
+        return "searchby=" in q or "optionsfacetsdd_" in q
+    except Exception:
+        return False
+
+
+def _erzwinge_de_locale(url: str) -> str:
+    """Setzt bei SuccessFactors-Seiten den Sprach-Parameter auf 'locale=de_DE'.
+    Ohne locale liefern manche SF-Seiten die englische Ansicht und blenden dann
+    Stellen aus, die nur im deutschen Locale veröffentlicht sind (z.B. DEKRA:
+    4 statt 68). Für einen deutschen Job-Scanner ist de_DE immer die richtige
+    Sprache (auch für Titel/Text der nachgelagerten KI/Extraktion)."""
+    if not _ist_successfactors(url):
+        return url
+    try:
+        pr = urlparse(url)
+        params = urllib.parse.parse_qsl(pr.query, keep_blank_values=True)
+        params = [(k, v) for k, v in params if k.lower() != "locale"]
+        params.append(("locale", "de_DE"))
+        return urllib.parse.urlunparse(
+            pr._replace(query=urllib.parse.urlencode(params)))
+    except Exception:
+        return url
+
+
 def _finde_job_liste(obj, tiefe: int = 0) -> list:
     """Sucht rekursiv die größte Liste aus Dicts, die wie Job-Einträge aussehen –
     jedes Dict hat sowohl ein Titel- als auch ein URL-artiges Feld."""
@@ -1098,6 +1131,22 @@ _MAX_SEITE_JS = "() => {" + _PAGINATION_HELPER_JS + r"""
     return items.length ? Math.max(...items.map(([n]) => n)) : 0;
 }"""
 
+# Liefert die echten <a href> der nummerierten Paginierungsleiste als [n, href].
+# Damit lässt sich die Paginierung über die vom Portal selbst erzeugten URLs
+# nachbauen (statt Parameternamen zu raten) – wichtig für Portale wie
+# SuccessFactors, deren Seiten-Links einen Offset-Parameter (startrow) tragen.
+_PAGINATION_HREFS_JS = "() => {" + _PAGINATION_HELPER_JS + r"""
+    const items = _paginationItems();
+    const out = [];
+    for (const [n, el] of items) {
+        const roh = (el.getAttribute && el.getAttribute('href')) || '';
+        if (el.tagName === 'A' && el.href && roh && roh !== '#'
+            && !/^javascript:/i.test(roh))
+            out.push([n, el.href]);
+    }
+    return out;
+}"""
+
 # Gängige Query-Parameter für die Seitennummer (in Reihenfolge des Ausprobierens).
 _URL_SEITEN_PARAM = ("page", "p", "pageNumber", "seite", "pg")
 _URL_PAGINATION_CAP = 100  # harte Obergrenze an Seiten (Laufzeit-Schutz)
@@ -1140,8 +1189,156 @@ def _gesamt_treffer(page) -> int:
     return max(zahlen) if zahlen else 0
 
 
+def _lade_paginierungsseite(page, url: str, links_js: str) -> list:
+    """Navigiert zu einer Paginierungs-URL und liefert deren Links.
+
+    Robust gegen Portale, deren Folge-Navigation ``domcontentloaded`` nur
+    verzögert oder gar nicht feuert (z.B. Kärcher hängt zeitweise sekundenlang):
+    erst auf ``commit`` warten (feuert, sobald die Antwort beginnt), dann DCL
+    nur mit kurzem Timeout abwarten (nicht blockieren, falls es ausbleibt), und
+    beim Scrollen null-sicher vorgehen, solange ``document.body`` noch fehlt."""
+    try:
+        page.goto(url, wait_until="commit", timeout=30000)
+    except Exception:
+        pass
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
+    except Exception:
+        pass
+    page.wait_for_timeout(2000)
+    for _ in range(4):
+        try:
+            page.evaluate("window.scrollTo(0, (document.body||document.documentElement).scrollHeight)")
+        except Exception:
+            pass
+        page.wait_for_timeout(800)
+    try:
+        return page.evaluate(links_js)
+    except Exception:
+        return []
+
+
+def _warne_abdeckung(alle_links: list, gesamt: int):
+    if not gesamt:
+        return
+    erfasst = len({l["href"] for l in alle_links if ist_job_link(l["href"])})
+    # Gesamtzahl-Parsing greift gelegentlich eine unrelated Zahl (z.B. eine PLZ
+    # wie 71409) ab. Ist die "Gesamtzahl" absurd viel größer als das Erfasste,
+    # ist sie unplausibel – dann keine irreführende Warnung.
+    if gesamt > max(erfasst, 1) * 20:
+        return
+    if erfasst < gesamt * 0.95:
+        print(f"  ⚠️  Nur {erfasst} von {gesamt} Stellen erfasst – das Portal "
+              f"liefert über die URL-Paginierung nicht alle Treffer. Für "
+              f"vollständige Ergebnisse enger filtern (Stadt/Bereich).")
+
+
+def _paginiere_via_hrefs(page, url_boerse: str, alle_links: list,
+                         gesehene_hrefs: set, links_js: str,
+                         pag_hrefs: list, max_seite: int, gesamt: int):
+    """Blättert über die echten <a href> der nummerierten Paginierungsleiste.
+
+    Baut die Seiten-URLs aus den Basis-Parametern von ``url_boerse`` und
+    übernimmt aus den Seiten-Links nur den/die Paginierungs-Parameter (der/die,
+    dessen Wert sich zwischen den nummerierten Links ändert – z.B. ``startrow``).
+    So bleiben Filter-Parameter wie ``locale`` oder ``d`` erhalten, die die
+    Portal-Links oft fallenlassen (SuccessFactors schaltet dabei sonst zurück
+    auf Englisch). Per linearer Extrapolation aus zwei Links werden auch Seiten
+    erreicht, die nicht als eigener Nummern-Link angezeigt werden – deshalb wird
+    nicht bis ``max_seite`` geblättert, sondern bis zwei aufeinanderfolgende
+    Seiten keine neuen Stellen mehr bringen (die Leiste zeigt oft nur die ersten
+    Seiten, z.B. Kärcher: 6 Seiten, Leiste nur bis 5).
+
+    ``pag_hrefs`` sind die auf Seite 1 erfassten [n, href]-Paare der Leiste
+    (vor einem evtl. Weg-Navigieren durch die Klick-Paginierung).
+
+    Gibt ``None`` zurück, wenn kein Paginierungs-Schema aus den Hrefs ableitbar
+    ist (dann greift der Parameter-Rate-Fallback), sonst die Zahl der zusätzlich
+    geladenen Seiten."""
+    per_n: dict = {}
+    for eintrag in (pag_hrefs or []):
+        try:
+            n, href = int(eintrag[0]), eintrag[1]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if n >= 2 and href and n not in per_n:
+            per_n[n] = href
+    ns = sorted(per_n)
+    if len(ns) < 2:
+        return None  # zu wenig Info für den Schema-Nachbau → Fallback
+
+    def query_dict(href: str) -> dict:
+        return dict(urllib.parse.parse_qsl(urlparse(href).query, keep_blank_values=True))
+
+    queries = {n: query_dict(per_n[n]) for n in ns}
+    # Paginierungs-Parameter = ganzzahlige Query-Keys, deren Wert sich zwischen
+    # den nummerierten Links ändert (konstante Filter wie d/locale fallen raus).
+    param_werte: dict = {}
+    for k in set().union(*[set(q) for q in queries.values()]):
+        werte = {}
+        passt = True
+        for n in ns:
+            v = queries[n].get(k, "").strip()
+            if not re.fullmatch(r"-?\d+", v):
+                passt = False
+                break
+            werte[n] = int(v)
+        if passt and len(set(werte.values())) >= 2:
+            param_werte[k] = werte
+    if not param_werte:
+        return None
+
+    n0, n1 = ns[0], ns[1]
+
+    def wert_fuer(k: str, n: int) -> int:
+        w = param_werte[k]
+        step = (w[n1] - w[n0]) // (n1 - n0)
+        return w[n0] + (n - n0) * step
+
+    basis = urllib.parse.parse_qsl(urlparse(url_boerse).query, keep_blank_values=True)
+    pr = urlparse(url_boerse)
+
+    def baue_url(n: int) -> str:
+        overrides = {k: str(wert_fuer(k, n)) for k in param_werte}
+        neu = [(k, v) for k, v in basis if k not in overrides]
+        neu += list(overrides.items())
+        return urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(neu)))
+
+    def lade(n: int) -> list:
+        return _lade_paginierungsseite(page, baue_url(n), links_js)
+
+    print(f"  🔢 URL-Paginierung über Seiten-Links ({'/'.join(param_werte)}, "
+          f"Leiste bis Seite {max_seite})")
+    zusatz = 0
+    leer_folge = 0
+    n = 2
+    while n <= _URL_PAGINATION_CAP:
+        aktuelle = lade(n)
+        neue_hrefs = {l["href"] for l in aktuelle} - gesehene_hrefs
+        neue_jobs = {h for h in neue_hrefs if ist_job_link(h)}
+        if neue_hrefs:
+            alle_links.extend(l for l in aktuelle if l["href"] in neue_hrefs)
+            gesehene_hrefs |= neue_hrefs
+        # Ende der Liste = zwei Seiten hintereinander ohne neue Stellen (fängt
+        # sowohl leere Seiten jenseits des letzten Offsets als auch wiederholt
+        # ausgelieferte letzte Seiten ab).
+        if neue_jobs:
+            zusatz += 1
+            leer_folge = 0
+        else:
+            leer_folge += 1
+            if leer_folge >= 2:
+                break
+        n += 1
+    if zusatz:
+        print(f"  🔢 URL-Paginierung: +{zusatz} Seite(n), {len(alle_links)} Links gesamt")
+    _warne_abdeckung(alle_links, gesamt)
+    return zusatz
+
+
 def _paginiere_per_url(page, url_boerse: str, alle_links: list,
-                       gesehene_hrefs: set, links_js: str) -> int:
+                       gesehene_hrefs: set, links_js: str,
+                       pag_hrefs: list, max_seite: int, gesamt: int) -> int:
     """Blättert über einen URL-Query-Parameter (?page=N) statt per Klick.
 
     Für Portale, deren nummerierte Paginierung nur JS-Klick-Handler ohne echtes
@@ -1154,25 +1351,26 @@ def _paginiere_per_url(page, url_boerse: str, alle_links: list,
     Blättert bis zur letzten Seite (zwei leere Seiten = Ende) und warnt, wenn
     weniger Stellen erfasst wurden als die Seite als Gesamtzahl nennt (manche
     Portale liefern über den URL-Parameter nicht zuverlässig alle Treffer).
-    Gibt die Zahl zusätzlich geladener Seiten zurück."""
-    max_seite = 0
-    try:
-        max_seite = int(page.evaluate(_MAX_SEITE_JS) or 0)
-    except Exception:
-        pass
+
+    ``pag_hrefs``/``max_seite``/``gesamt`` werden vom Aufrufer auf Seite 1
+    erfasst (die Paginierungsleiste ist dort gerendert, und die Klick-Paginierung
+    kann die Seite bereits weg-navigiert haben). Gibt die Zahl zusätzlich
+    geladener Seiten zurück."""
     if max_seite < 2:
         return 0
-    gesamt = _gesamt_treffer(page)  # vor dem Wegnavigieren von Seite 1 lesen
+
+    # Zuerst über die echten Seiten-Link-Hrefs blättern (behält Filter-Parameter
+    # wie locale/d, die die Portal-Links oft fallenlassen). Nur wenn daraus kein
+    # Schema ableitbar ist (None), auf das Parameter-Raten zurückfallen.
+    via_href = _paginiere_via_hrefs(page, url_boerse, alle_links, gesehene_hrefs,
+                                    links_js, pag_hrefs, max_seite, gesamt)
+    if via_href is not None:
+        return via_href
+
     trenn = "&" if "?" in url_boerse else "?"
 
     def lade(param: str, n: int) -> list:
-        try:
-            page.goto(f"{url_boerse}{trenn}{param}={n}",
-                      wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(2000)
-            return page.evaluate(links_js)
-        except Exception:
-            return []
+        return _lade_paginierungsseite(page, f"{url_boerse}{trenn}{param}={n}", links_js)
 
     # Parameter bestimmen: Seite 2 muss neue, nach Job aussehende Links liefern.
     # Bei SXA zuerst den korrekten '<sig>page'-Parameter probieren.
@@ -1213,12 +1411,7 @@ def _paginiere_per_url(page, url_boerse: str, alle_links: list,
             aktuelle = lade(param, n)
     if zusatz:
         print(f"  🔢 URL-Paginierung: +{zusatz} Seite(n), {len(alle_links)} Links gesamt")
-    if gesamt:
-        erfasst = len({l["href"] for l in alle_links if ist_job_link(l["href"])})
-        if erfasst < gesamt * 0.95:
-            print(f"  ⚠️  Nur {erfasst} von {gesamt} Stellen erfasst – das Portal "
-                  f"liefert über die URL-Paginierung nicht alle Treffer. Für "
-                  f"vollständige Ergebnisse enger filtern (Stadt/Bereich).")
+    _warne_abdeckung(alle_links, gesamt)
     return zusatz
 
 
@@ -1253,6 +1446,10 @@ def _onlyfy_alle_url(widget_url: str) -> str:
 def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
     name       = firma["name"]
     url_boerse = firma["url"]
+    _url_de = _erzwinge_de_locale(url_boerse)
+    if _url_de != url_boerse:
+        print("  🌐 SuccessFactors erkannt – erzwinge deutsche Sprache (locale=de_DE)")
+        url_boerse = _url_de
     dom        = domain(url_boerse)
 
     print(f"\n{'='*60}")
@@ -1415,6 +1612,20 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
     print(f"  🔗 {len(alle_links)} Links gesamt (Seite 1)")
 
+    # Paginierungs-Info JETZT (auf Seite 1, Leiste durch das Scrollen gerendert)
+    # erfassen – die anschließende Klick-Paginierung kann die Seite weg-navigieren
+    # (z.B. bei SuccessFactors auf eine locale-lose Sackgasse). Wird später an den
+    # URL-Paginierungs-Fallback durchgereicht.
+    try:
+        _pag_hrefs = page.evaluate(_PAGINATION_HREFS_JS) or []
+    except Exception:
+        _pag_hrefs = []
+    try:
+        _max_seite = int(page.evaluate(_MAX_SEITE_JS) or 0)
+    except Exception:
+        _max_seite = 0
+    _gesamt_seite1 = _gesamt_treffer(page)
+
     # Seiten-Paginierung folgen (statt nur Infinite-Scroll): manche Portale
     # (z.B. umantis, festool-group.com) zeigen nur ~10 Treffer pro Seite und
     # brauchen einen Klick auf "nächste Seite" statt Scrollen.
@@ -1439,7 +1650,15 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     MAX_SEITEN = 15
     gesehene_hrefs = {l["href"] for l in alle_links}
     seite = 1
-    while seite < MAX_SEITEN:
+    # Hat die Seite eine nummerierte Paginierungsleiste mit echten <a href>
+    # (z.B. SuccessFactors: startrow-Links), NICHT klicken: solche Links lassen
+    # oft Filter-Parameter (locale/d) fallen und landen so auf der falschen
+    # Sprach-/Ergebnismenge. Stattdessen unten direkt über die erfassten Hrefs
+    # per URL blättern (behält alle Parameter). Nur wenn keine echten Href da
+    # sind (Infinite-Scroll, JS-only-Pagination wie Rheinmetall/SXA), klicken.
+    _hat_href_pagination = len({int(e[0]) for e in _pag_hrefs
+                                if str(e[0]).lstrip("-").isdigit() and int(e[0]) >= 2}) >= 2
+    while not _hat_href_pagination and seite < MAX_SEITEN:
         try:
             next_el = page.query_selector(_NEXT_SELECTOR)
             if next_el and next_el.is_visible() and next_el.is_enabled():
@@ -1469,7 +1688,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     # einen URL-Query-Parameter blättern (nummerierte Leisten ohne echtes href,
     # deren JS-Klick im Headless nicht nachlädt – z.B. Rheinmetall).
     if seite == 1:
-        _paginiere_per_url(page, url_boerse, alle_links, gesehene_hrefs, _LINKS_JS)
+        _paginiere_per_url(page, url_boerse, alle_links, gesehene_hrefs, _LINKS_JS,
+                           _pag_hrefs, _max_seite, _gesamt_seite1)
 
     print(f"  🔗 {len(alle_links)} Links gesamt")
 
