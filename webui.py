@@ -37,6 +37,7 @@ BASIS_PFAD   = Path(__file__).parent
 REPORT_HTML  = BASIS_PFAD / "report.html"
 KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
 LOG_DATEI    = BASIS_PFAD / "scan.log"
+VORSCHAU_LOG = BASIS_PFAD / "vorschau_scan.log"
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
 VORSCHAU_JSON = BASIS_PFAD / "vorschau_kandidaten.json"
 NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
@@ -532,24 +533,44 @@ def vorschau_scannen():
              "--vorschau-url", url, "--vorschau-name", name],
             [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
         ]
-        for cmd in pipeline:
-            prozess = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace", cwd=str(BASIS_PFAD),
-                env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
-            )
-            for zeile in prozess.stdout:
-                zeile = zeile.rstrip("\n")
-                if zeile:
-                    yield f"data: {zeile}\n\n"
-            prozess.wait()
-            if prozess.returncode != 0:
-                yield f"data: ❌ {cmd[1]} fehlgeschlagen (Code {prozess.returncode})\n\n"
-                break
+        # Kompletten Scan-Output zusätzlich in eine Log-Datei schreiben, damit man
+        # die gefundenen (auch nicht passenden) Stellen nach dem Reload nachlesen
+        # kann. Wird bei jedem Lauf neu angelegt (letzter Scan bleibt erhalten).
+        with open(VORSCHAU_LOG, "w", encoding="utf-8") as log:
+            log.write(f"# Breite Suche – {jetzt()}\n# URL: {url}\n# Firma: {name}\n\n")
+            log.flush()
+            for cmd in pipeline:
+                prozess = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", cwd=str(BASIS_PFAD),
+                    env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                )
+                for zeile in prozess.stdout:
+                    zeile = zeile.rstrip("\n")
+                    if zeile:
+                        log.write(zeile + "\n")
+                        log.flush()
+                        yield f"data: {zeile}\n\n"
+                prozess.wait()
+                if prozess.returncode != 0:
+                    fehler = f"❌ {cmd[1]} fehlgeschlagen (Code {prozess.returncode})"
+                    log.write(fehler + "\n")
+                    yield f"data: {fehler}\n\n"
+                    break
         yield "data: FERTIG\n\n"
 
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/vorschau-log")
+def vorschau_log():
+    """Zeigt das Log des letzten breiten Scans als Klartext an (bleibt nach dem
+    Reload der Report-Seite erhalten – anders als das Live-Ausgabefenster)."""
+    if not VORSCHAU_LOG.exists():
+        return Response("Noch kein breiter Scan gelaufen.", mimetype="text/plain")
+    return Response(VORSCHAU_LOG.read_text(encoding="utf-8", errors="replace"),
+                    mimetype="text/plain; charset=utf-8")
 
 
 # =============================================================================

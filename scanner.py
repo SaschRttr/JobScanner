@@ -110,6 +110,7 @@ JOB_LINK_MUSTER = [
     "/R0", "251563-", "ashbyhq.com/sereact/", "dvinci-hr.com/de/jobs/",
     "zsw-bw-jobs.de/job-", "/careers/job/", "/career/job/",
     "/j/karriere/offene-stellen/", "/j/careers/job-vacancies/",
+    "/emploi",  # frz. "Stelle" (z.B. xs-groupe.com: /emploi-xs/<slug>/)
 ]
 
 _FORM_MUSTER = [r'-de-f\d+', r'/apply/', r'/bewerben$', r'/application/']
@@ -153,6 +154,127 @@ def ist_job_link(href: str) -> bool:
 
 def ist_bewerbungslink(href: str) -> bool:
     return any(re.search(m, href) for m in _FORM_MUSTER)
+
+
+# Job-Schlüsselwörter, deren "nacktes" letztes Pfadsegment eine Übersichts-/
+# Sektionsseite kennzeichnet (kein Slug dahinter = kein Stellen-Detail). Solche
+# Links erfüllen zwar ist_job_link(), sind aber keine Stellen und dürfen die
+# Heuristik-Schwelle nicht fälschlich erfüllen (sonst wird die KI nie gefragt).
+_JOB_SEKTION_WORTE = {
+    "jobs", "job", "stellen", "stellenangebot", "stellenangebote",
+    "stellenausschreibung", "stellenausschreibungen", "karriere", "career",
+    "careers", "emploi", "emplois", "vacancy", "vacancies", "offene-stellen",
+}
+
+
+def _ist_uebersichts_link(href: str, url_boerse: str) -> bool:
+    """True, wenn href die Börsen-Seite selbst oder eine reine Job-Übersichts-
+    seite ist (letztes Pfadsegment = Job-Schlüsselwort, kein Detail-Slug)."""
+    def norm(u: str):
+        pr = urlparse(u)
+        return pr.netloc.replace("www.", ""), pr.path.rstrip("/")
+    if norm(href) == norm(url_boerse):
+        return True
+    segmente = [s for s in urlparse(href).path.split("/") if s]
+    if not segmente:
+        return True  # Domain-Wurzel
+    return segmente[-1].lower() in _JOB_SEKTION_WORTE
+
+
+def _echte_job_links(kandidaten: list, url_boerse: str) -> list:
+    """Reduziert Heuristik-Kandidaten auf plausible Stellen-Detail-Links: dedupe
+    nach normalisierter href, ohne Seite-selbst und ohne reine Übersichtsseiten.
+    Verlässlichere Zählbasis für die Schwelle, ab der die KI ein Muster lernt."""
+    gesehen = set()
+    echte = []
+    for l in kandidaten:
+        href = l.get("href", "")
+        norm = href.split("#")[0].rstrip("/")
+        if not norm or norm in gesehen:
+            continue
+        if _ist_uebersichts_link(href, url_boerse):
+            continue
+        gesehen.add(norm)
+        echte.append(l)
+    return echte
+
+
+# -----------------------------------------------------------------------------
+# Generischer JSON-API-Fallback
+# -----------------------------------------------------------------------------
+# Moderne Karriere-Seiten rendern Stellen oft NICHT als <a href> im DOM, sondern
+# laden sie beim Seitenaufruf per XHR/fetch (JSON/GraphQL) nach – teils über ein
+# firmeneigenes Gateway, das intern auf ein ATS (z.B. Workday) zeigt. Für solche
+# Seiten wertet der Scanner die abgefangenen JSON-Antworten aus, statt am leeren
+# DOM zu scheitern. Bewusst generisch (Feldnamen breit), kein Firmen-Sonderfall.
+_API_TITEL_FELDER = ("title", "jobtitle", "name", "positiontitle", "jobposting",
+                     "displayname", "titel", "bezeichnung", "postingtitle")
+_API_URL_FELDER   = ("externalapplyurl", "externalurl", "applyurl", "joburl",
+                     "url", "externalpath", "canonicalurl", "detailurl", "link",
+                     "jobdetailurl", "absoluteurl", "href", "permalink", "path")
+_API_ORT_FELDER   = ("primarylocation", "locationstext", "location", "city",
+                     "arbeitsort", "ort", "standort", "locationcountry",
+                     "locationname", "workplace")
+
+
+def _finde_job_liste(obj, tiefe: int = 0) -> list:
+    """Sucht rekursiv die größte Liste aus Dicts, die wie Job-Einträge aussehen –
+    jedes Dict hat sowohl ein Titel- als auch ein URL-artiges Feld."""
+    if tiefe > 8:
+        return []
+    beste: list = []
+    if isinstance(obj, list):
+        dicts = [x for x in obj if isinstance(x, dict)]
+        if len(dicts) >= 2:
+            def _hat(d, felder):
+                return any(k.lower() in felder for k in d)
+            treffer = [d for d in dicts
+                       if _hat(d, _API_TITEL_FELDER) and _hat(d, _API_URL_FELDER)]
+            if len(treffer) >= max(2, len(dicts) // 2):
+                beste = treffer
+        for x in obj:
+            kand = _finde_job_liste(x, tiefe + 1)
+            if len(kand) > len(beste):
+                beste = kand
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            kand = _finde_job_liste(v, tiefe + 1)
+            if len(kand) > len(beste):
+                beste = kand
+    return beste
+
+
+def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
+    """Baut aus abgefangenen JSON-Antworten Job-Kandidaten [{href, text,
+    arbeitsort, api}]. Nimmt die erste Antwort, die eine plausible Job-Liste
+    enthält. Relative Pfade werden gegen basis_url aufgelöst."""
+    for body in bodies:
+        liste = _finde_job_liste(body)
+        if not liste:
+            continue
+        kand = []
+        gesehen = set()
+        for d in liste:
+            low = {k.lower(): v for k, v in d.items()}
+            titel = next((str(low[f]).strip() for f in _API_TITEL_FELDER
+                          if isinstance(low.get(f), str) and low.get(f).strip()), "")
+            href = next((low[f].strip() for f in _API_URL_FELDER
+                         if isinstance(low.get(f), str) and low.get(f).strip()), "")
+            if not titel or not href:
+                continue
+            if href.startswith("/"):
+                href = urllib.parse.urljoin(basis_url, href)
+            if not href.startswith("http"):
+                continue
+            if href in gesehen:
+                continue
+            gesehen.add(href)
+            ort = next((low[f].strip() for f in _API_ORT_FELDER
+                        if isinstance(low.get(f), str) and low.get(f).strip()), "")
+            kand.append({"href": href, "text": titel, "arbeitsort": ort, "api": True})
+        if kand:
+            return kand
+    return []
 
 
 _UUID_MUSTER = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -1026,6 +1148,25 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             pass
     page.on("response", _b_ite_capture)
 
+    # Generischer JSON-Capture: alle JSON-Antworten von XHR/fetch mitschneiden,
+    # damit wir Stellen aus einer nachgeladenen API/GraphQL-Antwort ziehen können,
+    # falls das DOM keine Job-Links hergibt (z.B. Zeiss-Gateway → Workday).
+    api_bodies: list = []
+    def _json_capture(resp):
+        try:
+            if len(api_bodies) >= 60:
+                return
+            if resp.request.resource_type not in ("xhr", "fetch"):
+                return
+            if "json" not in (resp.headers.get("content-type", "") or "").lower():
+                return
+            body = resp.json()
+            if isinstance(body, (dict, list)):
+                api_bodies.append(body)
+        except Exception:
+            pass
+    page.on("response", _json_capture)
+
     try:
         antwort = page.goto(url_boerse, wait_until="domcontentloaded", timeout=45000)
     except Exception as e:
@@ -1088,8 +1229,13 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     page.evaluate("window.scrollTo(0, 0)")
     page.wait_for_timeout(2000)
 
-    _LINKS_JS = """() =>
-        [...document.querySelectorAll('a[href]')].map(a => {
+    # Link-Sammler, der auch Shadow-DOM durchdringt: moderne Web-Components
+    # (z.B. Sitecore-patternlib, manche Salesforce-/Custom-Portale) kapseln ihre
+    # Job-Links in Shadow-Roots, die ein normales document.querySelectorAll der
+    # Hauptseite nicht sieht. Rekursiv über alle Shadow-Roots gehen.
+    _LINKS_JS = """() => {
+        const out = [];
+        const titelVon = (a) => {
             let text = (a.innerText || a.getAttribute('aria-label') || '').trim();
             if (text.length < 10) {
                 const parent = a.closest('li, article, [role="listitem"]');
@@ -1102,10 +1248,36 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                             .find(t => t.length >= 10) || text;
                 }
             }
-            return { href: a.href, text };
-        })
-    """
+            return text;
+        };
+        const besuche = (root) => {
+            let anchors = [];
+            try { anchors = root.querySelectorAll('a[href]'); } catch (e) {}
+            for (const a of anchors) out.push({ href: a.href, text: titelVon(a) });
+            let alle = [];
+            try { alle = root.querySelectorAll('*'); } catch (e) {}
+            for (const el of alle) if (el.shadowRoot) besuche(el.shadowRoot);
+        };
+        besuche(document);
+        return out;
+    }"""
     alle_links = page.evaluate(_LINKS_JS)
+
+    # Zusätzlich Links aus allen iframes einsammeln: eingebettete ATS-Widgets
+    # rendern die Stellen oft in einem (auch fremd-domänigen) Frame, den das
+    # querySelectorAll der Hauptseite nicht erreicht. Playwright kann in jeden
+    # Frame hineinsehen. Bereits bekannte hrefs werden später ohnehin dedupliziert.
+    for frame in page.frames:
+        if frame is page.main_frame:
+            continue
+        try:
+            frame_links = [l for l in frame.evaluate(_LINKS_JS) if l.get("href")]
+        except Exception:
+            continue
+        if frame_links:
+            alle_links.extend(frame_links)
+            print(f"  🖼️  +{len(frame_links)} Links aus iframe: {frame.url[:60]}")
+
     print(f"  🔗 {len(alle_links)} Links gesamt (Seite 1)")
 
     # Seiten-Paginierung folgen (statt nur Infinite-Scroll): manche Portale
@@ -1181,6 +1353,8 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         except re.error:
             return False
 
+    aus_api = False  # True, wenn Kandidaten aus einer abgefangenen JSON-API stammen
+    api_kandidaten = [] if bite_jobs or muster else _stellen_aus_api_json(api_bodies, url_boerse)
     if bite_jobs:
         # b-ite-API erkannt: Stellen direkt aus der Antwort (Titel + echte Job-URL),
         # unabhängig von DOM/Heuristik. jobSite (Standort) ist oft leer.
@@ -1192,12 +1366,26 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     elif muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
+    elif api_kandidaten:
+        # Kein bekanntes DOM-Muster, aber die Seite hat Stellen per XHR/GraphQL
+        # nachgeladen (z.B. Zeiss-Gateway → Workday). Diese Antwort direkt nutzen,
+        # statt an der DOM-Heuristik zu scheitern.
+        kandidaten = api_kandidaten
+        aus_api = True
+        print(f"  🛰️  JSON-API erkannt – {len(kandidaten)} Stellen aus abgefangener API-Antwort")
     else:
         kandidaten = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
         schon_ki_geprueft = bool(strukturen.get(dom, {}).get("ki_geprueft"))
 
-        if len(kandidaten) >= MIN_HEURISTIK_LINKS or (kandidaten and schon_ki_geprueft):
-            print(f"  ✅ Heuristik: {len(kandidaten)} Job-Links erkannt")
+        # Schwelle NICHT gegen rohe Treffer prüfen: Navigations-/Übersichtslinks
+        # (z.B. /de/jobs/, /en/jobs/) erfüllen ist_job_link(), sind aber keine
+        # Stellen. Würden sie mitzählen, gilt die Heuristik fälschlich als
+        # erfolgreich und die KI (die das echte Muster lernen könnte) wird nie
+        # gefragt. Daher nur echte Detail-Links als Zählbasis.
+        echte = _echte_job_links(kandidaten, url_boerse)
+
+        if len(echte) >= MIN_HEURISTIK_LINKS or (echte and schon_ki_geprueft):
+            print(f"  ✅ Heuristik: {len(echte)} Job-Links erkannt")
         elif schon_ki_geprueft:
             # Domain wurde schon einmal ergebnislos der KI vorgelegt → nicht erneut
             # fragen (spart Tokens); nichts gefunden heißt hier wirklich nichts.
@@ -1209,15 +1397,16 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             # bitten und nur das STRIKT bessere Ergebnis übernehmen. Das fängt
             # Seiten ab, auf denen ein paar beiläufige Links die Heuristik "erfüllen",
             # die echten Stellen aber ein anderes Muster haben. Der >-Vergleich
-            # schützt eine funktionierende Heuristik, die 0.6-Grenze vor zu breiten
-            # (Navigation mitfangenden) KI-Mustern.
-            print(f"  🤖 Heuristik nur {len(kandidaten)} Link(s) – frage KI...")
+            # (gegen die ECHTEN Detail-Links) schützt eine funktionierende
+            # Heuristik, die 0.6-Grenze vor zu breiten (Navigation mitfangenden)
+            # KI-Mustern.
+            print(f"  🤖 Heuristik nur {len(echte)} echte Job-Link(s) – frage KI...")
             alle_hrefs = list({l["href"] for l in alle_links if len(l["href"]) > 30})
             ki_muster = ki_lerne_muster(dom, alle_hrefs, config["api_key"])
             ki_kandidaten = ([l for l in alle_links if muster_trifft(l["href"], ki_muster)]
                              if ki_muster else [])
             zu_breit = len(ki_kandidaten) > 0.6 * max(len(alle_links), 1)
-            if ki_muster and len(ki_kandidaten) > len(kandidaten) and not zu_breit:
+            if ki_muster and len(ki_kandidaten) > len(echte) and not zu_breit:
                 print(f"  ✅ KI-Muster gelernt: '{ki_muster}' ({len(ki_kandidaten)} Links)")
                 strukturen.setdefault(dom, {})["link_muster"] = ki_muster
                 strukturen.setdefault(dom, {})["gelernt_am"] = jetzt()
@@ -1228,21 +1417,28 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 # damit wir nicht bei jedem Lauf erneut die KI bemühen.
                 if len(alle_links) >= 20:
                     strukturen.setdefault(dom, {})["ki_geprueft"] = jetzt()
-                if kandidaten:
-                    print(f"  ✅ Heuristik: {len(kandidaten)} Job-Links (KI kein besseres Muster)")
+                if echte:
+                    # Nur die echten Detail-Links weiterverwenden (Übersichts-/
+                    # Selbst-Links raus), nicht die rohe Müll-Liste.
+                    kandidaten = echte
+                    print(f"  ✅ Heuristik: {len(echte)} Job-Links (KI kein besseres Muster)")
                 else:
                     print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
                     status_merken(name, False, "Kein Job-Link-Muster erkannt")
                     return [], []
 
-    rd = root_domain(url_boerse)
-    vor_filter = len(kandidaten)
-    kandidaten = [l for l in kandidaten
-                  if root_domain(l["href"]) == rd or ist_ats_host(l["href"])]
-    if len(kandidaten) < vor_filter:
-        print(f"  🔒 Domain-Filter: {vor_filter - len(kandidaten)} Fremd-Links entfernt")
+    # API-Kandidaten überspringen den Domain-/Bewerbungslink-Filter: ihre URLs
+    # zeigen bewusst auf das dahinterliegende ATS (z.B. *.myworkdayjobs.com) und
+    # sind bereits echte Job-Einträge aus der API, keine beiläufigen DOM-Links.
+    if not aus_api:
+        rd = root_domain(url_boerse)
+        vor_filter = len(kandidaten)
+        kandidaten = [l for l in kandidaten
+                      if root_domain(l["href"]) == rd or ist_ats_host(l["href"])]
+        if len(kandidaten) < vor_filter:
+            print(f"  🔒 Domain-Filter: {vor_filter - len(kandidaten)} Fremd-Links entfernt")
 
-    kandidaten = [l for l in kandidaten if not ist_bewerbungslink(l["href"])]
+        kandidaten = [l for l in kandidaten if not ist_bewerbungslink(l["href"])]
 
     if not kandidaten:
         pdf_begriffe = ("stellenausschreibung", "ausschreibung", "karriere",
@@ -1307,7 +1503,9 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         gesehen_titel.add(titel)
         roh += 1
 
-        standort_aus_text = standort_aus_linktext(zeilen_roh, titel, config)
+        # Bei API-Kandidaten den Standort direkt aus der API übernehmen (z.B.
+        # primaryLocation), sonst wie bisher aus dem Linktext ableiten.
+        standort_aus_text = link.get("arbeitsort") or standort_aus_linktext(zeilen_roh, titel, config)
 
         treffer = text_matched(titel, config["suchbegriffe"])
 

@@ -277,8 +277,16 @@
         quelle.onmessage = function(e) {
             if (e.data === 'FERTIG') {
                 quelle.close();
-                if (status) status.textContent = '✅ Fertig – lade Vorschau...';
-                setTimeout(() => location.reload(), 700);
+                // NICHT automatisch neu laden – sonst verschwindet die Ausgabe
+                // sofort und man kann die gefundenen Stellen nicht prüfen.
+                // Stattdessen Ausgabe stehen lassen und manuell laden lassen.
+                if (status) {
+                    status.innerHTML = '✅ Fertig. '
+                        + '<button class="scan-btn" onclick="location.reload()">📋 Vorschau laden</button> '
+                        + '<a href="' + SERVER + '/vorschau-log" target="_blank" '
+                        + 'style="margin-left:6px;">📄 Vollständiges Log öffnen</a>';
+                }
+                if (output) output.scrollTop = output.scrollHeight;
                 return;
             }
             if (output) { output.textContent += e.data + '\n'; output.scrollTop = output.scrollHeight; }
@@ -290,54 +298,91 @@
     }
 
     // --- Breite Vorschau (ganz Deutschland) -------------------------------
-    // "Bewerten": Kandidat provisorisch in die DB legen und die Pipeline
-    // (Rohtext→Extraktion→KI) starten. Danach erscheint er als provisorisch
-    // bewertete Stelle mit voller Detailansicht (Übernehmen/Verwerfen).
-    async function vorschauBewerten(btn) {
-        const zeile  = btn.closest('.vorschau-zeile');
-        const url    = zeile ? zeile.getAttribute('data-url') : null;
+    // Log-Fenster für den Bewertungs-Fortschritt einblenden und zurückgeben.
+    function _vorschauLogAnzeigen(titel) {
         const status = document.getElementById('vorschau-status');
-        if (!url) return;
-        btn.disabled = true;
-        btn.textContent = '⏳...';
-        try {
-            const res = await fetch(SERVER + '/vorschau-bewerten', {
+        if (!status) return null;
+        status.innerHTML = '<div style="font-weight:bold; margin-bottom:4px;">' + titel + '</div>'
+            + '<pre id="vorschau-log" style="max-height:220px; overflow-y:auto; background:#111; color:#0f0; padding:8px; border-radius:4px; font-size:0.8em; white-space:pre-wrap;"></pre>';
+        return document.getElementById('vorschau-log');
+    }
+
+    // Eine Stelle provisorisch in die DB legen und die Pipeline (Rohtext→
+    // Extraktion→KI) streamen. Promise, das bei FERTIG (oder Fehler) auflöst –
+    // OHNE Reload, damit der Aufrufer mehrere Stellen nacheinander abarbeiten kann.
+    function _vorschauStelleVerarbeiten(url, log) {
+        return new Promise((resolve) => {
+            fetch(SERVER + '/vorschau-bewerten', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({url})
-            });
-            const data = await res.json();
-            if (!data.ok) {
-                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
-                btn.disabled = false; btn.textContent = '🔍 Bewerten';
-                return;
-            }
-            if (zeile) zeile.remove();
-            // Live-Log sichtbar machen, damit man den Fortschritt sieht.
-            let log = document.getElementById('vorschau-log');
-            if (!log && status) {
-                status.innerHTML = '<div style="font-weight:bold; margin-bottom:4px;">⏳ Bewerte Stelle (Rohtext → Extraktion → KI)...</div>'
-                    + '<pre id="vorschau-log" style="max-height:220px; overflow-y:auto; background:#111; color:#0f0; padding:8px; border-radius:4px; font-size:0.8em; white-space:pre-wrap;"></pre>';
-                log = document.getElementById('vorschau-log');
-            }
-            const quelle = new EventSource('/stelle-einzeln-stream?url=' + encodeURIComponent(url));
-            quelle.onmessage = function(e) {
-                if (e.data === 'FERTIG') {
-                    quelle.close();
-                    if (log) log.textContent += '\n✅ Fertig – lade Detailansicht...\n';
-                    setTimeout(() => location.reload(), 900);
-                    return;
+            }).then(r => r.json()).then(data => {
+                if (!data.ok) {
+                    if (log) log.textContent += '\n❌ ' + url + ': ' + (data.fehler || 'Fehler') + '\n';
+                    return resolve(false);
                 }
-                if (log) { log.textContent += e.data + '\n'; log.scrollTop = log.scrollHeight; }
-            };
-            quelle.onerror = function() {
-                quelle.close();
-                if (log) log.textContent += '\n⚠️ Verbindung zur Pipeline unterbrochen.\n';
-            };
-        } catch(e) {
-            alert('Server nicht erreichbar');
-            btn.disabled = false; btn.textContent = '🔍 Bewerten';
+                const quelle = new EventSource('/stelle-einzeln-stream?url=' + encodeURIComponent(url));
+                quelle.onmessage = function(e) {
+                    if (e.data === 'FERTIG') { quelle.close(); return resolve(true); }
+                    if (log) { log.textContent += e.data + '\n'; log.scrollTop = log.scrollHeight; }
+                };
+                quelle.onerror = function() {
+                    quelle.close();
+                    if (log) log.textContent += '\n⚠️ Verbindung zur Pipeline unterbrochen.\n';
+                    resolve(false);
+                };
+            }).catch(() => {
+                if (log) log.textContent += '\n❌ Server nicht erreichbar\n';
+                resolve(false);
+            });
+        });
+    }
+
+    // "Bewerten" (einzeln): Kandidat bewerten und danach Detailansicht laden.
+    async function vorschauBewerten(btn) {
+        const zeile = btn.closest('.vorschau-zeile');
+        const url   = zeile ? zeile.getAttribute('data-url') : null;
+        if (!url) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        const log = _vorschauLogAnzeigen('⏳ Bewerte Stelle (Rohtext → Extraktion → KI)...');
+        if (zeile) zeile.remove();
+        await _vorschauStelleVerarbeiten(url, log);
+        if (log) log.textContent += '\n✅ Fertig – lade Detailansicht...\n';
+        setTimeout(() => location.reload(), 900);
+    }
+
+    // "Ausgewählte bewerten" (Batch): alle angehakten Kandidaten nacheinander
+    // durch die Pipeline schicken, dann EINMAL die Detailansicht laden.
+    async function vorschauBewertenBatch() {
+        const zeilen = [...document.querySelectorAll('.vorschau-cb:checked')]
+            .map(cb => cb.closest('.vorschau-zeile'))
+            .filter(Boolean);
+        if (!zeilen.length) { alert('Bitte mindestens eine Stelle auswählen.'); return; }
+        const urls = zeilen.map(z => z.getAttribute('data-url'));
+        const btn = document.getElementById('vorschau-batch-btn');
+        if (btn) btn.disabled = true;
+        const log = _vorschauLogAnzeigen('⏳ Bewerte ' + urls.length + ' Stelle(n) nacheinander...');
+        let ok = 0;
+        for (let i = 0; i < urls.length; i++) {
+            if (log) log.textContent += '\n=== ' + (i + 1) + '/' + urls.length + ': ' + urls[i] + ' ===\n';
+            const erfolg = await _vorschauStelleVerarbeiten(urls[i], log);
+            if (erfolg) { ok++; if (zeilen[i]) zeilen[i].remove(); }
         }
+        if (log) log.textContent += '\n✅ ' + ok + '/' + urls.length + ' bewertet – lade Detailansicht...\n';
+        setTimeout(() => location.reload(), 1200);
+    }
+
+    // Checkbox "Alle auswählen" umschalten + Zähler im Batch-Button aktualisieren.
+    function vorschauAlleUmschalten(cb) {
+        document.querySelectorAll('.vorschau-cb').forEach(x => { x.checked = cb.checked; });
+        vorschauCountAktualisieren();
+    }
+
+    function vorschauCountAktualisieren() {
+        const n = document.querySelectorAll('.vorschau-cb:checked').length;
+        const btn = document.getElementById('vorschau-batch-btn');
+        if (btn) btn.textContent = n ? ('🔍 ' + n + ' Ausgewählte bewerten') : '🔍 Ausgewählte bewerten';
     }
 
     // "Übernehmen": provisorische Stelle endgültig behalten (nur Markierung
