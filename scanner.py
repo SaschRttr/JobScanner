@@ -211,7 +211,8 @@ _API_TITEL_FELDER = ("title", "jobtitle", "name", "positiontitle", "jobposting",
                      "displayname", "titel", "bezeichnung", "postingtitle")
 _API_URL_FELDER   = ("externalapplyurl", "externalurl", "applyurl", "joburl",
                      "url", "externalpath", "canonicalurl", "detailurl", "link",
-                     "jobdetailurl", "absoluteurl", "href", "permalink", "path")
+                     "jobdetailurl", "absoluteurl", "href", "permalink", "path",
+                     "apply_job_url", "wp_url", "job_url", "apply_url", "slug")
 _API_ORT_FELDER   = ("primarylocation", "locationstext", "location", "city",
                      "arbeitsort", "ort", "standort", "locationcountry",
                      "locationname", "workplace")
@@ -275,6 +276,93 @@ def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
         if kand:
             return kand
     return []
+
+
+# Pagination-Parameter, die in Job-REST-APIs vorkommen (Seite bzw. Größe) sowie
+# Felder für die Gesamtzahl. Für die vollständige, saubere API-Auswertung.
+_API_SEITE_PARAMS = ("page", "pagenumber", "pageno", "offset", "from", "start")
+_API_SIZE_PARAMS  = ("size", "pagesize", "limit", "rows", "per_page")
+_API_TOTAL_FELDER = ("total", "totalcount", "totalresults", "totalhits",
+                     "count", "numfound", "totaljobs")
+
+
+def _api_total(body) -> int | None:
+    """Liest eine Gesamt-Trefferzahl aus einer API-Antwort (flach, oberste Ebene)."""
+    if isinstance(body, dict):
+        for k, v in body.items():
+            if k.lower() in _API_TOTAL_FELDER and isinstance(v, int):
+                return v
+    return None
+
+
+def _finde_job_api(captures: list, basis_url: str):
+    """Sucht die erste abgefangene Antwort mit einer Job-Liste.
+    Gibt (kandidaten, quelle) zurück – quelle = {url, method, post_data, body}."""
+    for cap in captures:
+        kand = _stellen_aus_api_json([cap.get("body")], basis_url)
+        if kand:
+            return kand, cap
+    return [], None
+
+
+def _paginiere_api(page, quelle: dict, basis_url: str) -> list:
+    """Holt eine erkannte GET-JSON-API vollständig ab: der Request wird im Seiten-
+    Origin (page.evaluate → fetch, erreicht die API trotz CORS) mit hochgezähltem
+    Seiten-/Offset-Parameter und großem size erneut abgerufen. Gibt die komplette,
+    deduplizierte Kandidatenliste zurück. Bei POST/GraphQL oder ohne erkennbare
+    Pagination-Params: nur die bereits abgefangene erste Antwort."""
+    einzeln = _stellen_aus_api_json([quelle.get("body")], basis_url)
+    if (quelle.get("method") or "GET").upper() != "GET":
+        return einzeln  # POST/GraphQL: kein generisches Replay
+
+    pr = urlparse(quelle["url"])
+    params = urllib.parse.parse_qs(pr.query, keep_blank_values=True)
+    low = {k.lower(): k for k in params}
+    seite_key = next((low[p] for p in _API_SEITE_PARAMS if p in low), None)
+    if not seite_key:
+        return einzeln  # keine Pagination erkennbar → eine Antwort reicht
+
+    size_key = next((low[p] for p in _API_SIZE_PARAMS if p in low), None)
+    offset_modus = seite_key.lower() in ("offset", "from", "start")
+    SIZE = 100
+    if size_key:
+        params[size_key] = [str(SIZE)]
+
+    def _url(wert: int) -> str:
+        p = {k: v[:] for k, v in params.items()}
+        p[seite_key] = [str(wert)]
+        return urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(p, doseq=True)))
+
+    MAX_API_SEITEN = 30
+    alle: list = []
+    gesehen: set = set()
+    total = None
+    wert = 0 if offset_modus else 1
+    for _ in range(MAX_API_SEITEN):
+        try:
+            data = page.evaluate(
+                "async (u) => { try { const r = await fetch(u, {headers:{'Accept':'application/json'}});"
+                " if(!r.ok) return null; return await r.json(); } catch(e){ return null; } }",
+                _url(wert))
+        except Exception:
+            break
+        if not data:
+            break
+        if total is None:
+            total = _api_total(data)
+        roh = _finde_job_liste(data)
+        if not roh:
+            break
+        for k in _stellen_aus_api_json([data], basis_url):
+            if k["href"] not in gesehen:
+                gesehen.add(k["href"])
+                alle.append(k)
+        if total is not None and len(alle) >= total:
+            break
+        if total is None and len(roh) < SIZE:
+            break  # letzte (Teil-)Seite bei unbekannter Gesamtzahl
+        wert += len(roh) if offset_modus else 1
+    return alle if alle else einzeln
 
 
 _UUID_MUSTER = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -1148,13 +1236,14 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             pass
     page.on("response", _b_ite_capture)
 
-    # Generischer JSON-Capture: alle JSON-Antworten von XHR/fetch mitschneiden,
-    # damit wir Stellen aus einer nachgeladenen API/GraphQL-Antwort ziehen können,
-    # falls das DOM keine Job-Links hergibt (z.B. Zeiss-Gateway → Workday).
-    api_bodies: list = []
+    # Generischer JSON-Capture: JSON-Antworten von XHR/fetch mitschneiden – inkl.
+    # Request (URL/Methode/Body), damit eine erkannte Job-API später vollständig
+    # nachpaginiert werden kann. Deckt SPAs ab, die Stellen per API/GraphQL laden
+    # (z.B. Zeiss-Gateway → Workday, Capgemini job-search).
+    api_captures: list = []
     def _json_capture(resp):
         try:
-            if len(api_bodies) >= 60:
+            if len(api_captures) >= 60:
                 return
             if resp.request.resource_type not in ("xhr", "fetch"):
                 return
@@ -1162,7 +1251,16 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                 return
             body = resp.json()
             if isinstance(body, (dict, list)):
-                api_bodies.append(body)
+                try:
+                    post_data = resp.request.post_data
+                except Exception:
+                    post_data = None
+                api_captures.append({
+                    "url":       resp.url,
+                    "method":    resp.request.method,
+                    "post_data": post_data,
+                    "body":      body,
+                })
         except Exception:
             pass
     page.on("response", _json_capture)
@@ -1354,7 +1452,16 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             return False
 
     aus_api = False  # True, wenn Kandidaten aus einer abgefangenen JSON-API stammen
-    api_kandidaten = [] if bite_jobs or muster else _stellen_aus_api_json(api_bodies, url_boerse)
+    # API-first: zuerst prüfen, ob die Seite Stellen per JSON-API geliefert hat.
+    # Wenn ja, diese sauberen, vollständig paginierten Daten bevorzugen – DOM-
+    # Scraping erwischt bei SPAs oft nur zufällige Teilmengen (flaky). Nur die
+    # b-ite-Sondererkennung hat Vorrang.
+    api_kandidaten: list = []
+    if not bite_jobs:
+        _api_kand, _api_quelle = _finde_job_api(api_captures, url_boerse)
+        if _api_kand and _api_quelle:
+            api_kandidaten = _paginiere_api(page, _api_quelle, url_boerse)
+
     if bite_jobs:
         # b-ite-API erkannt: Stellen direkt aus der Antwort (Titel + echte Job-URL),
         # unabhängig von DOM/Heuristik. jobSite (Standort) ist oft leer.
@@ -1363,13 +1470,18 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                        "arbeitsort": j.get("jobSite") or ""}
                       for j in bite_jobs if j.get("url") and j.get("title")]
         print(f"  🔎 b-ite-API erkannt – {len(kandidaten)} Stellen direkt aus der API")
+    elif len(api_kandidaten) >= MIN_HEURISTIK_LINKS:
+        # Solide Job-API erkannt → saubere, vollständige Daten bevorzugen (vor
+        # DOM-Muster/Heuristik). z.B. Zeiss (GraphQL→Workday), Capgemini (job-search).
+        kandidaten = api_kandidaten
+        aus_api = True
+        print(f"  🛰️  JSON-API erkannt – {len(kandidaten)} Stellen (voll paginiert)")
     elif muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
     elif api_kandidaten:
-        # Kein bekanntes DOM-Muster, aber die Seite hat Stellen per XHR/GraphQL
-        # nachgeladen (z.B. Zeiss-Gateway → Workday). Diese Antwort direkt nutzen,
-        # statt an der DOM-Heuristik zu scheitern.
+        # API vorhanden, aber wenige Treffer – trotzdem nutzen (sauberer als
+        # flakiges DOM-Scraping), statt an der Heuristik zu scheitern.
         kandidaten = api_kandidaten
         aus_api = True
         print(f"  🛰️  JSON-API erkannt – {len(kandidaten)} Stellen aus abgefangener API-Antwort")
