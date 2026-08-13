@@ -82,7 +82,13 @@ def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
 
 
-def kein_treffer_merken(name: str, titel: str, url: str):
+def kein_treffer_merken(name: str, titel: str, url: str, ausschlussbegriffe: list | None = None):
+    # Stellen mit Ausschlussbegriff im Titel gar nicht erst auf die
+    # Kein-Treffer-Liste setzen – sie sind bewusst unerwünscht und würden
+    # die Liste (die eigentlich fehlende Suchbegriffe sichtbar machen soll)
+    # nur mit Praktika/Vertrieb/Leitung usw. zumüllen.
+    if ausschlussbegriffe and ist_ausgeschlossen(titel, ausschlussbegriffe):
+        return
     KEIN_TREFFER.setdefault(name, []).append({"titel": titel, "url": url})
 
 
@@ -785,7 +791,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             treffer = text_matched(titel, config["suchbegriffe"])
 
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             if treffer:
@@ -916,7 +922,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
 
             treffer = text_matched(titel, config["suchbegriffe"])
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             _np_grund = ablehnungsgrund(titel, standort, config)
@@ -1009,7 +1015,7 @@ def scanne_html_tabelle_firma(api_config: dict, bekannte_urls: set, config: dict
 
         treffer = text_matched(titel, config["suchbegriffe"])
         if not treffer:
-            kein_treffer_merken(name, titel, url_job)
+            kein_treffer_merken(name, titel, url_job, config["ausschlussbegriffe"])
             continue
 
         _np_grund = ablehnungsgrund(titel, standort, config)
@@ -1118,7 +1124,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             treffer  = text_matched(titel, config["suchbegriffe"])
 
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             if treffer:
@@ -2135,7 +2141,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         treffer = text_matched(titel, config["suchbegriffe"])
 
         if not treffer and not ist_pdf_link:
-            kein_treffer_merken(name, titel, href)
+            kein_treffer_merken(name, titel, href, config["ausschlussbegriffe"])
             ohne_suchbegriff += 1
             continue
         if not treffer:
@@ -2721,6 +2727,16 @@ def main():
 
     gesamt_kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
     gesamt_kein_treffer.update(KEIN_TREFFER)
+    # Bereits gespeicherte Einträge nachträglich gegen die aktuellen
+    # Ausschlussbegriffe filtern. Sonst blieben Alt-Einträge von Firmen, die in
+    # diesem Lauf keinen Kein-Treffer mehr liefern (weil alle ausgeschlossen
+    # wurden), unbereinigt stehen.
+    _ausschluss = config["ausschlussbegriffe"]
+    gesamt_kein_treffer = {
+        firma: [e for e in eintraege if not ist_ausgeschlossen(e.get("titel", ""), _ausschluss)]
+        for firma, eintraege in gesamt_kein_treffer.items()
+    }
+    gesamt_kein_treffer = {firma: eintraege for firma, eintraege in gesamt_kein_treffer.items() if eintraege}
     speichere_json(KEIN_TREFFER_JSON, gesamt_kein_treffer)
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
