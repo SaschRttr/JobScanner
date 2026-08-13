@@ -24,7 +24,7 @@ except ImportError:
     print("anthropic nicht installiert: pip install anthropic")
     sys.exit(1)
 
-from utils import lade_config, standort_verboten, effektiver_score
+from utils import lade_config, standort_ablehnungsgrund, effektiver_score, standort_ignoriert_urls
 
 
 # =============================================================================
@@ -258,29 +258,38 @@ def main():
         print("ℹ️  Keine Stellen in DB – zuerst scanner.py ausführen.")
         return
 
+    erlaubte  = config["erlaubte_standorte"]
     verbotene = config["verbotene_standorte"]
+    provisorisch_urls = standort_ignoriert_urls()
 
-    def standort_ok(s: dict) -> bool:
+    def standort_grund(s: dict) -> str:
+        # Deckt beide Fälle ab: Blacklist-Treffer UND (bekannter) Standort
+        # außerhalb der Whitelist – nicht nur die Blacklist wie zuvor. Sonst
+        # bewertet die KI Stellen, deren Arbeitsort erst hier (durch
+        # extraktor.py) bekannt wird und außerhalb des Umkreises liegt.
+        # Provisorische Vorschau-Stellen (breite DE-Suche) sind ausgenommen –
+        # sie sollen ja gerade out-of-area bewertet werden.
+        if s.get("url") in provisorisch_urls:
+            return ""
         arbeitsort = s.get("arbeitsort") or ""
         if not arbeitsort:
-            return True
-        # standort_verboten normalisiert Umlaute (München == Muenchen)
-        return not standort_verboten(arbeitsort, verbotene)
+            return ""
+        return standort_ablehnungsgrund(arbeitsort, erlaubte, verbotene)
 
-    # Stellen mit verbotenem Standort explizit als nicht_passend markieren
+    # Stellen mit Standort außerhalb Whitelist/Blacklist explizit als nicht_passend markieren
     zu_markieren = [
         (i, s) for i, s in enumerate(stellen)
         if s.get("status") == 3
         and s.get("stellentext")
-        and not standort_ok(s)
+        and standort_grund(s)
         and not s.get("nicht_passend")
         and (args.firma is None or s.get("firma") == args.firma)
     ]
     if zu_markieren:
-        print(f"  {len(zu_markieren)} Stellen wegen verbotenem Standort → nicht_passend:")
+        print(f"  {len(zu_markieren)} Stellen wegen Standort außerhalb/verboten → nicht_passend:")
         for idx, stelle in zu_markieren:
             stellen[idx]["nicht_passend"] = True
-            np_grund = f"Verbotener Standort: {stelle.get('arbeitsort', '?')}"
+            np_grund = standort_grund(stelle)
             stellen[idx]["nicht_passend_grund"] = np_grund
             upsert_stelle({"url": stelle["url"], "nicht_passend": True, "nicht_passend_grund": np_grund})
             print(f"    🚫 {stelle['firma']}: {stelle['titel'][:60]} ({stelle.get('arbeitsort','')})")
@@ -297,7 +306,7 @@ def main():
         (i, s) for i, s in enumerate(stellen)
         if s.get("status") == 3
         and s.get("stellentext")
-        and standort_ok(s)
+        and not standort_grund(s)
         and not s.get("nicht_passend")
         and (args.url is None or s["url"] == args.url)
         and (args.firma is None or s.get("firma") == args.firma)
@@ -352,6 +361,32 @@ def main():
     if zu_bearbeiten:
         exportiere_stellen_json(STELLEN_JSON)
         exportiere_bekannte_json(BEKANNTE_JSON)
+
+    # Fahrzeit-Backfill: bei einem VOLLEN Lauf (kein --url/--firma) für alle aktiven
+    # Stellen mit Arbeitsort, aber ohne gecachte Fahrzeit nachtragen. Fängt Stellen
+    # nach, deren Google-Abfrage beim Erstfund fehlschlug (z.B. Billing war aus).
+    # Report-Rebuilds rechnen bewusst keine Fahrzeit – daher hier im Scan-Lauf.
+    if args.url is None and args.firma is None:
+        try:
+            from report import aktualisiere_fahrzeit_fuer_stelle
+            from db import hole_fahrzeit_cache
+            firma_adressen = config.get("firma_adressen", {})
+            nachgetragen = 0
+            for s in stellen:
+                if s.get("geloescht_am") or s.get("nicht_passend"):
+                    continue
+                arbeitsort = s.get("arbeitsort") or ""
+                firma = s.get("firma", "")
+                if not arbeitsort and not firma_adressen.get(firma):
+                    continue
+                if hole_fahrzeit_cache(s["url"]) is not None:
+                    continue
+                if aktualisiere_fahrzeit_fuer_stelle(s["url"], firma, arbeitsort, config):
+                    nachgetragen += 1
+            if nachgetragen:
+                print(f"  🚗 Fahrzeit nachgetragen für {nachgetragen} Stelle(n)")
+        except Exception as e:
+            print(f"  ⚠️  Fahrzeit-Backfill fehlgeschlagen: {e}")
 
     print(f"\n{'='*60}")
     print(f"  FERTIG")

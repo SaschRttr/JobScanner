@@ -34,7 +34,7 @@ def lade_stellen():
                s.status, b.score, b.empfehlung
         FROM stellen s
         LEFT JOIN bewertungen b ON b.url = s.url
-        WHERE s.status NOT IN (0, 9)
+        WHERE s.status NOT IN (0, 9) AND s.nicht_passend = 0
         ORDER BY b.score DESC NULLS LAST
     """).fetchall()
     con.close()
@@ -43,11 +43,11 @@ def lade_stellen():
 
 @st.cache_data(ttl=60)
 def lade_status_counts():
-    """Anzahl Stellen pro Scanner-Status."""
+    """Anzahl Stellen pro Scanner-Status (ohne als 'nicht passend' ausgeschlossene)."""
     if not DB.exists():
         return {}
     con = sqlite3.connect(DB)
-    rows = con.execute("SELECT status, COUNT(*) AS n FROM stellen GROUP BY status").fetchall()
+    rows = con.execute("SELECT status, COUNT(*) AS n FROM stellen WHERE nicht_passend = 0 GROUP BY status").fetchall()
     con.close()
     return {r[0]: r[1] for r in rows}
 
@@ -86,7 +86,7 @@ def lade_firmen():
                SUM(CASE WHEN b.score >= 70 THEN 1 ELSE 0 END) AS relevante
         FROM stellen s
         JOIN bewertungen b ON b.url = s.url
-        WHERE s.status NOT IN (0, 9)
+        WHERE s.status NOT IN (0, 9) AND s.nicht_passend = 0
         GROUP BY s.firma
         HAVING COUNT(*) >= 1
         ORDER BY relevante DESC, avg_score DESC

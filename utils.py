@@ -9,6 +9,18 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+# Konsolen-Ausgabe auf UTF-8 zwingen. Die Skripte geben reichlich Emojis aus
+# (✅ 🔗 📋 …); unter Windows ist stdout aber standardmäßig cp1252 und wirft dann
+# beim ersten Emoji einen UnicodeEncodeError, der die ganze Pipeline abbricht.
+# errors="replace" stellt sicher, dass eine Konsole ohne Emoji-Unterstützung
+# ein Ersatzzeichen zeigt statt zu crashen. Auf Linux/UTF-8 ist das ein No-Op.
+# Wird hier beim Import erledigt, weil alle Einstiegs-Skripte utils importieren.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # z.B. umgeleiteter/ersetzter Stream ohne reconfigure()
+
 CONFIG_PFAD = Path(__file__).parent / "config.txt"
 CONFIG_SECRETS_PFAD = Path(__file__).parent / "config_secrets.txt"
 WHITELIST_PFAD = Path(__file__).parent / "whitelist_standorte.txt"
@@ -99,6 +111,40 @@ def lade_json(pfad: Path, standard):
     return standard
 
 
+_VORSCHAU_PROVISORISCH_PFAD = Path(__file__).parent / "vorschau_provisorisch.json"
+_STANDORT_AUSNAHME_PFAD     = Path(__file__).parent / "standort_ausnahme.json"
+
+
+def provisorische_vorschau_urls() -> set:
+    """URLs der provisorisch bewerteten Vorschau-Stellen (breite DE-Suche). Diese
+    umgehen den Standort-Filter in extraktor.py/bewertung.py – sie sollen ja gerade
+    außerhalb des Umkreises bewertet werden können."""
+    if not _VORSCHAU_PROVISORISCH_PFAD.exists():
+        return set()
+    try:
+        return set(json.loads(_VORSCHAU_PROVISORISCH_PFAD.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def standort_ausnahme_urls() -> set:
+    """URLs übernommener out-of-area-Stellen, die DAUERHAFT vom Standortfilter
+    ausgenommen sind (beim Übernehmen einer provisorischen Vorschau-Stelle gesetzt).
+    Ohne diese Ausnahme würde scanner.py sie beim nächsten Scan wieder ausblenden."""
+    if not _STANDORT_AUSNAHME_PFAD.exists():
+        return set()
+    try:
+        return set(json.loads(_STANDORT_AUSNAHME_PFAD.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def standort_ignoriert_urls() -> set:
+    """Alle URLs, für die der Standortfilter übersprungen wird: provisorisch
+    bewertete Vorschau-Stellen UND dauerhaft übernommene Ausnahmen."""
+    return provisorische_vorschau_urls() | standort_ausnahme_urls()
+
+
 def speichere_json(pfad: Path, daten):
     pfad.parent.mkdir(parents=True, exist_ok=True)
     pfad.write_text(json.dumps(daten, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -135,6 +181,50 @@ def text_matched(text: str, begriffe: list) -> list:
 
 def ist_ausgeschlossen(titel: str, begriffe: list) -> bool:
     return bool(text_matched(titel, begriffe))
+
+
+# Auslands-Marker für den "ganz Deutschland"-Modus des breiten Firmen-Scans.
+# Anders als die config-Blacklist (die auch deutsche Städte wie Hamburg wegen
+# Entfernung sperrt) fängt diese Liste NUR Ausland ab – deutsche Orte passieren.
+# Bewusst unscharf (Städte nur mit Land im Text erkennbar); der Mensch hakt die
+# Vorschau in Stufe 2 nach. Alle Einträge in normalisierter Form (siehe
+# normalisiere_ort: lowercase + ä->ae/ö->oe/ü->ue/ß->ss). Erweiterbar.
+AUSLAND_MARKER = [
+    # Länder (mehrsprachig)
+    "frankreich", "france",
+    "schweiz", "switzerland", "suisse", "svizzera",
+    "oesterreich", "austria",
+    "italien", "italy", "italia",
+    "spanien", "spain", "espana",
+    "niederlande", "netherlands", "nederland", "holland",
+    "belgien", "belgium", "belgique",
+    "polen", "poland", "polska",
+    "tschechien", "czech", "czechia",
+    "ungarn", "hungary",
+    "rumaenien", "romania",
+    "schweden", "sweden",
+    "daenemark", "denmark",
+    "norwegen", "norway",
+    "finnland", "finland",
+    "portugal",
+    "griechenland", "greece",
+    "irland", "ireland",
+    "vereinigtes koenigreich", "united kingdom", "great britain",
+    "england", "scotland", "wales",
+    "usa", "united states", "vereinigte staaten",
+    "kanada", "canada",
+    "china", "shanghai", "shenzhen", "beijing",
+    "indien", "india", "bangalore", "bengaluru", "pune", "hyderabad", "chennai",
+    "japan", "korea", "singapur", "singapore", "malaysia", "thailand",
+    "brasilien", "brazil", "mexiko", "mexico",
+    "tuerkei", "turkey", "turkiye",
+    "slowakei", "slovakia", "slowenien", "slovenia",
+    "kroatien", "croatia", "bulgarien", "bulgaria",
+    "luxemburg", "luxembourg",
+    "russland", "russia",
+    # Einzelne, eindeutig ausländische Städte (z.B. bekannte Auslandsstandorte)
+    "santa rosa", "glattbrugg", "bulle", "colmar", "ensisheim", "nussbaumen",
+]
 
 
 def standort_verboten(text: str, verbotene: list) -> bool:
@@ -217,17 +307,25 @@ def ersetze_abschnitt(text: str, marker: str, neuer_inhalt: str) -> str:
 # COOKIE-BANNER (Playwright)
 # =============================================================================
 
+# Text-Selektoren MÜSSEN exakt matchen (Anführungszeichen). Ohne sie macht
+# Playwright bei "text=OK" einen case-insensitiven Teilstring-Match und klickt
+# jeden Job-Link, dessen Titel zufällig "ok" enthält (z.B. "Fokus") – das
+# navigiert auf die Detailseite und leert die komplette Stellenliste.
 COOKIE_SELEKTOREN = [
-    "text=ALLES AKZEPTIEREN", "text=Alles akzeptieren",
-    "text=Alle akzeptieren", "text=Alle Cookies akzeptieren",
-    "text=Akzeptieren", "text=ABLEHNEN", "text=Ablehnen",
-    "text=Nur notwendige", "text=Nur erforderliche",
-    "text=Accept All", "text=Accept all", "text=Accept all cookies",
-    "text=Accept Cookies", "text=Reject All", "text=Reject all",
-    "text=I Accept", "text=Got it", "text=OK",
+    'text="ALLES AKZEPTIEREN"', 'text="Alles akzeptieren"',
+    'text="Alle akzeptieren"', 'text="Alle Cookies akzeptieren"',
+    'text="Akzeptieren"', 'text="ABLEHNEN"', 'text="Ablehnen"',
+    'text="Nur notwendige"', 'text="Nur erforderliche"',
+    'text="Accept All"', 'text="Accept all"', 'text="Accept all cookies"',
+    'text="Accept Cookies"', 'text="Reject All"', 'text="Reject all"',
+    'text="I Accept"', 'text="Got it"', 'text="OK"',
     "#onetrust-accept-btn-handler",
     "button[id*='cookie-accept']", "button[id*='accept-all']",
     "button[id*='onetrust-accept']",
+    # Usercentrics (Shadow-DOM; Playwright-Selektoren durchdringen offene Roots).
+    # data-testid ist über UC-Versionen stabil; deckt z.B. rosen-nxt.com ab.
+    "[data-testid='uc-accept-all-button']",
+    "[data-testid='uc-deny-all-button']",
 ]
 
 

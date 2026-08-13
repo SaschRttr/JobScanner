@@ -131,6 +131,9 @@ Electrical
 # -----------------------------------------------------------------------------
 
 [ausschlussbegriffe]
+duales studium
+praxissemester
+auszubildender
 thesis
 technikerarbeit
 leiter
@@ -271,6 +274,13 @@ Nokia                | https://jobs.nokia.com/en/sites/CX_1/jobs?location=Stuttg
 q.ant                | https://q-ant-gmbh.jobs.personio.de/?language=en
 IMS Chips            | https://k33469.coveto.de/public/jobs/
 Renesas              | https://jobs.renesas.com/jobs?options=19%2C27%2C47%2C646&page=1
+Advantest Software | https://jobs.advantest-career.de/software-development?utm_source=karriereseite&utm_medium=button&utm_campaign=jobshop
+Instagrid            | https://careers.instagrid.co/l/de?_gl=1*8651mv*_gcl_au*OTAxMTQzNTE5LjE3ODUzMDg3ODE.*FPAU*OTAxMTQzNTE5LjE3ODUzMDg3ODE.*_ga*MTM3Njk0MjM2Ny4xNzg1MzA4Nzgy*_ga_RPDTWZJD0B*czE3ODUzMDg3ODIkbzEkZzAkdDE3ODUzMDg3ODIkajYwJGwwJGgxNDExMDQ0OTEz*_fplc*UkZvdm5YMVJvYXUwNnFTSnNxNGFvazJMVlhKVnl6V0RvaHF5a3pHemE4ZmtjcHd3VTZKZllPM2NrOEtHUG94c0VjVmpYSDZWUWhXMnJpendtR1VsS3R2S3NDaXlTOEt5YTZBM1ZENEF0c0olMkJtd3RTZlN2c0ZPWHJ5RGlQdkElM0QlM0Q.
+Elring Klinger       | https://elringklinger.de/karriere/stellenangebote?entry=%22FuncArea_Manufacturing,FuncArea_Manufacturing_Technology%22,FuncArea_Research_and_Development,FuncArea_Other,EntryLevel_Professional,EntryLevel_Graduate,EntryLevel_Experienced,EntryLevel_Management
+Pfisterer            | https://www.pfisterer.com/de/stellenangebote
+Kärcher              | https://careers.kaercher.com/search/?searchby=location&createNewAlert=false&q=&locationsearch=&geolocation=&optionsFacetsDD_department=Fach-+%26+F%C3%BChrungsposition&optionsFacetsDD_customfield3=Forschung+und+Entwicklung&optionsFacetsDD_country=DE&optionsFacetsDD_facility=
+Liebherr             | https://www.liebherr.com/de-int/karriere/offene-stellen-5370609?filter=1220727223%3B1619115726%3B2344617153%3B2493034523%3B3036250039%3B3847609188%3B491761697
+SEG Automotive       | https://career.seg-automotive.com/stellenangebote.html
 [\firmen]
 
 # -----------------------------------------------------------------------------
@@ -539,7 +549,13 @@ Renesas              | https://jobs.renesas.com/jobs?options=19%2C27%2C47%2C646&
         "resultsPerPage": 20,
         "tableRequest": "applicant-job-offer"
     }
-}
+  },
+  {
+    "name": "Erbe Elektromedizin",
+    "typ": "html_tabelle",
+    "url": "https://de.erbegroup.com/de-de/karriere/jobs/",
+    "basis_url": "https://de.erbegroup.com"
+  }
 ]
 [\api_firmen]
 

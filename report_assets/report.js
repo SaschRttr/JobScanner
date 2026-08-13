@@ -20,10 +20,25 @@
         if (!ohneZaehlen) aktualisiereStatusCounts();
     }
 
+    // Zählt wie viele Stellen je Status im aktuell sichtbaren Ausschnitt liegen.
+    // Ist ein Firma-/Vorgemerkt-/Merkliste-Filter aktiv, werden nur die davon
+    // betroffenen Stellen gezählt - sonst zeigten die Kopfzeilen-Badges immer
+    // die globale Zahl an, während z.B. ein Firma-Filter nur einen Bruchteil
+    // davon sichtbar ließ.
     function aktualisiereStatusCounts() {
         const counts = {};
         const seenUrls = new Set();
         document.querySelectorAll('.stelle[data-scanner-status][data-url]').forEach(el => {
+            if (_nurVorgemerkt) {
+                if (el.dataset.vorgemerkt !== '1') return;
+            } else {
+                // data-ausgeschlossen ("nicht passend") wird vom Status-Filter immer
+                // ausgeblendet, egal welcher Status gewählt ist - hier ebenfalls
+                // ausschließen, sonst weicht die Kopfzeile vom Filter-Ergebnis ab.
+                if (el.dataset.ausgeschlossen) return;
+                if (_aktiverFirmaFilter !== null && el.dataset.firma !== _aktiverFirmaFilter) return;
+            }
+            if (_nurMerkliste && el.dataset.gemerkt !== '1') return;
             const url = el.dataset.url;
             if (url) {
                 if (seenUrls.has(url)) return;
@@ -199,10 +214,6 @@
                 el.classList.remove('mit-aktivitaet');
             }
         });
-        const statAbsagen = document.getElementById('stat-absagen');
-        if (statAbsagen) {
-            statAbsagen.textContent = document.querySelectorAll('.stelle.absage').length;
-        }
         aktualisiereStatusCounts();
     }
 
@@ -249,6 +260,195 @@
             sel.disabled = false;
             status.textContent = '❌ Verbindungsfehler';
         };
+    }
+
+    // Breite Suche (ganz Deutschland) über eine frei eingegebene Karriere-URL.
+    function breitScannen() {
+        const urlEl  = document.getElementById('breit-url');
+        const nameEl = document.getElementById('breit-name');
+        const status = document.getElementById('breit-status');
+        const output = document.getElementById('breit-output');
+        const url    = urlEl ? urlEl.value.trim() : '';
+        const name   = nameEl ? nameEl.value.trim() : '';
+        if (!url) { if (status) status.textContent = '⚠️ Bitte eine Karriere-URL eingeben'; return; }
+
+        if (status) status.textContent = '⏳ Breite Suche (ganz Deutschland)... das kann etwas dauern.';
+        if (output) { output.style.display = 'block'; output.textContent = ''; }
+
+        let ziel = '/vorschau-scannen?url=' + encodeURIComponent(url);
+        if (name) ziel += '&name=' + encodeURIComponent(name);
+        const quelle = new EventSource(ziel);
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                // NICHT automatisch neu laden – sonst verschwindet die Ausgabe
+                // sofort und man kann die gefundenen Stellen nicht prüfen.
+                // Stattdessen Ausgabe stehen lassen und manuell laden lassen.
+                if (status) {
+                    status.innerHTML = '✅ Fertig. '
+                        + '<button class="scan-btn" onclick="location.reload()">📋 Vorschau laden</button> '
+                        + '<a href="' + SERVER + '/vorschau-log" target="_blank" '
+                        + 'style="margin-left:6px;">📄 Vollständiges Log öffnen</a>';
+                }
+                if (output) output.scrollTop = output.scrollHeight;
+                return;
+            }
+            if (output) { output.textContent += e.data + '\n'; output.scrollTop = output.scrollHeight; }
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            if (status) status.textContent = '❌ Verbindungsfehler';
+        };
+    }
+
+    // --- Breite Vorschau (ganz Deutschland) -------------------------------
+    // Log-Fenster für den Bewertungs-Fortschritt einblenden und zurückgeben.
+    function _vorschauLogAnzeigen(titel) {
+        const status = document.getElementById('vorschau-status');
+        if (!status) return null;
+        status.innerHTML = '<div style="font-weight:bold; margin-bottom:4px;">' + titel + '</div>'
+            + '<pre id="vorschau-log" style="max-height:220px; overflow-y:auto; background:#111; color:#0f0; padding:8px; border-radius:4px; font-size:0.8em; white-space:pre-wrap;"></pre>';
+        return document.getElementById('vorschau-log');
+    }
+
+    // Eine Stelle provisorisch in die DB legen und die Pipeline (Rohtext→
+    // Extraktion→KI) streamen. Promise, das bei FERTIG (oder Fehler) auflöst –
+    // OHNE Reload, damit der Aufrufer mehrere Stellen nacheinander abarbeiten kann.
+    function _vorschauStelleVerarbeiten(url, log) {
+        return new Promise((resolve) => {
+            fetch(SERVER + '/vorschau-bewerten', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            }).then(r => r.json()).then(data => {
+                if (!data.ok) {
+                    if (log) log.textContent += '\n❌ ' + url + ': ' + (data.fehler || 'Fehler') + '\n';
+                    return resolve(false);
+                }
+                const quelle = new EventSource('/stelle-einzeln-stream?url=' + encodeURIComponent(url));
+                quelle.onmessage = function(e) {
+                    if (e.data === 'FERTIG') { quelle.close(); return resolve(true); }
+                    if (log) { log.textContent += e.data + '\n'; log.scrollTop = log.scrollHeight; }
+                };
+                quelle.onerror = function() {
+                    quelle.close();
+                    if (log) log.textContent += '\n⚠️ Verbindung zur Pipeline unterbrochen.\n';
+                    resolve(false);
+                };
+            }).catch(() => {
+                if (log) log.textContent += '\n❌ Server nicht erreichbar\n';
+                resolve(false);
+            });
+        });
+    }
+
+    // "Bewerten" (einzeln): Kandidat bewerten und danach Detailansicht laden.
+    async function vorschauBewerten(btn) {
+        const zeile = btn.closest('.vorschau-zeile');
+        const url   = zeile ? zeile.getAttribute('data-url') : null;
+        if (!url) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        const log = _vorschauLogAnzeigen('⏳ Bewerte Stelle (Rohtext → Extraktion → KI)...');
+        if (zeile) zeile.remove();
+        await _vorschauStelleVerarbeiten(url, log);
+        if (log) log.textContent += '\n✅ Fertig – lade Detailansicht...\n';
+        setTimeout(() => location.reload(), 900);
+    }
+
+    // "Ausgewählte bewerten" (Batch): alle angehakten Kandidaten nacheinander
+    // durch die Pipeline schicken, dann EINMAL die Detailansicht laden.
+    async function vorschauBewertenBatch() {
+        const zeilen = [...document.querySelectorAll('.vorschau-cb:checked')]
+            .map(cb => cb.closest('.vorschau-zeile'))
+            .filter(Boolean);
+        if (!zeilen.length) { alert('Bitte mindestens eine Stelle auswählen.'); return; }
+        const urls = zeilen.map(z => z.getAttribute('data-url'));
+        const btn = document.getElementById('vorschau-batch-btn');
+        if (btn) btn.disabled = true;
+        const log = _vorschauLogAnzeigen('⏳ Bewerte ' + urls.length + ' Stelle(n) nacheinander...');
+        let ok = 0;
+        for (let i = 0; i < urls.length; i++) {
+            if (log) log.textContent += '\n=== ' + (i + 1) + '/' + urls.length + ': ' + urls[i] + ' ===\n';
+            const erfolg = await _vorschauStelleVerarbeiten(urls[i], log);
+            if (erfolg) { ok++; if (zeilen[i]) zeilen[i].remove(); }
+        }
+        if (log) log.textContent += '\n✅ ' + ok + '/' + urls.length + ' bewertet – lade Detailansicht...\n';
+        setTimeout(() => location.reload(), 1200);
+    }
+
+    // Checkbox "Alle auswählen" umschalten + Zähler im Batch-Button aktualisieren.
+    function vorschauAlleUmschalten(cb) {
+        document.querySelectorAll('.vorschau-cb').forEach(x => { x.checked = cb.checked; });
+        vorschauCountAktualisieren();
+    }
+
+    function vorschauCountAktualisieren() {
+        const n = document.querySelectorAll('.vorschau-cb:checked').length;
+        const btn = document.getElementById('vorschau-batch-btn');
+        if (btn) btn.textContent = n ? ('🔍 ' + n + ' Ausgewählte bewerten') : '🔍 Ausgewählte bewerten';
+    }
+
+    // "Übernehmen": provisorische Stelle endgültig behalten (nur Markierung
+    // entfernen, KEINE zweite Bewertung).
+    async function vorschauUebernehmen(btn) {
+        const karte = btn.closest('.vorschau-prov');
+        const url   = karte ? karte.getAttribute('data-url') : null;
+        if (!url) return;
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        try {
+            const res = await fetch(SERVER + '/vorschau-uebernehmen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+                btn.disabled = false; btn.textContent = '✅ Übernehmen';
+                return;
+            }
+            location.reload();
+        } catch(e) {
+            alert('Server nicht erreichbar');
+            btn.disabled = false; btn.textContent = '✅ Übernehmen';
+        }
+    }
+
+    // "Verwerfen": Kandidat (nur aus Liste) ODER provisorische Stelle (aus DB löschen).
+    async function vorschauVerwerfen(btn) {
+        const el  = btn.closest('.vorschau-zeile') || btn.closest('.vorschau-prov');
+        const url = el ? el.getAttribute('data-url') : null;
+        if (!url) return;
+        const istProv = el.classList.contains('vorschau-prov');
+        if (istProv && !confirm('Provisorisch bewertete Stelle verwerfen? Sie wird aus der Datenbank gelöscht.')) return;
+        try {
+            const res = await fetch(SERVER + '/vorschau-verwerfen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (data.ok && el) el.remove();
+            else if (!data.ok) alert('Fehler: ' + (data.fehler || 'Unbekannt'));
+        } catch(e) { alert('Server nicht erreichbar'); }
+    }
+
+    async function vorschauLeeren() {
+        if (!confirm('Komplette Vorschau leeren?')) return;
+        try {
+            const res = await fetch(SERVER + '/vorschau-leeren', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const data = await res.json();
+            if (data.ok) {
+                const box = document.getElementById('vorschau-box');
+                if (box) box.remove();
+            }
+        } catch(e) { alert('Server nicht erreichbar'); }
     }
 
     function scanStarten() {
@@ -487,8 +687,46 @@
         }
     }
 
+    // Trägt eine Stelle über /stelle-einfuegen ein und lässt die Teil-Pipeline
+    // (rohtext_holen/extraktor/bewertung/report) über /manuell-stream laufen.
+    // meldung(text, istFehler) zeigt Statustext an; onZeile(text) ist optional
+    // und bekommt jede rohe Log-Zeile (für ein sichtbares Output-Fenster).
+    async function _stelleEinfuegenAusfuehren(url, firma, titel, meldung, onZeile) {
+        const res = await fetch(SERVER + '/stelle-einfuegen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, firma, titel })
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            meldung('Fehler: ' + (data.fehler || 'Unbekannt'), true);
+            return;
+        }
+
+        meldung('Eingetragen - Pipeline laeuft...', false);
+
+        // Nur DIESE Stelle durch die Teil-Pipeline schicken (url-Filter), sonst
+        // läuft rohtext_holen/extraktor/bewertung über ALLE Stellen und wirkt wie
+        // "hängt".
+        const quelle = new EventSource(SERVER + '/manuell-stream?url=' + encodeURIComponent(url));
+        quelle.onmessage = function(e) {
+            if (e.data === 'FERTIG') {
+                quelle.close();
+                meldung('Fertig - Seite wird neu geladen...', false);
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+            if (onZeile) onZeile(e.data);
+        };
+        quelle.onerror = function() {
+            quelle.close();
+            meldung('Verbindungsfehler zum Server', true);
+        };
+    }
+
     async function stelleEinfuegen() {
-       const url = document.getElementById('manuell-url').value.trim();
+        const url = document.getElementById('manuell-url').value.trim();
         const firma = document.getElementById('manuell-firma').value.trim();
         const titel = document.getElementById('manuell-titel').value.trim();
         const statusEl = document.getElementById('manuell-status');
@@ -502,43 +740,186 @@
 
         statusEl.textContent = 'Stelle wird eingetragen...';
         statusEl.style.color = '#2980b9';
+        output.style.display = 'block';
+        output.textContent = '';
 
-        const server = window.location.origin;
+        await _stelleEinfuegenAusfuehren(url, firma, titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+            },
+            (zeile) => {
+                output.textContent += zeile + '\n';
+                output.scrollTop = output.scrollHeight;
+            }
+        );
+    }
 
-        const res = await fetch(server + '/stelle-einfuegen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, firma, titel })
-        });
-        const data = await res.json();
+    // "In Pipeline aufnehmen"-Button bei einem Titel ohne Suchbegriff-Treffer:
+    // url/firma/titel stehen schon als data-Attribute an der .kt-eintrag-Zeile.
+    async function stelleAusKeinTrefferAufnehmen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
 
-        if (!data.ok) {
-            statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+        // Live-Ausgabe-Box einmalig anlegen, damit man sieht, was die Pipeline
+        // gerade macht (rohtext_holen → extraktor → bewertung → report).
+        let output = zeile.querySelector('.kt-pipeline-output');
+        if (!output) {
+            output = document.createElement('pre');
+            output.className = 'kt-pipeline-output';
+            output.style.cssText = 'margin-top:6px; max-height:180px; overflow:auto; ' +
+                'background:#1e1e1e; color:#ddd; font-size:0.8em; padding:6px 8px; ' +
+                'border-radius:4px; white-space:pre-wrap; word-break:break-word;';
+            zeile.appendChild(output);
+        }
+        output.style.display = 'block';
+        output.textContent = '';
+
+        btn.disabled = true;
+        statusEl.textContent = 'Wird eingetragen...';
+        statusEl.style.color = '#2980b9';
+
+        await _stelleEinfuegenAusfuehren(zeile.dataset.url, zeile.dataset.firma, zeile.dataset.titel,
+            (text, istFehler) => {
+                statusEl.textContent = text;
+                statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
+                if (istFehler) btn.disabled = false;
+            },
+            (zeileText) => {
+                output.textContent += zeileText + '\n';
+                output.scrollTop = output.scrollHeight;
+            }
+        );
+    }
+
+    // "Stellentext anzeigen"-Button: lädt den Rohtext live per Playwright (ohne
+    // die Stelle zu speichern) und zeigt ihn in der .kt-vorschau-Box darunter an.
+    // Zweiter Klick blendet nur ein/aus, ohne erneut zu laden.
+    async function stellentextVorschau(btn) {
+        const zeile   = btn.closest('.kt-eintrag');
+        const box     = zeile.querySelector('.kt-vorschau');
+        const statusEl = zeile.querySelector('.kt-status');
+
+        if (box.dataset.geladen === '1') {
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+
+        btn.disabled = true;
+        statusEl.textContent = 'Lädt Stellentext...';
+        statusEl.style.color = '#2980b9';
+        box.style.display = 'block';
+        box.textContent = 'Lädt...';
+
+        try {
+            const res = await fetch(SERVER + '/kein-treffer-vorschau', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: zeile.dataset.url })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                box.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.textContent = '';
+                btn.disabled = false;
+                return;
+            }
+            box.textContent = data.text;
+            box.dataset.geladen = '1';
+            statusEl.textContent = '';
+        } catch (e) {
+            box.textContent = 'Server nicht erreichbar';
+            statusEl.textContent = '';
+        }
+        btn.disabled = false;
+    }
+
+    // "Als Suchbegriff vormerken"-Button: übernimmt ausgewählte Wort-Chips
+    // (kt-chip-active) plus optionalen Freitext als Vorschlag in
+    // neue_suchbegriffe.json - landet NICHT direkt in config.txt, sondern wird
+    // erst später gesammelt durchgesehen.
+    async function suchbegriffHinzufuegen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
+        const freitext = zeile.querySelector('.kt-freitext');
+
+        const begriffe = Array.from(zeile.querySelectorAll('.kt-chip-active')).map(c => c.textContent);
+        if (freitext.value.trim()) begriffe.push(freitext.value.trim());
+
+        if (begriffe.length === 0) {
+            statusEl.textContent = 'Bitte mind. einen Begriff wählen oder eingeben.';
             statusEl.style.color = '#e74c3c';
             return;
         }
 
-        statusEl.textContent = 'Eingetragen - Pipeline laeuft...';
-        statusEl.style.color = '#27ae60';
-        output.style.display = 'block';
-        output.textContent = '';
+        btn.disabled = true;
+        statusEl.textContent = 'Wird vorgemerkt...';
+        statusEl.style.color = '#2980b9';
 
-        const quelle = new EventSource(server + '/manuell-stream');
-        quelle.onmessage = function(e) {
-            if (e.data === 'FERTIG') {
-                quelle.close();
-                statusEl.textContent = 'Fertig - Seite wird neu geladen...';
-                setTimeout(() => location.reload(), 2000);
+        try {
+            const res = await fetch(SERVER + '/suchbegriff-hinzufuegen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    begriffe,
+                    url: zeile.dataset.url,
+                    firma: zeile.dataset.firma,
+                    titel: zeile.dataset.titel
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
                 return;
             }
-            output.textContent += e.data + '\n';
-            output.scrollTop = output.scrollHeight;
-        };
-        quelle.onerror = function() {
-            quelle.close();
-            statusEl.textContent = 'Verbindungsfehler zum Server';
+            const mitText = data.stellentext_dabei ? ' (inkl. Stellentext)' : '';
+            statusEl.textContent = '✅ vorgemerkt: ' + begriffe.join(', ') + mitText;
+            statusEl.style.color = '#27ae60';
+            freitext.value = '';
+            zeile.querySelectorAll('.kt-chip-active').forEach(c => c.classList.remove('kt-chip-active'));
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
             statusEl.style.color = '#e74c3c';
-        };
+            btn.disabled = false;
+        }
+    }
+
+    // "✅ In config übernehmen"-Button im Abschnitt "Vorgemerkte Suchbegriffe":
+    // schreibt den Begriff in den [suchbegriffe]-Block von config.txt und
+    // entfernt ihn aus neue_suchbegriffe.json.
+    async function suchbegriffInConfig(btn) {
+        const li = btn.closest('.vb-eintrag');
+        const statusEl = li.querySelector('.vb-status');
+        const begriff = li.dataset.begriff;
+
+        btn.disabled = true;
+        statusEl.textContent = 'Übernehme...';
+        statusEl.style.color = '#2980b9';
+
+        try {
+            const res = await fetch(SERVER + '/suchbegriff-uebernehmen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ begriff })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
+                return;
+            }
+            statusEl.textContent = data.schon_vorhanden ? '✓ war schon in config.txt' : '✅ in config.txt übernommen';
+            statusEl.style.color = '#27ae60';
+            btn.style.display = 'none';
+            li.style.opacity = '0.55';
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
+            statusEl.style.color = '#e74c3c';
+            btn.disabled = false;
+        }
     }
 
     async function neuLadenUndBewerten(btn, stellenUrl) {
@@ -610,6 +991,11 @@
         if (section) section.style.display = checked ? '' : 'none';
         if (_flatAktiv) _aktualisiereFlach();
     }
+    function toggleStandortAusserhalb(checked) {
+        const section = document.getElementById('standort-ausserhalb-section');
+        if (section) section.style.display = checked ? '' : 'none';
+        if (_flatAktiv) _aktualisiereFlach();
+    }
     function toggleNichtBewertet(checked) {
         _nurNichtBewertet = checked;
         _aktualisiere();
@@ -622,8 +1008,16 @@
         _nurMerkliste = checked;
         _aktualisiere();
     }
+    // _aktiverFilter (Stufe: kennenlernen/einladung/zusage/absage) und
+    // _aktiverStatusFilter (Scanner-Status: bewerben/beworben/... ) sind zwei
+    // unabhängige Variablen, stellen für den Nutzer aber dieselbe Filterleiste
+    // dar ("welche Stellen will ich sehen?"). Ohne gegenseitiges Zurücksetzen
+    // blieb ein zuvor gewählter Filter im Hintergrund aktiv und wurde mit dem
+    // neuen UND-verknüpft - Stellen verschwanden dadurch scheinbar grundlos
+    // (z.B. eine beworbene Stelle bei noch aktivem Kennenlernen-Filter).
     function setzeFilter(filter) {
         _aktiverFilter = (_aktiverFilter === filter && filter !== null) ? null : filter;
+        _aktiverStatusFilter = null;
         _aktualisiere();
     }
     function setzeSortierung(sort) {
@@ -632,6 +1026,7 @@
     }
     function setzeStatusFilter(status) {
         _aktiverStatusFilter = (_aktiverStatusFilter === status) ? null : status;
+        _aktiverFilter = null;
         _aktualisiere();
     }
     function setzeFirmaFilter(firma) {
@@ -698,6 +1093,7 @@
         fa.style.display = 'none';
         fa.innerHTML = '<div id="flat-ansicht-info"></div>';
         ha.style.display = '';
+        aktualisiereStatusCounts();
     }
     function _aktualisiereFlach() {
         const fa = document.getElementById('flat-ansicht');
@@ -738,11 +1134,15 @@
         // betroffenen Stellen sichtbar sein – Geringer-Match/Zu-weit nur
         // ausblenden, wenn keine Firma gewählt ist.
         const zeigeGM = document.getElementById('cb-geringer-match')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
+        let ausgeblendetGM = 0;
         if (!zeigeGM) {
+            ausgeblendetGM = gefiltert.filter(el => el.dataset.geringerMatch).length;
             gefiltert = gefiltert.filter(el => !el.dataset.geringerMatch);
         }
         const zeigeZW = document.getElementById('cb-zu-weit')?.checked || _aktiverFirmaFilter !== null || _nurVorgemerkt || _nurMerkliste;
+        let ausgeblendetZW = 0;
         if (!zeigeZW) {
+            ausgeblendetZW = gefiltert.filter(el => el.dataset.zuWeit).length;
             gefiltert = gefiltert.filter(el => !el.dataset.zuWeit);
         }
         if (_nurNichtBewertet) {
@@ -799,6 +1199,28 @@
         } else {
             gefiltert.forEach(el => fa.appendChild(el));
         }
+        // Der aktive Filter (Status/Firma/...) kann Treffer haben, die zusätzlich
+        // per Geringer-Match- oder Zu-weit-Checkbox ausgeblendet sind - ohne
+        // Hinweis wirkte die Liste dann unvollständig oder fälschlich leer
+        // (siehe Grenzfall-Zähler-Bug: Kopfzeile zeigte mehr als sichtbar war).
+        // Klick blendet die jeweilige Gruppe dauerhaft ein (dieselbe Checkbox
+        // wie oben in der Filterleiste).
+        [
+            { count: ausgeblendetGM, label: 'Geringer Match', cbId: 'cb-geringer-match', fn: toggleGeringerMatch },
+            { count: ausgeblendetZW, label: 'Zu weit',        cbId: 'cb-zu-weit',        fn: toggleZuWeit },
+        ].forEach(({count, label, cbId, fn}) => {
+            if (count === 0) return;
+            const p = document.createElement('p');
+            p.className = 'ausblende-hinweis';
+            p.textContent = `▾ ${count} weitere ausgeblendet (${label}) – anzeigen`;
+            p.onclick = () => {
+                const cb = document.getElementById(cbId);
+                if (cb) cb.checked = true;
+                fn(true);
+            };
+            fa.appendChild(p);
+        });
+        aktualisiereStatusCounts();
     }
 
     async function stellePruefen(btn, url) {

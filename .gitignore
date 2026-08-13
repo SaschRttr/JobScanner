@@ -9,6 +9,12 @@ strukturen.json
 scan_status.json
 status.json
 report.html
+kein_treffer.html
+kein_treffer.json
+neue_suchbegriffe.json
+vorschau_kandidaten.json
+vorschau_provisorisch.json
+standort_ausnahme.json
 jobscanner.db
 log.txt
 
@@ -32,3 +38,9 @@ __pycache__/
 node_modules/
 package-lock.json
 .claude
+
+# Lokale Arbeitsdateien (PC-spezifisch)
+TODO.md
+config_raspi.txt
+jobscanner.db.bak*
+variance_ergebnisse.json

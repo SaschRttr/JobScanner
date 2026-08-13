@@ -33,6 +33,7 @@ from utils import (lade_config, lade_json, ist_ausgeschlossen, text_matched,
                    standort_ablehnungsgrund, sicherer_pfadname, effektiver_score)
 from status_def import (STATUS_LABELS, STATUS_EMOJIS, INAKTIVE_STATUSWERTE,
                         UNBEWERTETE_STATUSWERTE, FILTER_STATUS_VALS)
+from bewertung import empfehlung_fuer_score
 
 
 # =============================================================================
@@ -41,11 +42,150 @@ from status_def import (STATUS_LABELS, STATUS_EMOJIS, INAKTIVE_STATUSWERTE,
 
 BASIS_PFAD      = Path(__file__).parent
 STELLEN_JSON    = BASIS_PFAD / "stellen.json"
+VORSCHAU_JSON   = BASIS_PFAD / "vorschau_kandidaten.json"
+VORSCHAU_PROVISORISCH_JSON = BASIS_PFAD / "vorschau_provisorisch.json"
 BEKANNTE_JSON   = BASIS_PFAD / "bekannte_stellen.json"
 REPORT_PFAD     = BASIS_PFAD / "report.html"
 BEWERBUNGEN_DIR = BASIS_PFAD / "bewerbungen"
 STATUS_JSON     = BASIS_PFAD / "status.json"
 SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
+KEIN_TREFFER_JSON = BASIS_PFAD / "kein_treffer.json"
+KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
+NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
+
+
+def _titel_chips_html(titel: str) -> str:
+    woerter = re.split(r"[^\wäöüÄÖÜß&]+", titel)
+    gesehen = set()
+    chips = []
+    for w in woerter:
+        wl = w.lower()
+        if len(w) < 2 or wl in gesehen:
+            continue
+        gesehen.add(wl)
+        chips.append(
+            f'<button type="button" class="kt-chip" '
+            f'onclick="this.classList.toggle(\'kt-chip-active\')">{_html.escape(w)}</button>'
+        )
+    return "".join(chips)
+
+
+def erstelle_kein_treffer_seite() -> str:
+    """Eigenständige Seite (kein_treffer.html) für die Whitelist-Diagnose - getrennt
+    vom Haupt-Report, damit das Produktivsystem (Bewerbungs-Tracking) übersichtlich
+    bleibt. Wird von webui.py unter /kein-treffer ausgeliefert."""
+    kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
+    gesamt = sum(len(v) for v in kein_treffer.values())
+    status_js_konstanten = (
+        f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
+        f"const INAKTIVE_STATUS = {json.dumps(list(INAKTIVE_STATUSWERTE))};\n"
+        f"const UNBEWERTETE_STATUS = {json.dumps(list(UNBEWERTETE_STATUSWERTE))};\n"
+        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};"
+    )
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Suchbegriff-Whitelist – Titel ohne Treffer</title>
+    <style>{CSS}</style>
+    <script>{status_js_konstanten}</script>
+    <script>{JS}</script>
+</head>
+<body>
+    <h1>🔍 Titel ohne Suchbegriff-Treffer ({gesamt})</h1>
+    <p><a href="/">← Zurück zum Report</a></p>
+    <p style="color:#666; font-size:0.9em;">Diese Titel sind schon an der Whitelist [suchbegriffe] gescheitert und
+    stehen deshalb nicht im normalen Report. Begriffe, die du hier vormerkst, landen zunächst in
+    <code>neue_suchbegriffe.json</code> und erscheinen oben unter „Vorgemerkte Suchbegriffe" - von dort
+    übernimmst du sie per Klick in <code>config.txt</code>.</p>
+    {erstelle_vorgemerkte_begriffe_html()}
+    {erstelle_kein_treffer_html(kein_treffer)}
+</body>
+</html>"""
+
+
+def erstelle_vorgemerkte_begriffe_html() -> str:
+    """Zeigt die in neue_suchbegriffe.json vorgemerkten Begriffe mit einem
+    „In config übernehmen"-Button - so bleibt die Prüf-vor-Live-Logik erhalten,
+    aber die Übernahme in [suchbegriffe] ist ein Klick statt Handarbeit in der JSON."""
+    vorschlaege = lade_json(NEUE_SUCHBEGRIFFE_JSON, [])
+    if not vorschlaege:
+        return ""
+
+    # begriff -> Kontexte (Titel/Firma), damit man beim Übernehmen weiß, woher er stammt.
+    begriffe: dict = {}
+    for e in vorschlaege:
+        titel = (e.get("stellenbezeichnung") or "").strip()
+        firma = (e.get("firma") or "").strip()
+        kontext = " ".join(t for t in [titel, f"({firma})" if firma else ""] if t).strip()
+        for b in e.get("begriffe", []):
+            b = (b or "").strip()
+            if not b:
+                continue
+            if kontext:
+                begriffe.setdefault(b, []).append(kontext)
+            else:
+                begriffe.setdefault(b, [])
+
+    if not begriffe:
+        return ""
+
+    items = []
+    for b in sorted(begriffe, key=str.lower):
+        kontexte = "; ".join(dict.fromkeys(begriffe[b]))  # doppelte Kontexte zusammenfassen
+        kontext_html = (f'<span style="color:#888; font-size:0.85em; margin-left:6px;">{_html.escape(kontexte)}</span>'
+                        if kontexte else "")
+        items.append(f"""
+            <li class="vb-eintrag" data-begriff="{_html.escape(b, quote=True)}" style="margin:4px 0;">
+                <button type="button" class="kt-btn" onclick="suchbegriffInConfig(this)">✅ „{_html.escape(b)}" in config übernehmen</button>
+                {kontext_html}
+                <span class="vb-status" style="margin-left:6px; font-size:0.85em;"></span>
+            </li>""")
+
+    return f"""
+    <details open style="margin:12px 0; padding:8px 12px; background:#fff8e1; border:1px solid #ffe082; border-radius:6px;">
+        <summary style="cursor:pointer; font-weight:bold;">📌 Vorgemerkte Suchbegriffe ({len(begriffe)}) – noch nicht in config.txt</summary>
+        <ul style="margin:8px 0 0 0; padding-left:0; list-style:none;">{"".join(items)}</ul>
+    </details>"""
+
+
+def erstelle_kein_treffer_html(kein_treffer: dict) -> str:
+    """Baut die Liste der Titel ohne Suchbegriff-Treffer je Firma - lebt auf einer
+    eigenen Seite (kein_treffer.html), nicht im Haupt-Report, damit das
+    Produktivsystem (Bewerbungs-Tracking) sauber von dieser Whitelist-Diagnose
+    getrennt bleibt."""
+    if not kein_treffer:
+        return "<p>Keine Titel ohne Suchbegriff-Treffer.</p>"
+    zeilen = []
+    for name in sorted(kein_treffer.keys()):
+        eintraege = kein_treffer.get(name) or []
+        if not eintraege:
+            continue
+        items = []
+        for e in eintraege:
+            titel = e.get("titel", "")
+            url   = e.get("url", "")
+            items.append(f"""
+            <li class="kt-eintrag" data-url="{_html.escape(url, quote=True)}"
+                data-firma="{_html.escape(name, quote=True)}" data-titel="{_html.escape(titel, quote=True)}">
+                <div><a href="{_html.escape(url, quote=True)}" target="_blank" style="color:#2980b9; text-decoration:none;">{_html.escape(titel)} ↗</a></div>
+                <div class="kt-chips">{_titel_chips_html(titel)}</div>
+                <div style="margin-top:4px;">
+                    <input type="text" class="kt-freitext" placeholder="eigener Begriff..." style="width:160px;">
+                    <button type="button" class="kt-btn" onclick="suchbegriffHinzufuegen(this)">+ Als Suchbegriff vormerken</button>
+                    <button type="button" class="kt-btn" onclick="stelleAusKeinTrefferAufnehmen(this)">📥 In Pipeline aufnehmen</button>
+                    <button type="button" class="kt-btn" onclick="stellentextVorschau(this)">👁 Stellentext anzeigen</button>
+                    <span class="kt-status" style="margin-left:6px; color:#888; font-size:0.85em;"></span>
+                </div>
+                <div class="kt-vorschau" style="display:none;"></div>
+            </li>""")
+        zeilen.append(
+            f'<details style="margin-top:6px;"><summary style="cursor:pointer;">{name}: '
+            f'{len(eintraege)} ohne Suchbegriff-Treffer</summary>'
+            f'<ul class="kt-liste" style="margin:6px 0 0 0; padding-left:16px; list-style:none;">{"".join(items)}</ul>'
+            f'</details>\n'
+        )
+    return "".join(zeilen) or "<p>Keine Titel ohne Suchbegriff-Treffer.</p>"
 
 
 def _scan_status_html(stellen: list | None = None) -> str:
@@ -56,8 +196,19 @@ def _scan_status_html(stellen: list | None = None) -> str:
     if not status:
         return ""
 
+    kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
+    kein_treffer_gesamt = sum(len(v) for v in kein_treffer.values())
+
     fehler = {name: info for name, info in status.items() if not info.get("ok")}
     letzter_stand = max((info.get("zeitpunkt", "") for info in status.values()), default="")
+
+    def _kein_treffer_link() -> str:
+        if not kein_treffer_gesamt:
+            return ""
+        return (
+            f'<div style="margin-top:6px;">ℹ️ {kein_treffer_gesamt} Titel ohne Suchbegriff-Treffer '
+            f'(Whitelist evtl. zu eng) – <a href="/kein-treffer" target="_blank">Details &amp; Vorschläge ansehen →</a></div>\n'
+        )
 
     # Reine Sichtbarkeits-Info (kein Alarm): passend/ausgeschlossen je Firma, damit
     # auffällt, wenn z.B. plötzlich gar keine Ausschluss-Treffer (Praktikum,
@@ -65,7 +216,7 @@ def _scan_status_html(stellen: list | None = None) -> str:
     # Hinweis auf zu enge/falsche Links, ohne dass es hart als Fehler gilt.
     def _firmen_details_html() -> str:
         if not stellen:
-            return ""
+            return _kein_treffer_link()
         zeilen = []
         for name in sorted(status.keys()):
             firmen_stellen = [s for s in stellen if s.get("firma") == name and not s.get("geloescht_am")]
@@ -73,12 +224,14 @@ def _scan_status_html(stellen: list | None = None) -> str:
                 continue
             passend      = sum(1 for s in firmen_stellen if not s.get("nicht_passend"))
             ausgeschlossen = sum(1 for s in firmen_stellen if s.get("nicht_passend"))
-            zeilen.append(f'<li>{name}: {passend} passend, {ausgeschlossen} ausgeschlossen</li>')
+            ohne_treffer   = len(kein_treffer.get(name) or [])
+            zeilen.append(f'<li>{name}: {passend} passend, {ausgeschlossen} ausgeschlossen, {ohne_treffer} ohne Treffer</li>')
         if not zeilen:
-            return ""
+            return _kein_treffer_link()
         return (
             '<details style="margin-top:6px;"><summary style="cursor:pointer;">Details je Firma</summary>'
             f'<ul style="margin:6px 0 0 0;">{"".join(zeilen)}</ul></details>\n'
+            f'{_kein_treffer_link()}'
         )
 
     if not fehler:
@@ -139,6 +292,9 @@ def _rohtext_fehler_html(stellen: list) -> str:
 # FAHRZEIT (Google Distance Matrix API)
 # =============================================================================
 
+_MAPS_FEHLER_GEZEIGT = False
+
+
 def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None:
     """Fragt Google Distance Matrix API ab (driving + transit). Kein Caching — nur reiner API-Call."""
     if not api_key or not ziel or not startpunkt or api_key == "DEIN_GOOGLE_MAPS_API_KEY":
@@ -157,6 +313,16 @@ def hole_fahrzeit_daten(ziel: str, api_key: str, startpunkt: str) -> dict | None
             req = urllib.request.Request(api_url, headers={"User-Agent": "JobScanner/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+            # Top-Level-Fehler (z.B. REQUEST_DENIED bei fehlendem Billing) einmalig
+            # sichtbar machen – sonst verschwindet die Fahrzeit kommentarlos.
+            top = data.get("status")
+            if top and top != "OK":
+                global _MAPS_FEHLER_GEZEIGT
+                if not _MAPS_FEHLER_GEZEIGT:
+                    print(f"  ⚠️  Google Maps API: {top} – {data.get('error_message', '')} "
+                          f"→ Fahrzeit wird nicht angezeigt (Billing/API-Key prüfen)")
+                    _MAPS_FEHLER_GEZEIGT = True
+                return None
             rows = data.get("rows", [])
             if not rows:
                 return None
@@ -327,7 +493,13 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         score      = b.get("score", 0)
         score_pot  = b.get("score_potenzial")
         score_na   = b.get("score_nach_anpassung")
-        empf  = b.get("empfehlung", "?")
+        # Live aus dem aktuellen Score neu berechnen statt das gespeicherte
+        # empfehlung-Feld zu vertrauen: dieselbe Rechnung bestimmt auch den
+        # Scanner-Status-Badge (Grenzfall/bewerben/nicht bewerben) - nach einer
+        # Neubewertung (score_nach_anpassung geändert, Status neu berechnet)
+        # blieb das gespeicherte empfehlung-Feld sonst auf dem alten Wert stehen
+        # und widersprach dem Badge (z.B. Badge "Grenzfall", Text "BEWERBEN").
+        empf  = empfehlung_fuer_score(effektiver_score(b))
         def _farbe(v: float) -> str:
             return "#27ae60" if v >= 70 else "#f39c12" if v >= 40 else "#e74c3c"
         empf_farbe  = "#27ae60" if empf == "bewerben" else "#8e44ad" if empf == "unsicher" else "#e74c3c"
@@ -436,7 +608,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     # Bewerbungsunterlagen: Checkbox + Download-Links
     firma_safe = sicherer_pfadname(s["firma"])
     titel_safe = sicherer_pfadname(s["titel"])
-    score      = (s.get("bewertung") or {}).get("score", 0)
+    # effektiver_score (Maximum aus Lebenslauf-/Optimierbar-/Profil-Score), NICHT
+    # nur der rohe Lebenslauf-Score – sonst weicht die "Nach Passung"-Sortierung
+    # (nutzt data-score) vom Status ab, der über effektiver_score entschieden wird.
+    score      = effektiver_score(s.get("bewertung") or {})
 
     stelle_dir = BEWERBUNGEN_DIR / firma_safe / titel_safe
     lv_docx = Path(s["lebenslauf_pfad"]) if s.get("lebenslauf_pfad") else None
@@ -595,6 +770,119 @@ CSS = (ASSETS_DIR / "report.css").read_text(encoding="utf-8")
 JS  = (ASSETS_DIR / "report.js").read_text(encoding="utf-8")
 
 
+def _vorschau_html() -> str:
+    """Rendert die Sektion 'Breit gefunden (DE) – Vorschau' aus vorschau_kandidaten.json.
+    Diese Kandidaten sind noch NICHT in der DB; per Button einzeln übernehmbar."""
+    if not VORSCHAU_JSON.exists():
+        return ""
+    try:
+        kandidaten = json.loads(VORSCHAU_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not kandidaten:
+        return ""
+
+    def _fahrzeit_text(k: dict) -> str:
+        fz = k.get("fahrzeit") or {}
+        teile = []
+        if fz.get("auto_min") is not None:
+            km = f" ({fz['auto_km']} km)" if fz.get("auto_km") is not None else ""
+            teile.append(f"🚗 {fz['auto_min']} min{km}")
+        if fz.get("transit_min") is not None:
+            teile.append(f"🚆 {fz['transit_min']} min")
+        return " · ".join(teile) if teile else ""
+
+    zeilen = []
+    for k in kandidaten:
+        url   = _html.escape(k.get("url", ""), quote=True)
+        titel = _html.escape(k.get("titel", "") or "(ohne Titel)")
+        firma = _html.escape(k.get("firma", ""))
+        ort   = _html.escape(k.get("arbeitsort", "") or "–")
+        fahrzeit = _html.escape(_fahrzeit_text(k))
+        fahrzeit_html = f'<div style="flex:1; color:#666;">{fahrzeit}</div>' if fahrzeit else '<div style="flex:1;"></div>'
+        zeilen.append(
+            f'<div class="vorschau-zeile" data-url="{url}" '
+            f'style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid #eee;">'
+            f'<input type="checkbox" class="vorschau-cb" onchange="vorschauCountAktualisieren()" '
+            f'style="width:18px; height:18px; cursor:pointer;">'
+            f'<div style="flex:2; min-width:200px;"><a href="{url}" target="_blank">{titel} ↗</a></div>'
+            f'<div style="flex:1; color:#666;">{firma}</div>'
+            f'<div style="flex:1; color:#666;">📍 {ort}</div>'
+            f'{fahrzeit_html}'
+            f'<button class="scan-btn" onclick="vorschauBewerten(this)">🔍 Bewerten</button>'
+            f'<button class="scan-btn" style="background:#e74c3c;" onclick="vorschauVerwerfen(this)">🗑️</button>'
+            f'</div>'
+        )
+
+    return (
+        '<div class="scan-box" id="vorschau-box">'
+        f'<h3 style="margin-top:0;">🌍 Breit gefunden (ganz Deutschland) – Vorschau ({len(kandidaten)})</h3>'
+        '<p style="margin:4px 0; color:#666; font-size:0.9em;">Noch NICHT in der Datenbank. '
+        '„Bewerten" holt Stellentext + KI-Bewertung und zeigt die Detailansicht – danach '
+        'kannst du übernehmen oder verwerfen. Mehrere auswählen und gemeinsam bewerten '
+        'geht über die Checkboxen.</p>'
+        '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">'
+        '<label style="font-size:0.9em; cursor:pointer; display:flex; align-items:center; gap:4px;">'
+        '<input type="checkbox" id="vorschau-alle-cb" onchange="vorschauAlleUmschalten(this)" '
+        'style="width:18px; height:18px; cursor:pointer;"> Alle auswählen</label>'
+        '<button class="scan-btn" id="vorschau-batch-btn" onclick="vorschauBewertenBatch()">🔍 Ausgewählte bewerten</button>'
+        '<button class="scan-btn" style="background:#888;" onclick="vorschauLeeren()">🧹 Vorschau leeren</button>'
+        '</div>'
+        f'<div id="vorschau-liste">{"".join(zeilen)}</div>'
+        '<div id="vorschau-status"></div>'
+        '</div>'
+    )
+
+
+def _lade_provisorisch_urls() -> set:
+    if not VORSCHAU_PROVISORISCH_JSON.exists():
+        return set()
+    try:
+        return set(json.loads(VORSCHAU_PROVISORISCH_JSON.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def _provisorisch_html(stellen_prov: list) -> str:
+    """Rendert die provisorisch bewerteten Vorschau-Stellen mit voller Detailansicht
+    (gleiche Karte wie normale Stellen) plus Übernehmen/Verwerfen-Buttons."""
+    if not stellen_prov:
+        return ""
+    # Fahrzeit aus dem Cache nachreichen – provisorische Stellen sind früh aus der
+    # normalen stellen-Liste ausgeklammert und damit nicht in fahrzeit_daten. Der
+    # extraktor hat sie beim Bewerten aber berechnet und gecacht.
+    try:
+        from db import hole_fahrzeit_cache
+    except Exception:
+        def hole_fahrzeit_cache(_u):
+            return None
+    karten = []
+    for s in stellen_prov:
+        url = _html.escape(s.get("url", ""), quote=True)
+        # scanner_status=None unterdrückt die normalen Passend-/Vergeben-Buttons;
+        # hier zählen nur Übernehmen/Verwerfen. Den "Außerhalb Umkreis"-Grund
+        # ausblenden – breit gesuchte Stellen sind bewusst out-of-area; relevant
+        # sind Fahrzeit + Bewertung, nicht der Standort-Ablehnungsgrund.
+        s_disp = {**s, "nicht_passend": False, "nicht_passend_grund": ""}
+        karte = stelle_zu_html(s_disp, zeige_firma=True, scanner_status=None,
+                               fahrzeit=hole_fahrzeit_cache(s.get("url", "")))
+        karten.append(
+            f'<div class="vorschau-prov" data-url="{url}" style="border:2px solid #f0ad4e; border-radius:6px; margin-bottom:12px; padding:6px;">'
+            f'<div style="display:flex; gap:8px; margin-bottom:6px;">'
+            f'<button class="scan-btn" onclick="vorschauUebernehmen(this)">✅ Übernehmen</button>'
+            f'<button class="scan-btn" style="background:#e74c3c;" onclick="vorschauVerwerfen(this)">🗑️ Verwerfen</button>'
+            f'<span style="align-self:center; color:#946c00; font-size:0.9em;">provisorisch bewertet – noch nicht in der Sammlung</span>'
+            f'</div>{karte}</div>'
+        )
+    return (
+        '<div class="scan-box" id="vorschau-prov-box">'
+        f'<h3 style="margin-top:0;">🔍 Provisorisch bewertet ({len(stellen_prov)}) – übernehmen oder verwerfen</h3>'
+        f'{"".join(karten)}'
+        '<div id="vorschau-prov-status"></div>'
+        '</div>'
+    )
+
+
 # =============================================================================
 # REPORT ERSTELLEN
 # =============================================================================
@@ -611,6 +899,30 @@ def _hat_geringen_score(s: dict, status: int | None = None) -> bool:
 
 def erstelle_report(stellen: list, config: dict | None = None) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Provisorisch bewertete Vorschau-Stellen aus den Normalsektionen herausnehmen –
+    # sie erscheinen in einer eigenen Sektion (Übernehmen/Verwerfen) und zählen noch
+    # nicht zur Sammlung, bis sie übernommen werden.
+    _prov_urls = _lade_provisorisch_urls()
+    provisorisch_stellen = [s for s in stellen if s.get("url") in _prov_urls]
+    stellen = [s for s in stellen if s.get("url") not in _prov_urls]
+
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) bereinigen, BEVOR die
+    # Fahrzeit geladen und die Sektionen gebildet werden: der Nutzer hat sie
+    # bewusst behalten, also den Standort-Ablehnungsgrund + das nicht_passend-Flag
+    # entfernen (heilt auch Altbestände, die ein Scan noch als nicht_passend
+    # markiert hatte). Muss vor dem Fahrzeit-Block stehen, sonst werden sie dort
+    # als nicht_passend übersprungen und bekämen keine Fahrzeit angezeigt.
+    try:
+        from utils import standort_ausnahme_urls
+        ausnahme_urls = standort_ausnahme_urls()
+    except Exception:
+        ausnahme_urls = set()
+    for _s in stellen:
+        if _s.get("url") in ausnahme_urls and (_s.get("nicht_passend_grund") or "").startswith(
+                ("Außerhalb Umkreis", "Verbotener Standort")):
+            _s["nicht_passend"] = False
+            _s["nicht_passend_grund"] = ""
 
     # Fahrzeit-Daten vorberechnen (cached in DB, max 1 API-Call pro Zieladresse)
     api_key    = (config or {}).get("google_maps_key", "")
@@ -646,12 +958,21 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             elif not arbeitsort and not firma_adressen.get(s.get("firma", "")):
                 fahrzeit_daten[url] = {"kein_ziel": True}
 
-    # Fahrzeit-Filter nur anwenden wenn keine Whitelist aktiv ist: ein Ort auf der
-    # Whitelist ist explizit gewollt (z.B. Apple München trotz >60min), die
-    # Whitelist soll den Fahrzeit-Filter nicht nur ergänzen, sondern übersteuern.
-    zu_weit_urls = set() if (config or {}).get("erlaubte_standorte") else {
+    # Bereits entschiedene Stellen (bewerben/beworben/Ghosting) sowie Grenzfälle
+    # (manuell zu prüfen) sollen nicht in der eingeklappten "Zu weit"-Sektion
+    # verschwinden - sonst zählt der Status-Zähler oben sie mit (data-scanner-
+    # status im ganzen Dokument), aber der "Bewerben"-Filter blendet sie
+    # standardmäßig aus (Zu-weit-Checkbox ist per Default aus), Kopfzeile und
+    # Filter-Ergebnis wichen dadurch voneinander ab.
+    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7, 11)}
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) sind bereits oben
+    # bereinigt und NICHT in "Zu weit" zu verstecken – der Nutzer kennt die
+    # Entfernung und will sie trotzdem sehen.
+    zu_weit_urls = {
         url for url, fz in fahrzeit_daten.items()
         if not fz.get("kein_ziel") and (fz.get("auto_min") or 0) > FAHRZEIT_MAX_AUTO_MIN
+        and url not in entschieden_urls
+        and url not in ausnahme_urls
     }
 
     # Bewerbungsstatus aus Datenbank laden
@@ -670,13 +991,19 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         s["url"] for s in stellen
         if not s.get("arbeitsort") and not s.get("nicht_passend") and not s.get("geloescht_am")
     }
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend") and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls and s["url"] not in ohne_standort_urls]
+    # Übernommene out-of-area-Stellen (Standort-Ausnahme) gelten als aktiv, auch
+    # wenn ein späterer Scan sie (fälschlich) noch als nicht_passend markiert hat –
+    # der Nutzer hat sie bewusst behalten und will sie in der Sammlung sehen.
+    def _sichtbar(s: dict) -> bool:
+        return not s.get("nicht_passend") or s["url"] in ausnahme_urls
+
+    aktive        = [s for s in stellen if not s.get("geloescht_am") and _sichtbar(s) and s["url"] not in zu_weit_urls and s["url"] not in nicht_beworben_urls and s["url"] not in ohne_standort_urls]
     zu_weit       = [s for s in stellen if s["url"] in zu_weit_urls and not s.get("geloescht_am")]
 
     def _ist_standort_grund(grund: str) -> bool:
         return grund.startswith("Außerhalb Umkreis") or grund.startswith("Verbotener Standort")
 
-    nicht_passend_alle     = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    nicht_passend_alle     = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am") and s["url"] not in ausnahme_urls]
     nicht_passend_standort = [s for s in nicht_passend_alle if _ist_standort_grund(s.get("nicht_passend_grund") or "")]
     nicht_passend_standort_urls = {s["url"] for s in nicht_passend_standort}
     nicht_passend = [s for s in nicht_passend_alle if s["url"] not in nicht_passend_standort_urls]
@@ -684,14 +1011,18 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     geloescht        = [s for s in stellen if s.get("geloescht_am")]
     nicht_beworben   = [s for s in stellen if s["url"] in nicht_beworben_urls and not s.get("geloescht_am")]
     absagen          = [s for s in aktive  if s["url"] in absage_urls]
-    entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
     geringer_match = [s for s in aktive if _hat_geringen_score(s, bekannte_status.get(s["url"])) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
     geringer_urls  = {s["url"] for s in geringer_match}
     aktive_haupt   = [s for s in aktive if s["url"] not in geringer_urls and s["url"] not in absage_urls]
 
-    # Status-Zähler für Dashboard
+    # Status-Zähler für Dashboard. Als "nicht passend" ausgeschlossene Stellen
+    # zählen hier nicht mit - der Status-Filter blendet sie (data-ausgeschlossen)
+    # immer aus, egal welcher Status gewählt ist. Sonst zeigte die Kopfzeile
+    # z.B. "6 bewerben", der Klick auf den Filter aber nur 5 Stellen.
     status_counts = {}
     for s in stellen:
+        if s.get("nicht_passend"):
+            continue
         sv = bekannte_status.get(s["url"])
         if sv is not None:
             status_counts[sv] = status_counts.get(sv, 0) + 1
@@ -779,6 +1110,22 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         </div>
 
        <div class="scan-box">
+        <h3 style="margin-top:0;">🌍 Breit suchen (ganz Deutschland)</h3>
+        <p style="margin:4px 0 8px; color:#666; font-size:0.9em;">Karriere-URL einfügen – am besten die Stellen-Übersicht OHNE Standort-Filter im Link. Findet alle deutschen Stellen als Vorschau; nichts wird automatisch bewertet.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="url" id="breit-url" placeholder="https://www.firma.com/karriere/stellen"
+                style="flex:2; min-width:220px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <input type="text" id="breit-name" placeholder="Firmenname"
+                style="flex:1; min-width:150px; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <button class="scan-btn" onclick="breitScannen()">🌍 Breit scannen</button>
+        </div>
+        <div id="breit-status"></div>
+        <pre id="breit-output" style="display:none; max-height:300px; overflow-y:auto;"></pre>
+       </div>
+
+       """ + _vorschau_html() + _provisorisch_html(provisorisch_stellen) + """
+
+       <div class="scan-box">
         <h3 style="margin-top:0;">📎 Stelle manuell einfügen</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
             <input type="text" id="manuell-url" placeholder="https://jobs.firma.de/stelle/123"
@@ -859,15 +1206,21 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
     html += firma_filter_gruppe
     html += status_filter_gruppe
     html += """        <div class="filter-gruppe">
-            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;" title="Bei aktivem Firma- oder Vorgemerkt-/Merkliste-Filter werden geringe Matches immer eingeblendet, unabhängig von dieser Checkbox.">
                 <input type="checkbox" id="cb-geringer-match" onchange="toggleGeringerMatch(this.checked)">
                 📉 Geringen Match einblenden
             </label>
         </div>
         <div class="filter-gruppe">
-            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;" title="Bei aktivem Firma- oder Vorgemerkt-/Merkliste-Filter werden zu weit entfernte Stellen immer eingeblendet, unabhängig von dieser Checkbox.">
                 <input type="checkbox" id="cb-zu-weit" onchange="toggleZuWeit(this.checked)">
                 🚗 Zu weit einblenden (&gt;60 min)
+            </label>
+        </div>
+        <div class="filter-gruppe">
+            <label style="font-size:0.85em; cursor:pointer; color:#666; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="cb-standort-ausserhalb" onchange="toggleStandortAusserhalb(this.checked)">
+                📍 Standort außerhalb/verboten einblenden
             </label>
         </div>
         <div class="filter-gruppe">
@@ -1023,17 +1376,6 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</details>\n'
 
-    if nicht_passend_standort:
-        html += f'''<details style="margin: 15px 0;">
-    <summary style="cursor:pointer; background:#fdebd0; padding:12px 20px;
-        border-radius:8px; font-weight:bold; font-size:1.05em;">
-        📍 Nicht passend – Standort außerhalb/verboten ({len(nicht_passend_standort)})
-    </summary>
-    <div class="firma-block" style="border-radius:0 0 8px 8px; margin-top:0;">\n'''
-        for s in nicht_passend_standort:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
-        html += '</div>\n</details>\n'
-
     if ohne_standort:
         html += f'''<details open style="margin: 15px 0;">
     <summary style="cursor:pointer; background:#eaf2f8; padding:12px 20px;
@@ -1051,6 +1393,14 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += f'<h2>🚗 Nicht passend – Zu weit (&gt;{FAHRZEIT_MAX_AUTO_MIN} min mit Auto) ({len(zu_weit)})</h2>\n'
         for s in zu_weit:
             html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), zu_weit=True)
+        html += '</div>\n</div>\n'
+
+    if nicht_passend_standort:
+        html += f'<div id="standort-ausserhalb-section" style="display:none; margin:15px 0;">\n'
+        html += f'<div class="firma-block">\n'
+        html += f'<h2>📍 Nicht passend – Standort außerhalb/verboten ({len(nicht_passend_standort)})</h2>\n'
+        for s in nicht_passend_standort:
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), ausgeschlossen=True)
         html += '</div>\n</div>\n'
 
     html += '</div>\n'  # /hauptansicht
@@ -1339,6 +1689,10 @@ def main():
     report_html = erstelle_report(stellen, config)
     REPORT_PFAD.write_text(report_html, encoding="utf-8")
     print(f"  ✅ Report gespeichert: {REPORT_PFAD}")
+
+    kein_treffer_html = erstelle_kein_treffer_seite()
+    KEIN_TREFFER_HTML.write_text(kein_treffer_html, encoding="utf-8")
+    print(f"  ✅ Whitelist-Diagnose gespeichert: {KEIN_TREFFER_HTML}")
 
     # E-Mail bei Änderungen ODER wenn eine Firma beim letzten Scan keine Stellen mehr lieferte
     neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]

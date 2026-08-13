@@ -35,8 +35,12 @@ print("WEBUI GESTARTET - Version mit manuell-stream")
 
 BASIS_PFAD   = Path(__file__).parent
 REPORT_HTML  = BASIS_PFAD / "report.html"
+KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
 LOG_DATEI    = BASIS_PFAD / "scan.log"
+VORSCHAU_LOG = BASIS_PFAD / "vorschau_scan.log"
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
+VORSCHAU_JSON = BASIS_PFAD / "vorschau_kandidaten.json"
+NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
 PORT         = 5000
 
 # Globaler Status: läuft gerade ein Scan?
@@ -95,6 +99,14 @@ def index():
     if REPORT_HTML.exists():
         return send_file(REPORT_HTML)
     return "<h2>⚠️ Noch kein Report vorhanden. Bitte zuerst einen Scan starten.</h2>", 404
+
+
+@app.route("/kein-treffer")
+def kein_treffer_seite():
+    """Liefert die eigene Whitelist-Diagnose-Seite aus (getrennt vom Haupt-Report)."""
+    if KEIN_TREFFER_HTML.exists():
+        return send_file(KEIN_TREFFER_HTML)
+    return "<h2>⚠️ Noch keine Whitelist-Diagnose vorhanden. Bitte zuerst report.py laufen lassen.</h2>", 404
 
 
 def pipeline_im_hintergrund():
@@ -269,21 +281,34 @@ def firmen_liste():
 
 @app.route("/firma-testen")
 def firma_testen():
-    """Startet scanner.py --firma <name> und streamt den Output per SSE."""
+    """Startet scanner.py --firma <name> und streamt den Output per SSE.
+
+    Mit ?breit=1: breiter Vorschau-Scan (ganz Deutschland). Läuft NICHT die volle
+    Pipeline, sondern nur scanner.py --vorschau (schreibt vorschau_kandidaten.json,
+    keine DB, keine KI) + report.py, damit die Kandidaten in der Vorschau-Sektion
+    erscheinen. Von dort einzeln per "Übernehmen" in die echte Pipeline.
+    """
     firma = request.args.get("firma", "").strip()
+    breit = request.args.get("breit") == "1"
     if not firma:
         return "Kein firma-Parameter", 400
 
     def stream_firma():
         import subprocess, os
-        pipeline = [
-            [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "vergaben_check.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "extraktor.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "bewertung.py"), "--firma", firma],
-            [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
-        ]
+        if breit:
+            pipeline = [
+                [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma, "--vorschau"],
+                [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+            ]
+        else:
+            pipeline = [
+                [sys.executable, str(BASIS_PFAD / "scanner.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "rohtext_holen.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "vergaben_check.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "extraktor.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "bewertung.py"), "--firma", firma],
+                [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+            ]
         for cmd in pipeline:
             prozess = subprocess.Popen(
                 cmd,
@@ -307,6 +332,245 @@ def firma_testen():
 
     return Response(stream_firma(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# =============================================================================
+# BREITE VORSCHAU (ganz Deutschland)
+# =============================================================================
+
+VORSCHAU_PROVISORISCH_JSON = BASIS_PFAD / "vorschau_provisorisch.json"
+STANDORT_AUSNAHME_JSON = BASIS_PFAD / "standort_ausnahme.json"
+
+
+def _lade_ausnahme() -> list:
+    if not STANDORT_AUSNAHME_JSON.exists():
+        return []
+    try:
+        return json.loads(STANDORT_AUSNAHME_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_ausnahme(urls: list) -> None:
+    STANDORT_AUSNAHME_JSON.write_text(
+        json.dumps(urls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _lade_vorschau() -> list:
+    if not VORSCHAU_JSON.exists():
+        return []
+    try:
+        return json.loads(VORSCHAU_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_vorschau(kandidaten: list) -> None:
+    VORSCHAU_JSON.write_text(
+        json.dumps(kandidaten, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _lade_provisorisch() -> list:
+    if not VORSCHAU_PROVISORISCH_JSON.exists():
+        return []
+    try:
+        return json.loads(VORSCHAU_PROVISORISCH_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _speichere_provisorisch(urls: list) -> None:
+    VORSCHAU_PROVISORISCH_JSON.write_text(
+        json.dumps(urls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.route("/vorschau-bewerten", methods=["POST"])
+def vorschau_bewerten():
+    """Legt einen Vorschau-Kandidaten PROVISORISCH in der DB an (Status 1) und merkt
+    ihn als provisorisch vor. Die eigentliche Bewertung (Rohtext→Extraktion→Bewertung)
+    startet das Frontend danach über /stelle-einzeln-stream. Provisorische Stellen
+    bleiben aus den Normalsektionen des Reports ausgeblendet, bis sie übernommen werden."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+
+    kandidaten = _lade_vorschau()
+    kandidat = next((k for k in kandidaten if k.get("url") == url), None)
+    if not kandidat:
+        return jsonify({"ok": False, "fehler": "Kandidat nicht in Vorschau"}), 404
+
+    from datetime import datetime
+    jetzt_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.erstelle_schema()
+        if not any(s.get("url") == url for s in _db.lade_alle_stellen()):
+            _db.upsert_stelle({
+                "url":         url,
+                "firma":       kandidat.get("firma", "") or "Unbekannt",
+                "titel":       kandidat.get("titel", "") or "(Vorschau)",
+                "treffer":     kandidat.get("treffer", []),
+                "arbeitsort":  kandidat.get("arbeitsort", ""),
+                "gefunden_am": jetzt_str,
+                "neu":         True,
+                "status":      1,
+            })
+            _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+            _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+            # Im breiten Scan schon berechnete Fahrzeit in den Cache übernehmen,
+            # damit sie in der Detailansicht sofort da ist (der extraktor
+            # überschreibt sie ggf. mit einem exakteren Wert).
+            fz = kandidat.get("fahrzeit")
+            if fz:
+                _db.speichere_fahrzeit_cache(url, {
+                    "ziel":        kandidat.get("arbeitsort", ""),
+                    "genau":       False,
+                    "auto_min":    fz.get("auto_min"),
+                    "auto_km":     fz.get("auto_km"),
+                    "transit_min": fz.get("transit_min"),
+                    "abgerufen_am": jetzt_str,
+                })
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+
+    prov = _lade_provisorisch()
+    if url not in prov:
+        prov.append(url)
+        _speichere_provisorisch(prov)
+    _speichere_vorschau([k for k in kandidaten if k.get("url") != url])
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-uebernehmen", methods=["POST"])
+def vorschau_uebernehmen():
+    """Übernimmt eine provisorisch bewertete Stelle endgültig: entfernt nur die
+    provisorisch-Markierung, sodass sie zur normalen Stelle wird. Die bereits
+    berechnete Bewertung bleibt erhalten – es wird NICHT neu bewertet."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+    prov = _lade_provisorisch()
+    _speichere_provisorisch([u for u in prov if u != url])
+    # Dauerhafte Standort-Ausnahme setzen, damit der nächste Scan die (out-of-area)
+    # Stelle nicht wieder wegen des Standorts ausblendet (bereinige_verbotene_standorte).
+    ausnahme = _lade_ausnahme()
+    if url not in ausnahme:
+        ausnahme.append(url)
+        _speichere_ausnahme(ausnahme)
+    # nicht_passend/Standort-Grund aufräumen – die Stelle wird bewusst behalten,
+    # soll also nicht mehr als "außerhalb Umkreis" markiert im Report auftauchen.
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        import db as _db
+        _db.upsert_stelle({"url": url, "nicht_passend": False, "nicht_passend_grund": ""})
+        _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+        _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+    except Exception:
+        pass
+    # Report neu bauen, damit die übernommene Stelle aus der Provisorisch-Sektion
+    # verschwindet und in der Sammlung erscheint. location.reload() lädt nur die
+    # statische report.html – ohne Rebuild bliebe die Stelle sonst sichtbar.
+    try:
+        import subprocess, os
+        subprocess.run([sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+                       cwd=str(BASIS_PFAD), timeout=180,
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-verwerfen", methods=["POST"])
+def vorschau_verwerfen():
+    """Verwirft einen Kandidaten oder eine provisorisch bewertete Stelle:
+    - Kandidat (noch nicht in DB): nur aus der Vorschau-Liste entfernen.
+    - Provisorisch bewertete Stelle: aus der DB löschen + Markierung entfernen."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url = data["url"].strip()
+
+    _speichere_vorschau([k for k in _lade_vorschau() if k.get("url") != url])
+
+    prov = _lade_provisorisch()
+    if url in prov:
+        _speichere_provisorisch([u for u in prov if u != url])
+        try:
+            sys.path.insert(0, str(BASIS_PFAD))
+            import db as _db
+            _db.loesche_stelle(url)
+            _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
+            _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
+        except Exception as e:
+            return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-leeren", methods=["POST"])
+def vorschau_leeren():
+    """Leert die komplette Vorschau-Kandidatenliste (nicht die provisorisch bewerteten)."""
+    _speichere_vorschau([])
+    return jsonify({"ok": True})
+
+
+@app.route("/vorschau-scannen")
+def vorschau_scannen():
+    """Breiter Vorschau-Scan (ganz Deutschland) für eine FREI EINGEGEBENE Karriere-URL.
+    Nutzt bewusst nicht die config-URL (die oft Standort-Parameter enthält), sondern
+    genau die eingegebene URL. Streamt den Output per SSE."""
+    url  = request.args.get("url", "").strip()
+    name = request.args.get("name", "").strip() or "Manuell"
+    if not url:
+        return "Kein url-Parameter", 400
+
+    def stream():
+        import subprocess, os
+        pipeline = [
+            [sys.executable, str(BASIS_PFAD / "scanner.py"), "--vorschau",
+             "--vorschau-url", url, "--vorschau-name", name],
+            [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        ]
+        # Kompletten Scan-Output zusätzlich in eine Log-Datei schreiben, damit man
+        # die gefundenen (auch nicht passenden) Stellen nach dem Reload nachlesen
+        # kann. Wird bei jedem Lauf neu angelegt (letzter Scan bleibt erhalten).
+        with open(VORSCHAU_LOG, "w", encoding="utf-8") as log:
+            log.write(f"# Breite Suche – {jetzt()}\n# URL: {url}\n# Firma: {name}\n\n")
+            log.flush()
+            for cmd in pipeline:
+                prozess = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", cwd=str(BASIS_PFAD),
+                    env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                )
+                for zeile in prozess.stdout:
+                    zeile = zeile.rstrip("\n")
+                    if zeile:
+                        log.write(zeile + "\n")
+                        log.flush()
+                        yield f"data: {zeile}\n\n"
+                prozess.wait()
+                if prozess.returncode != 0:
+                    fehler = f"❌ {cmd[1]} fehlgeschlagen (Code {prozess.returncode})"
+                    log.write(fehler + "\n")
+                    yield f"data: {fehler}\n\n"
+                    break
+        yield "data: FERTIG\n\n"
+
+    return Response(stream(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/vorschau-log")
+def vorschau_log():
+    """Zeigt das Log des letzten breiten Scans als Klartext an (bleibt nach dem
+    Reload der Report-Seite erhalten – anders als das Live-Ausgabefenster)."""
+    if not VORSCHAU_LOG.exists():
+        return Response("Noch kein breiter Scan gelaufen.", mimetype="text/plain")
+    return Response(VORSCHAU_LOG.read_text(encoding="utf-8", errors="replace"),
+                    mimetype="text/plain; charset=utf-8")
 
 
 # =============================================================================
@@ -721,6 +985,13 @@ def stelle_einfuegen():
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
+    # Bewusst manuell hinzugefügte Stellen dauerhaft vom Standortfilter ausnehmen –
+    # sie sollen immer durch die Pipeline laufen und bleiben, egal wo sie liegen.
+    ausnahme = _lade_ausnahme()
+    if stellen_url not in ausnahme:
+        ausnahme.append(stellen_url)
+        _speichere_ausnahme(ausnahme)
+
     return jsonify({"ok": True})
 
 
@@ -1128,6 +1399,158 @@ def firmen_testen_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/kein-treffer-vorschau", methods=["POST"])
+def kein_treffer_vorschau():
+    """
+    Lädt den Rohtext einer Stelle live per Playwright, ohne sie in stellen.json/DB
+    einzutragen - für die schnelle Sichtprüfung bei Titeln ohne Suchbegriff-Treffer,
+    bevor man sich für "In Pipeline aufnehmen" entscheidet.
+    Erwartet JSON: { url }
+    """
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "url erforderlich"}), 400
+
+    url = data["url"].strip()
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        from playwright.sync_api import sync_playwright
+        from rohtext_holen import lade_rohtext_playwright
+        from browser import starte_browser, neuer_context, neue_seite
+
+        with sync_playwright() as p:
+            browser = starte_browser(p)
+            context = neuer_context(browser)
+            page = neue_seite(context)
+            try:
+                rohtext, status = lade_rohtext_playwright(page, url)
+            finally:
+                browser.close()
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+
+    if not rohtext:
+        fehler = f"Kein Inhalt geladen (HTTP {status})" if status else "Kein Inhalt geladen"
+        return jsonify({"ok": False, "fehler": fehler}), 502
+
+    return jsonify({"ok": True, "text": rohtext[:6000]})
+
+
+@app.route("/suchbegriff-hinzufuegen", methods=["POST"])
+def suchbegriff_hinzufuegen():
+    """
+    Speichert einen Suchbegriff-Vorschlag in neue_suchbegriffe.json zur späteren
+    manuellen Durchsicht - schreibt bewusst NICHT direkt in config.txt, damit
+    ungeprüfte Begriffe nicht sofort den Live-Filter verändern. Nach ein paar
+    Wochen wird die Liste durchgesehen und die brauchbaren Begriffe werden von
+    Hand in [suchbegriffe] übernommen.
+    Stellentext wird nur mitgespeichert, wenn er in der DB schon vorhanden ist
+    (Stelle wurde also schon über "In Pipeline aufnehmen" extrahiert) - sonst
+    würde ein Nachladen hier zusätzliche LLM-Tokens kosten, nur fürs Protokoll.
+    Erwartet JSON: { begriffe: [...], url, firma, titel }
+    """
+    data = request.get_json()
+    begriffe = data.get("begriffe") if data else None
+    if not begriffe or not isinstance(begriffe, list):
+        return jsonify({"ok": False, "fehler": "begriffe (Liste) erforderlich"}), 400
+
+    begriffe = [b.strip() for b in begriffe if isinstance(b, str) and b.strip()]
+    if not begriffe:
+        return jsonify({"ok": False, "fehler": "Keine gültigen Begriffe übergeben"}), 400
+
+    url   = (data.get("url") or "").strip()
+    firma = (data.get("firma") or "").strip()
+    titel = (data.get("titel") or "").strip()
+
+    stellentext = None
+    if url:
+        try:
+            sys.path.insert(0, str(BASIS_PFAD))
+            import db as _db
+            with _db.verbindung() as con:
+                row = con.execute("SELECT stellentext FROM stellen WHERE url = ?", (url,)).fetchone()
+            if row and row["stellentext"]:
+                stellentext = row["stellentext"]
+        except Exception:
+            pass  # Vorschlag trotzdem speichern, nur ohne Stellentext
+
+    eintrag = {
+        "begriffe": begriffe,
+        "stellenbezeichnung": titel,
+        "firma": firma,
+        "url": url,
+        "datum": jetzt(),
+    }
+    if stellentext:
+        eintrag["stellentext"] = stellentext
+
+    try:
+        vorschlaege = []
+        if NEUE_SUCHBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_SUCHBEGRIFFE_JSON.read_text(encoding="utf-8"))
+        vorschlaege.append(eintrag)
+        NEUE_SUCHBEGRIFFE_JSON.write_text(
+            json.dumps(vorschlaege, ensure_ascii=False, indent=2), encoding="utf-8")
+        return jsonify({"ok": True, "hinzugefuegt": begriffe, "stellentext_dabei": bool(stellentext)})
+
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+
+
+@app.route("/suchbegriff-uebernehmen", methods=["POST"])
+def suchbegriff_uebernehmen():
+    """
+    Übernimmt einen vorgemerkten Suchbegriff aus neue_suchbegriffe.json in den
+    [suchbegriffe]-Block von config.txt (wirkt beim nächsten Scan als Live-Filter)
+    und entfernt ihn danach aus der Vormerk-Liste.
+    Erwartet JSON: { begriff }
+    """
+    data = request.get_json()
+    begriff = ((data.get("begriff") if data else "") or "").strip()
+    if not begriff:
+        return jsonify({"ok": False, "fehler": "begriff erforderlich"}), 400
+
+    # --- In config.txt schreiben ------------------------------------------
+    try:
+        config_pfad = BASIS_PFAD / "config.txt"
+        inhalt      = config_pfad.read_text(encoding="utf-8")
+
+        ende = inhalt.find("[\\suchbegriffe]")
+        if ende == -1:
+            return jsonify({"ok": False, "fehler": "[\\suchbegriffe] nicht in config.txt gefunden"}), 500
+
+        start = inhalt.find("[suchbegriffe]")
+        block = inhalt[start:ende] if start != -1 else inhalt[:ende]
+        schon_vorhanden = any(
+            zeile.strip().lower() == begriff.lower() for zeile in block.splitlines()
+        )
+        if not schon_vorhanden:
+            inhalt = inhalt[:ende] + f"{begriff}\n" + inhalt[ende:]
+            config_pfad.write_text(inhalt, encoding="utf-8")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"config.txt-Fehler: {e}"}), 500
+
+    # --- Aus neue_suchbegriffe.json streichen -----------------------------
+    # (Begriff aus allen Einträgen entfernen; Einträge ohne Restbegriffe fallen weg.)
+    try:
+        if NEUE_SUCHBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_SUCHBEGRIFFE_JSON.read_text(encoding="utf-8"))
+            neu = []
+            for eintrag in vorschlaege:
+                rest = [b for b in eintrag.get("begriffe", [])
+                        if (b or "").strip().lower() != begriff.lower()]
+                if rest:
+                    eintrag["begriffe"] = rest
+                    neu.append(eintrag)
+            NEUE_SUCHBEGRIFFE_JSON.write_text(
+                json.dumps(neu, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass  # Übernahme in config hat geklappt; das Aufräumen ist zweitrangig
+
+    return jsonify({"ok": True, "schon_vorhanden": schon_vorhanden})
 
 
 @app.route("/firmen-config-hinzufuegen", methods=["POST"])

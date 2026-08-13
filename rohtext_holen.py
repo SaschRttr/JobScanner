@@ -23,6 +23,7 @@ Status-Übergänge:
 import argparse
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 BASIS_PFAD   = Path(__file__).parent
@@ -52,8 +53,14 @@ _WARTE_MS: dict[str, int] = {
     "jobs.infineon.com":         6000,
     "careers.te.com":            5000,
     "wd3.myworkdayjobs.com":     6000,
+    "liebherr.com":              1500,
 }
 _WARTE_MS_DEFAULT = 4000
+
+# Domains, die serverseitig gerendert werden, aber Tracking (usercentrics o.ä.)
+# haben, das networkidle nie erreichen lässt. Für sie: direkt domcontentloaded,
+# kein Cookie-Banner-Loop (der Text steht ohnehin im DOM). Spart ~20 s pro Seite.
+_SCHNELL_LADEN_DOMAINS = ("liebherr.com",)
 
 
 def _warte_fuer(url: str) -> int:
@@ -99,10 +106,25 @@ def _extrahiere_ort(page, url: str) -> str | None:
 
 def _url_anpassen(url: str) -> str:
     """Domain-spezifische URL-Umschreibungen für bessere Inhalte."""
-    # Bertrandt onlyfy: Volltext-URL statt Detail-URL
+    # onlyfy-Widget-Job → Volltext-Detailseite. Wichtig: den KORREKTEN Firmen-
+    # Subdomain beibehalten (früher hart bertrandtgroup → 404 bei anderen Firmen
+    # wie Dürr Dental) und die Job-ID ohne Query-Parameter nehmen.
     if "onlyfy.jobs" in url:
-        job_id = url.rstrip("/").split("/")[-1]
-        return f"https://bertrandtgroup.onlyfy.jobs/job/show/{job_id}/full?lang=de&mode=candidate"
+        pfad = url.split("?")[0]
+        m = re.search(r'/job/([a-z0-9]{16,})', pfad)
+        host_m = re.match(r'(https?://[^/]+)', url)
+        if m and host_m:
+            return f"{host_m.group(1)}/job/show/{m.group(1)}/full?lang=de&mode=candidate"
+
+    # Query-Parameter mit Wert "apply" entfernen: sie öffnen bei vielen ATS
+    # (z.B. Phenom ?tcsource=apply) direkt das Bewerbungsformular statt der
+    # Stellenbeschreibung. Generisch, plattformunabhängig.
+    pr = urllib.parse.urlparse(url)
+    if pr.query and "apply" in pr.query.lower():
+        params = [(k, v) for k, v in urllib.parse.parse_qsl(pr.query, keep_blank_values=True)
+                  if v.strip().lower() != "apply"]
+        url = urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(params)))
+
     return url
 
 
@@ -181,13 +203,25 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
     lade_url = _url_anpassen(url)
     warte_ms  = _warte_fuer(lade_url)
 
+    schnell = any(d in lade_url for d in _SCHNELL_LADEN_DOMAINS)
+
     try:
         antwort = None
-        try:
-            antwort = page.goto(lade_url, wait_until="networkidle", timeout=45000)
-        except Exception:
+        if schnell:
+            # SSR-Seiten mit Tracking (z.B. Liebherr/usercentrics): networkidle wird
+            # NIE erreicht und der Cookie-Banner blockiert den body-Text nicht (der
+            # Stellentext ist serverseitig schon im DOM). Direkt domcontentloaded,
+            # kurze Wartezeit, KEIN Cookie-Banner-Loop → spart ~20 s pro Seite.
             antwort = page.goto(lade_url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(4000)
+        else:
+            try:
+                # Kurzes networkidle-Timeout: tracking-lastige Seiten erreichen
+                # networkidle NIE und würden sonst die vollen Sekunden warten (sieht
+                # eingefroren aus). Nach 12 s auf domcontentloaded zurückfallen.
+                antwort = page.goto(lade_url, wait_until="networkidle", timeout=12000)
+            except Exception:
+                antwort = page.goto(lade_url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(4000)
 
         status = antwort.status if antwort else None
 
@@ -196,8 +230,31 @@ def lade_rohtext_playwright(page, url: str) -> tuple[str | None, int | None]:
             return None, status
 
         page.wait_for_timeout(warte_ms)
-        klick_cookie_banner(page)
+        if not schnell:
+            klick_cookie_banner(page)
         page.wait_for_timeout(2000)
+
+        # onlyfy-Wrapper mit ?jh=<jobid>: der Hash IST die onlyfy-Job-ID. Der
+        # richtige onlyfy-Subdomain steckt im eingebetteten Widget-iframe – von
+        # dort holen und direkt die Volltext-Detailseite laden (sonst bekäme man
+        # nur die Wrapper-Hülle ohne Stellentext). Generisch für jede onlyfy-Firma.
+        if "jh=" in lade_url and "onlyfy.jobs" not in lade_url:
+            jh = urllib.parse.parse_qs(urllib.parse.urlparse(lade_url).query).get("jh", [""])[0]
+            onlyfy_host = ""
+            for f in page.frames:
+                if "onlyfy.jobs" in (f.url or ""):
+                    mo = re.match(r'(https?://[^/]+)', f.url)
+                    onlyfy_host = mo.group(1) if mo else ""
+                    break
+            if jh and onlyfy_host:
+                detail = f"{onlyfy_host}/job/show/{jh}/full?lang=de&mode=candidate"
+                print(f"  🔎 onlyfy-Wrapper (?jh=) → Detailseite: {detail[:70]}")
+                try:
+                    antwort = page.goto(detail, wait_until="domcontentloaded", timeout=40000)
+                    status = antwort.status if antwort else status
+                    page.wait_for_timeout(2500)
+                except Exception as e:
+                    print(f"  ⚠️  onlyfy-Detailseite nicht ladbar: {e}")
 
         rohtext = page.inner_text("body")
 
