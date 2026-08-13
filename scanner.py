@@ -314,6 +314,30 @@ def _finde_job_liste(obj, tiefe: int = 0) -> list:
     return beste
 
 
+def _dok_signatur(href: str) -> str:
+    """Identität des Ziel-DOKUMENTS einer URL, robust gegen Locale-/Länder-Varianten.
+    Ein Länder-/Sprachwechsel erzeugt für dieselbe Seite viele URLs, die sich nur im
+    Länder-Präfix bzw. einem country/locale-Query unterscheiden – die identifizierende
+    Kern-ID bleibt gleich. Signatur = längste Ziffernfolge (≥4) im LETZTEN Pfadsegment
+    (Seiten-/Job-ID); fehlt sie, das letzte Pfadsegment ohne Endung. Query wird
+    ignoriert (dort stecken change_c/country/lang etc.)."""
+    seg = urlparse(href).path.rstrip("/").split("/")[-1]
+    seg = seg.rsplit(".", 1)[0].lower()  # Datei-Endung (.html) weg
+    ids = re.findall(r"\d{4,}", seg)
+    return ids[-1] if ids else seg
+
+
+def _ist_locale_selektor(kand: list) -> bool:
+    """True, wenn eine erkannte 'Job-Liste' in Wahrheit ein Länder-/Locale-Umschalter
+    ist: alle Einträge zeigen auf DASSELBE Dokument (gleiche Kern-ID), nur in anderem
+    Land/anderer Sprache (z.B. Rohde & Schwarz: 25× dieselbe Job-Board-Seite mit
+    ?change_c=AT/CH/DE/...). Echte Stellenlisten haben pro Eintrag eine andere ID.
+    Generisch, kein Firmen-Sonderfall."""
+    if len(kand) < 3:
+        return False
+    return len({_dok_signatur(k["href"]) for k in kand}) == 1
+
+
 def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
     """Baut aus abgefangenen JSON-Antworten Job-Kandidaten [{href, text,
     arbeitsort, api}]. Nimmt die erste Antwort, die eine plausible Job-Liste
@@ -343,7 +367,7 @@ def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
             ort = next((low[f].strip() for f in _API_ORT_FELDER
                         if isinstance(low.get(f), str) and low.get(f).strip()), "")
             kand.append({"href": href, "text": titel, "arbeitsort": ort, "api": True})
-        if kand:
+        if kand and not _ist_locale_selektor(kand):
             return kand
     return []
 
