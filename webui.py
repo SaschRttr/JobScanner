@@ -1500,6 +1500,59 @@ def suchbegriff_hinzufuegen():
         return jsonify({"ok": False, "fehler": str(e)}), 500
 
 
+@app.route("/suchbegriff-uebernehmen", methods=["POST"])
+def suchbegriff_uebernehmen():
+    """
+    Übernimmt einen vorgemerkten Suchbegriff aus neue_suchbegriffe.json in den
+    [suchbegriffe]-Block von config.txt (wirkt beim nächsten Scan als Live-Filter)
+    und entfernt ihn danach aus der Vormerk-Liste.
+    Erwartet JSON: { begriff }
+    """
+    data = request.get_json()
+    begriff = ((data.get("begriff") if data else "") or "").strip()
+    if not begriff:
+        return jsonify({"ok": False, "fehler": "begriff erforderlich"}), 400
+
+    # --- In config.txt schreiben ------------------------------------------
+    try:
+        config_pfad = BASIS_PFAD / "config.txt"
+        inhalt      = config_pfad.read_text(encoding="utf-8")
+
+        ende = inhalt.find("[\\suchbegriffe]")
+        if ende == -1:
+            return jsonify({"ok": False, "fehler": "[\\suchbegriffe] nicht in config.txt gefunden"}), 500
+
+        start = inhalt.find("[suchbegriffe]")
+        block = inhalt[start:ende] if start != -1 else inhalt[:ende]
+        schon_vorhanden = any(
+            zeile.strip().lower() == begriff.lower() for zeile in block.splitlines()
+        )
+        if not schon_vorhanden:
+            inhalt = inhalt[:ende] + f"{begriff}\n" + inhalt[ende:]
+            config_pfad.write_text(inhalt, encoding="utf-8")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"config.txt-Fehler: {e}"}), 500
+
+    # --- Aus neue_suchbegriffe.json streichen -----------------------------
+    # (Begriff aus allen Einträgen entfernen; Einträge ohne Restbegriffe fallen weg.)
+    try:
+        if NEUE_SUCHBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_SUCHBEGRIFFE_JSON.read_text(encoding="utf-8"))
+            neu = []
+            for eintrag in vorschlaege:
+                rest = [b for b in eintrag.get("begriffe", [])
+                        if (b or "").strip().lower() != begriff.lower()]
+                if rest:
+                    eintrag["begriffe"] = rest
+                    neu.append(eintrag)
+            NEUE_SUCHBEGRIFFE_JSON.write_text(
+                json.dumps(neu, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass  # Übernahme in config hat geklappt; das Aufräumen ist zweitrangig
+
+    return jsonify({"ok": True, "schon_vorhanden": schon_vorhanden})
+
+
 @app.route("/firmen-config-hinzufuegen", methods=["POST"])
 def firmen_config_hinzufuegen():
     """Fügt eine neue Zeile in den [firmen]-Block von config.txt ein."""

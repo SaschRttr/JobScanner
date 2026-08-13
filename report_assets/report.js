@@ -706,7 +706,10 @@
 
         meldung('Eingetragen - Pipeline laeuft...', false);
 
-        const quelle = new EventSource(SERVER + '/manuell-stream');
+        // Nur DIESE Stelle durch die Teil-Pipeline schicken (url-Filter), sonst
+        // läuft rohtext_holen/extraktor/bewertung über ALLE Stellen und wirkt wie
+        // "hängt".
+        const quelle = new EventSource(SERVER + '/manuell-stream?url=' + encodeURIComponent(url));
         quelle.onmessage = function(e) {
             if (e.data === 'FERTIG') {
                 quelle.close();
@@ -758,6 +761,20 @@
         const zeile = btn.closest('.kt-eintrag');
         const statusEl = zeile.querySelector('.kt-status');
 
+        // Live-Ausgabe-Box einmalig anlegen, damit man sieht, was die Pipeline
+        // gerade macht (rohtext_holen → extraktor → bewertung → report).
+        let output = zeile.querySelector('.kt-pipeline-output');
+        if (!output) {
+            output = document.createElement('pre');
+            output.className = 'kt-pipeline-output';
+            output.style.cssText = 'margin-top:6px; max-height:180px; overflow:auto; ' +
+                'background:#1e1e1e; color:#ddd; font-size:0.8em; padding:6px 8px; ' +
+                'border-radius:4px; white-space:pre-wrap; word-break:break-word;';
+            zeile.appendChild(output);
+        }
+        output.style.display = 'block';
+        output.textContent = '';
+
         btn.disabled = true;
         statusEl.textContent = 'Wird eingetragen...';
         statusEl.style.color = '#2980b9';
@@ -767,6 +784,10 @@
                 statusEl.textContent = text;
                 statusEl.style.color = istFehler ? '#e74c3c' : '#27ae60';
                 if (istFehler) btn.disabled = false;
+            },
+            (zeileText) => {
+                output.textContent += zeileText + '\n';
+                output.scrollTop = output.scrollHeight;
             }
         );
     }
@@ -858,6 +879,42 @@
             statusEl.style.color = '#27ae60';
             freitext.value = '';
             zeile.querySelectorAll('.kt-chip-active').forEach(c => c.classList.remove('kt-chip-active'));
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
+            statusEl.style.color = '#e74c3c';
+            btn.disabled = false;
+        }
+    }
+
+    // "✅ In config übernehmen"-Button im Abschnitt "Vorgemerkte Suchbegriffe":
+    // schreibt den Begriff in den [suchbegriffe]-Block von config.txt und
+    // entfernt ihn aus neue_suchbegriffe.json.
+    async function suchbegriffInConfig(btn) {
+        const li = btn.closest('.vb-eintrag');
+        const statusEl = li.querySelector('.vb-status');
+        const begriff = li.dataset.begriff;
+
+        btn.disabled = true;
+        statusEl.textContent = 'Übernehme...';
+        statusEl.style.color = '#2980b9';
+
+        try {
+            const res = await fetch(SERVER + '/suchbegriff-uebernehmen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ begriff })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
+                return;
+            }
+            statusEl.textContent = data.schon_vorhanden ? '✓ war schon in config.txt' : '✅ in config.txt übernommen';
+            statusEl.style.color = '#27ae60';
+            btn.style.display = 'none';
+            li.style.opacity = '0.55';
         } catch (e) {
             statusEl.textContent = 'Server nicht erreichbar';
             statusEl.style.color = '#e74c3c';
