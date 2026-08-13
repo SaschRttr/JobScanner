@@ -365,55 +365,139 @@ def _api_total(body) -> int | None:
     return None
 
 
+def _cap_signatur(cap: dict) -> tuple:
+    """Identität einer Job-API über alle Captures hinweg: Methode + Host + Pfad
+    (ohne Query). Mehrere 'Load more'-POSTs an denselben Endpoint bzw. mehrere
+    GET-Seiten (Query unterschiedlich) gehören so zur selben API."""
+    pr = urlparse(cap.get("url", ""))
+    return ((cap.get("method") or "GET").upper(), pr.scheme, pr.netloc, pr.path)
+
+
 def _finde_job_api(captures: list, basis_url: str):
-    """Sucht die erste abgefangene Antwort mit einer Job-Liste.
-    Gibt (kandidaten, quelle) zurück – quelle = {url, method, post_data, body}."""
+    """Sucht die erste abgefangene Antwort mit einer Job-Liste und aggregiert ALLE
+    weiteren Captures derselben API (gleiche Signatur) dazu – z.B. wenn ein
+    'Load more'-Klick mehrere POST-Seiten nachgeladen hat, liegt jede als eigener
+    Capture vor. Dedupe über href. Gibt (kandidaten, quelle) zurück – quelle = erstes
+    passendes Capture (Basis für optionales Replay)."""
+    quelle = None
     for cap in captures:
-        kand = _stellen_aus_api_json([cap.get("body")], basis_url)
-        if kand:
-            return kand, cap
-    return [], None
+        if _stellen_aus_api_json([cap.get("body")], basis_url):
+            quelle = cap
+            break
+    if quelle is None:
+        return [], None
 
-
-def _paginiere_api(page, quelle: dict, basis_url: str) -> list:
-    """Holt eine erkannte GET-JSON-API vollständig ab: der Request wird im Seiten-
-    Origin (page.evaluate → fetch, erreicht die API trotz CORS) mit hochgezähltem
-    Seiten-/Offset-Parameter und großem size erneut abgerufen. Gibt die komplette,
-    deduplizierte Kandidatenliste zurück. Bei POST/GraphQL oder ohne erkennbare
-    Pagination-Params: nur die bereits abgefangene erste Antwort."""
-    einzeln = _stellen_aus_api_json([quelle.get("body")], basis_url)
-    if (quelle.get("method") or "GET").upper() != "GET":
-        return einzeln  # POST/GraphQL: kein generisches Replay
-
-    pr = urlparse(quelle["url"])
-    params = urllib.parse.parse_qs(pr.query, keep_blank_values=True)
-    low = {k.lower(): k for k in params}
-    seite_key = next((low[p] for p in _API_SEITE_PARAMS if p in low), None)
-    if not seite_key:
-        return einzeln  # keine Pagination erkennbar → eine Antwort reicht
-
-    size_key = next((low[p] for p in _API_SIZE_PARAMS if p in low), None)
-    offset_modus = seite_key.lower() in ("offset", "from", "start")
-    SIZE = 100
-    if size_key:
-        params[size_key] = [str(SIZE)]
-
-    def _url(wert: int) -> str:
-        p = {k: v[:] for k, v in params.items()}
-        p[seite_key] = [str(wert)]
-        return urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(p, doseq=True)))
-
-    MAX_API_SEITEN = 30
+    ziel = _cap_signatur(quelle)
     alle: list = []
     gesehen: set = set()
+    for cap in captures:
+        if _cap_signatur(cap) != ziel:
+            continue
+        for k in _stellen_aus_api_json([cap.get("body")], basis_url):
+            if k["href"] not in gesehen:
+                gesehen.add(k["href"])
+                alle.append(k)
+    return alle, quelle
+
+
+def _paginiere_api(page, quelle: dict, basis_url: str, vorab: list | None = None) -> list:
+    """Holt eine erkannte JSON-API möglichst vollständig ab. Ausgangspunkt sind die
+    bereits abgefangenen Kandidaten `vorab` (aus _finde_job_api, inkl. per 'Load more'
+    nachgeladener Seiten). Zusätzlich wird die API im Seiten-Origin (page.evaluate →
+    fetch, erreicht sie trotz CORS) mit hochgezähltem Seiten-/Offset-Parameter und
+    großem size nachgezogen – für GET über die URL-Query, für POST über den JSON-Body.
+    Ohne erkennbaren Pagination-Parameter bleibt es bei `vorab`."""
+    alle: list = list(vorab or _stellen_aus_api_json([quelle.get("body")], basis_url))
+    gesehen: set = {k["href"] for k in alle}
+    SIZE = 100
+    MAX_API_SEITEN = 30
+    method = (quelle.get("method") or "GET").upper()
+
+    def _merge(data) -> int:
+        neu = 0
+        for k in _stellen_aus_api_json([data], basis_url):
+            if k["href"] not in gesehen:
+                gesehen.add(k["href"])
+                alle.append(k)
+                neu += 1
+        return neu
+
+    if method == "GET":
+        pr = urlparse(quelle["url"])
+        params = urllib.parse.parse_qs(pr.query, keep_blank_values=True)
+        low = {k.lower(): k for k in params}
+        seite_key = next((low[p] for p in _API_SEITE_PARAMS if p in low), None)
+        if not seite_key:
+            return alle  # keine Pagination erkennbar → abgefangene Antwort(en) reichen
+        size_key = next((low[p] for p in _API_SIZE_PARAMS if p in low), None)
+        offset_modus = seite_key.lower() in ("offset", "from", "start")
+        if size_key:
+            params[size_key] = [str(SIZE)]
+
+        def _url(wert: int) -> str:
+            p = {k: v[:] for k, v in params.items()}
+            p[seite_key] = [str(wert)]
+            return urllib.parse.urlunparse(pr._replace(query=urllib.parse.urlencode(p, doseq=True)))
+
+        total = None
+        wert = 0 if offset_modus else 1
+        for _ in range(MAX_API_SEITEN):
+            try:
+                data = page.evaluate(
+                    "async (u) => { try { const r = await fetch(u, {headers:{'Accept':'application/json'}});"
+                    " if(!r.ok) return null; return await r.json(); } catch(e){ return null; } }",
+                    _url(wert))
+            except Exception:
+                break
+            if not data:
+                break
+            if total is None:
+                total = _api_total(data)
+            roh = _finde_job_liste(data)
+            if not roh:
+                break
+            _merge(data)
+            if total is not None and len(alle) >= total:
+                break
+            if total is None and len(roh) < SIZE:
+                break  # letzte (Teil-)Seite bei unbekannter Gesamtzahl
+            wert += len(roh) if offset_modus else 1
+        return alle
+
+    # POST/GraphQL: Body-Offset-Replay versuchen. Der ursprüngliche Request-Body wird
+    # mit hochgezähltem Offset/Seiten-Feld erneut abgeschickt (mit den abgefangenen
+    # Request-Headern, damit evtl. nötige Auth-/Kunden-Header erhalten bleiben). Ohne
+    # Offset-Feld im Body bleibt es bei den bereits abgefangenen `vorab`-Kandidaten.
+    try:
+        body = json.loads(quelle.get("post_data") or "")
+    except Exception:
+        return alle
+    if not isinstance(body, dict):
+        return alle
+    low = {k.lower(): k for k in body}
+    seite_key = next((low[p] for p in _API_SEITE_PARAMS if p in low), None)
+    if not seite_key:
+        return alle
+    size_key = next((low[p] for p in _API_SIZE_PARAMS if p in low), None)
+    offset_modus = seite_key.lower() in ("offset", "from", "start")
+    if size_key:
+        body[size_key] = SIZE
+    headers = {k: v for k, v in (quelle.get("headers") or {}).items()
+               if k.lower() not in ("host", "content-length", "connection",
+                                    "accept-encoding", "cookie")}
+    headers.setdefault("Content-Type", "application/json")
+    headers.setdefault("Accept", "application/json")
+
     total = None
     wert = 0 if offset_modus else 1
     for _ in range(MAX_API_SEITEN):
+        body[seite_key] = wert
         try:
             data = page.evaluate(
-                "async (u) => { try { const r = await fetch(u, {headers:{'Accept':'application/json'}});"
-                " if(!r.ok) return null; return await r.json(); } catch(e){ return null; } }",
-                _url(wert))
+                "async (a) => { try { const r = await fetch(a.u, {method:'POST', headers:a.h,"
+                " body: JSON.stringify(a.b)}); if(!r.ok) return null; return await r.json(); }"
+                " catch(e){ return null; } }",
+                {"u": quelle["url"], "h": headers, "b": body})
         except Exception:
             break
         if not data:
@@ -423,16 +507,13 @@ def _paginiere_api(page, quelle: dict, basis_url: str) -> list:
         roh = _finde_job_liste(data)
         if not roh:
             break
-        for k in _stellen_aus_api_json([data], basis_url):
-            if k["href"] not in gesehen:
-                gesehen.add(k["href"])
-                alle.append(k)
+        neu = _merge(data)
         if total is not None and len(alle) >= total:
             break
-        if total is None and len(roh) < SIZE:
-            break  # letzte (Teil-)Seite bei unbekannter Gesamtzahl
+        if not neu:
+            break  # keine neuen Stellen mehr → Ende (auch bei unbekannter Gesamtzahl)
         wert += len(roh) if offset_modus else 1
-    return alle if alle else einzeln
+    return alle
 
 
 _UUID_MUSTER = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -1443,6 +1524,110 @@ def _onlyfy_alle_url(widget_url: str) -> str:
             f"&display_length=200&page=1&sort=matching&sort_dir=DESC&search=")
 
 
+# Sichtbarer Text (bzw. aria-label) eines "Load more"/"Mehr anzeigen"-Buttons.
+# Bewusst über den Text erkannt (plattformunabhängig), nicht über feste Selektoren.
+_LOAD_MORE_PHRASES = ("load more", "show more", "load more jobs", "more results",
+    "more jobs", "view more", "mehr anzeigen", "mehr laden", "mehr ergebnisse",
+    "weitere anzeigen", "weitere laden", "weitere ergebnisse", "weitere stellen",
+    "mehr stellen", "alle anzeigen", "alle stellen anzeigen")
+
+
+def _finde_load_more_button(page):
+    """Sichtbaren Load-more-Button als Playwright-ElementHandle finden (oder None).
+    Playwrights CSS-Engine durchdringt offene Shadow-Roots automatisch, sodass auch in
+    Web-Components gekapselte Buttons (z.B. Sitecore-Search) gefunden werden. Wichtig:
+    der Klick MUSS später ein echter Playwright-Klick sein – ein synthetischer JS-
+    el.click() löst bei React-Widgets die Nachlade-Logik NICHT zuverlässig aus."""
+    try:
+        els = page.query_selector_all("button, a, [role='button']")
+    except Exception:
+        return None
+    for el in els:
+        try:
+            if not el.is_visible():
+                continue
+            t = (el.inner_text() or "").strip().lower()
+            if not t:
+                t = (el.get_attribute("aria-label") or "").strip().lower()
+            if not t or len(t) > 40:   # echte Buttons haben kurzen Text
+                continue
+            if any(p in t for p in _LOAD_MORE_PHRASES):
+                return el
+        except Exception:
+            continue
+    return None
+
+
+def _klick_load_more(page, alle_links: list, gesehene_hrefs: set, links_js: str,
+                     fortschritt=None) -> None:
+    """Klickt wiederholt einen generischen 'Load more'/'Mehr anzeigen'-Button, der die
+    Liste NACHLÄDT (anhängt), statt zu navigieren. Deckt SPAs ab, deren Stellen weder
+    per Scroll noch per Next-Button, sondern nur per Button-Klick nachladen (z.B.
+    Sitecore-Search-Widgets wie rosen-nxt.com). Jeder Klick feuert im Browser die
+    zugehörigen (auch POST-)Nachlade-Requests selbst – die JSON-Captures fangen sie
+    ohnehin mit.
+
+    Fortschritt wird NICHT nur an neuen DOM-Links gemessen: viele SPAs rendern die
+    Stellen ohne eigene <a href> (die Ziel-URL steckt nur in der API-Antwort). Daher
+    zählt zusätzlich das optionale ``fortschritt``-Callback (z.B. Zahl der abgefangenen
+    API-Antworten). Abbruch, wenn kein Button mehr da ist, oder zwei Klicks in Folge
+    weder neue Links noch neuen API-Fortschritt bringen, oder MAX erreicht ist."""
+    MAX_LOAD_MORE = 40
+    runden = 0
+    stall = 0
+    fort_prev = fortschritt() if fortschritt else 0
+    for _ in range(MAX_LOAD_MORE):
+        btn = _finde_load_more_button(page)
+        if btn is None:
+            break  # kein (sichtbarer) Load-more-Button mehr → Ende
+        # Button in die MITTE des Viewports scrollen, nicht an den Rand: ein
+        # scroll_into_view_if_needed landet oft unter einem Sticky-Header, der den
+        # Klickpunkt verdeckt → Playwright-Klick läuft in einen Timeout. Danach echter
+        # Klick (triggert den React-Handler; ein synthetischer JS-Klick tut das nicht),
+        # mit force-Fallback, falls doch etwas den Punkt überlagert.
+        try:
+            btn.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center'})")
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+        try:
+            btn.click(timeout=4000)
+        except Exception:
+            # Klick geblockt – meist überlagert ein spät geladenes Consent-Banner
+            # (z.B. Usercentrics) den Button. Einmal abräumen und erneut versuchen,
+            # zuletzt ein force-Klick. Cookie-Abräumen nur hier (nicht pro Firma),
+            # damit Firmen ohne Load-more-Button nicht die Selektor-Laufzeit zahlen.
+            klick_cookie_banner(page)
+            try:
+                btn.click(timeout=4000)
+            except Exception:
+                try:
+                    btn.click(timeout=4000, force=True)
+                except Exception:
+                    break
+        page.wait_for_timeout(1500)
+        try:
+            page.wait_for_load_state("networkidle", timeout=6000)
+        except Exception:
+            pass
+        neue_links = page.evaluate(links_js)
+        neue_hrefs = {l["href"] for l in neue_links} - gesehene_hrefs
+        if neue_hrefs:
+            alle_links.extend(l for l in neue_links if l["href"] in neue_hrefs)
+            gesehene_hrefs |= neue_hrefs
+        fort_now = fortschritt() if fortschritt else 0
+        if neue_hrefs or fort_now > fort_prev:
+            runden += 1
+            stall = 0
+            print(f"  ⤵️  Load-more {runden}: +{len(neue_hrefs)} Links "
+                  f"(API-Antworten: {fort_now}, gesamt {len(alle_links)} Links)")
+        else:
+            stall += 1
+            if stall >= 2:
+                break  # zwei Klicks ohne jeden Fortschritt → Ende erreicht
+        fort_prev = fort_now
+
+
 def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
     name       = firma["name"]
     url_boerse = firma["url"]
@@ -1489,10 +1674,15 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
                     post_data = resp.request.post_data
                 except Exception:
                     post_data = None
+                try:
+                    req_headers = dict(resp.request.headers)
+                except Exception:
+                    req_headers = {}
                 api_captures.append({
                     "url":       resp.url,
                     "method":    resp.request.method,
                     "post_data": post_data,
+                    "headers":   req_headers,
                     "body":      body,
                 })
         except Exception:
@@ -1650,6 +1840,16 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     MAX_SEITEN = 15
     gesehene_hrefs = {l["href"] for l in alle_links}
     seite = 1
+
+    # Zuerst generische "Load more"/"Mehr anzeigen"-Buttons bedienen (Nachladen in
+    # dieselbe Liste). Läuft vor der Seiten-/Next-Paginierung: Seiten, die ihre
+    # Stellen nur so nachladen (z.B. Sitecore-Search), liefern sonst nur die erste
+    # Charge. Der Aufruf ist billig, wenn kein solcher Button existiert (bricht sofort
+    # ab). Fortschritt = Zahl der abgefangenen API-Antworten, damit auch API-only-
+    # Listen (ohne neue DOM-Links pro Klick) erkannt werden.
+    _klick_load_more(page, alle_links, gesehene_hrefs, _LINKS_JS,
+                     fortschritt=lambda: len(api_captures))
+
     # Hat die Seite eine nummerierte Paginierungsleiste mit echten <a href>
     # (z.B. SuccessFactors: startrow-Links), NICHT klicken: solche Links lassen
     # oft Filter-Parameter (locale/d) fallen und landen so auf der falschen
@@ -1717,7 +1917,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     if not bite_jobs:
         _api_kand, _api_quelle = _finde_job_api(api_captures, url_boerse)
         if _api_kand and _api_quelle:
-            api_kandidaten = _paginiere_api(page, _api_quelle, url_boerse)
+            api_kandidaten = _paginiere_api(page, _api_quelle, url_boerse, _api_kand)
 
     if bite_jobs:
         # b-ite-API erkannt: Stellen direkt aus der Antwort (Titel + echte Job-URL),

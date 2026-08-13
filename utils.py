@@ -322,6 +322,10 @@ COOKIE_SELEKTOREN = [
     "#onetrust-accept-btn-handler",
     "button[id*='cookie-accept']", "button[id*='accept-all']",
     "button[id*='onetrust-accept']",
+    # Usercentrics (Shadow-DOM; Playwright-Selektoren durchdringen offene Roots).
+    # data-testid ist über UC-Versionen stabil; deckt z.B. rosen-nxt.com ab.
+    "[data-testid='uc-accept-all-button']",
+    "[data-testid='uc-deny-all-button']",
 ]
 
 
