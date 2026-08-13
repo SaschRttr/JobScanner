@@ -659,8 +659,10 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_js}\', false)">👎 Nicht passend</button>'
     elif scanner_status == 5:
         passend_btn = f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_js}\', true)">📋 Passend – bewerben</button>'
-    elif scanner_status == 11:
-        # Grenzfall: keine KI-Vorentscheidung, daher beide Optionen gleichwertig anbieten
+    elif scanner_status in (10, 11):
+        # Grenzfall (11) bzw. "nicht beworben" (10): keine bindende KI-Vorentscheidung,
+        # daher beide Optionen gleichwertig anbieten (10 lässt sich so nachträglich als
+        # passend/nicht passend einordnen).
         passend_btn = (
             f'<button class="pruef-btn passend-toggle" style="background:#eafaf1;border-color:#27ae60;color:#27ae60;" onclick="passendSetzen(this, \'{url_js}\', true)">📋 Passend – bewerben</button>'
             f'<button class="pruef-btn passend-toggle" style="background:#f9ebea;border-color:#c0392b;color:#c0392b;" onclick="passendSetzen(this, \'{url_js}\', false)">👎 Nicht passend</button>'

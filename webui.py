@@ -1067,8 +1067,8 @@ def passend_setzen():
         aktueller = _db.status_von(url)
         if aktueller is None:
             return jsonify({"ok": False, "fehler": "Stelle nicht gefunden"}), 404
-        if aktueller not in (4, 5, 11):
-            return jsonify({"ok": False, "fehler": f"Nur bewertete Stellen (Status 4/5/11) umschaltbar, aktuell: {aktueller}"}), 409
+        if aktueller not in (4, 5, 10, 11):
+            return jsonify({"ok": False, "fehler": f"Nur bewertete Stellen (Status 4/5/10/11) umschaltbar, aktuell: {aktueller}"}), 409
 
         _db.upsert_stelle({"url": url, "status": neuer_status})
         _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
