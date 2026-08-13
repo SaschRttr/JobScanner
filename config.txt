@@ -279,6 +279,8 @@ Instagrid            | https://careers.instagrid.co/l/de?_gl=1*8651mv*_gcl_au*OT
 Elring Klinger       | https://elringklinger.de/karriere/stellenangebote?entry=%22FuncArea_Manufacturing,FuncArea_Manufacturing_Technology%22,FuncArea_Research_and_Development,FuncArea_Other,EntryLevel_Professional,EntryLevel_Graduate,EntryLevel_Experienced,EntryLevel_Management
 Pfisterer            | https://www.pfisterer.com/de/stellenangebote
 Kärcher              | https://careers.kaercher.com/search/?searchby=location&createNewAlert=false&q=&locationsearch=&geolocation=&optionsFacetsDD_department=Fach-+%26+F%C3%BChrungsposition&optionsFacetsDD_customfield3=Forschung+und+Entwicklung&optionsFacetsDD_country=DE&optionsFacetsDD_facility=
+Liebherr             | https://www.liebherr.com/de-int/karriere/offene-stellen-5370609?filter=1220727223%3B1619115726%3B2344617153%3B2493034523%3B3036250039%3B3847609188%3B491761697
+SEG Automotive       | https://career.seg-automotive.com/stellenangebote.html
 [\firmen]
 
 # -----------------------------------------------------------------------------
