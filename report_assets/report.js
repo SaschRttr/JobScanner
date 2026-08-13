@@ -5,7 +5,11 @@
 
     const _STUFE_ZU_STATUS = { beworben: 6, absage: 8 };
 
-    function aktualisiereStatusBadge(el, neuerStatus) {
+    // ohneZaehlen=true unterdrückt das (teure) Neuzählen aller Status-Badges - beim
+    // Massen-Update in ladeStatus wird pro Karte aktualisiert und erst am Ende EINMAL
+    // gezählt, statt N-mal über alle N Karten zu iterieren (sonst O(N²) → auf dem
+    // iPhone mit >1000 Karten sekundenlanges Laden).
+    function aktualisiereStatusBadge(el, neuerStatus, ohneZaehlen = false) {
         const badge = el.querySelector('.scanner-status');
         if (!badge) return;
         for (let i = 0; i <= 11; i++) badge.classList.remove('scanner-status-' + i);
@@ -13,7 +17,7 @@
         badge.title = 'Status ' + neuerStatus;
         badge.textContent = STATUS_LABELS[neuerStatus] || String(neuerStatus);
         el.dataset.scannerStatus = String(neuerStatus);
-        aktualisiereStatusCounts();
+        if (!ohneZaehlen) aktualisiereStatusCounts();
     }
 
     function aktualisiereStatusCounts() {
@@ -159,7 +163,7 @@
                 if (_STUFE_ZU_STATUS[stufe]) {
                     const _curSt = parseInt(el.dataset.scannerStatus);
                     if (isNaN(_curSt) || !INAKTIVE_STATUS.includes(_curSt)) {
-                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[stufe]);
+                        aktualisiereStatusBadge(el, _STUFE_ZU_STATUS[stufe], true);
                     }
                 }
             }
@@ -184,7 +188,7 @@
 
             // Scanner-Status aus DB anwenden (überschreibt eingebackenen HTML-Wert)
             if (s.scanner_status !== undefined) {
-                aktualisiereStatusBadge(el, s.scanner_status);
+                aktualisiereStatusBadge(el, s.scanner_status, true);
             }
 
             // Ockergelb: Lebenslauf oder Notizen vorhanden, aber kein Status gesetzt
