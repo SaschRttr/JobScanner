@@ -52,6 +52,7 @@ SCAN_STATUS_JSON = BASIS_PFAD / "scan_status.json"
 KEIN_TREFFER_JSON = BASIS_PFAD / "kein_treffer.json"
 KEIN_TREFFER_HTML = BASIS_PFAD / "kein_treffer.html"
 NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
+NEUE_AUSSCHLUSSBEGRIFFE_JSON = BASIS_PFAD / "neue_ausschlussbegriffe.json"
 
 
 def _titel_chips_html(titel: str) -> str:
@@ -99,6 +100,7 @@ def erstelle_kein_treffer_seite() -> str:
     <code>neue_suchbegriffe.json</code> und erscheinen oben unter „Vorgemerkte Suchbegriffe" - von dort
     übernimmst du sie per Klick in <code>config.txt</code>.</p>
     {erstelle_vorgemerkte_begriffe_html()}
+    {erstelle_vorgemerkte_ausschluss_html()}
     {erstelle_kein_treffer_html(kein_treffer)}
 </body>
 </html>"""
@@ -149,6 +151,51 @@ def erstelle_vorgemerkte_begriffe_html() -> str:
     </details>"""
 
 
+def erstelle_vorgemerkte_ausschluss_html() -> str:
+    """Zeigt die in neue_ausschlussbegriffe.json vorgemerkten Ausschlussbegriffe mit
+    einem „In config übernehmen"-Button - analog zu erstelle_vorgemerkte_begriffe_html,
+    aber für die Blacklist [ausschlussbegriffe]."""
+    vorschlaege = lade_json(NEUE_AUSSCHLUSSBEGRIFFE_JSON, [])
+    if not vorschlaege:
+        return ""
+
+    # begriff -> Kontexte (Titel/Firma), damit man beim Übernehmen weiß, woher er stammt.
+    begriffe: dict = {}
+    for e in vorschlaege:
+        titel = (e.get("stellenbezeichnung") or "").strip()
+        firma = (e.get("firma") or "").strip()
+        kontext = " ".join(t for t in [titel, f"({firma})" if firma else ""] if t).strip()
+        for b in e.get("begriffe", []):
+            b = (b or "").strip()
+            if not b:
+                continue
+            if kontext:
+                begriffe.setdefault(b, []).append(kontext)
+            else:
+                begriffe.setdefault(b, [])
+
+    if not begriffe:
+        return ""
+
+    items = []
+    for b in sorted(begriffe, key=str.lower):
+        kontexte = "; ".join(dict.fromkeys(begriffe[b]))  # doppelte Kontexte zusammenfassen
+        kontext_html = (f'<span style="color:#888; font-size:0.85em; margin-left:6px;">{_html.escape(kontexte)}</span>'
+                        if kontexte else "")
+        items.append(f"""
+            <li class="vb-eintrag" data-begriff="{_html.escape(b, quote=True)}" style="margin:4px 0;">
+                <button type="button" class="kt-btn" onclick="ausschlussbegriffInConfig(this)">🚫 „{_html.escape(b)}" in config übernehmen</button>
+                {kontext_html}
+                <span class="vb-status" style="margin-left:6px; font-size:0.85em;"></span>
+            </li>""")
+
+    return f"""
+    <details open style="margin:12px 0; padding:8px 12px; background:#fdecea; border:1px solid #f5c6cb; border-radius:6px;">
+        <summary style="cursor:pointer; font-weight:bold;">🚫 Vorgemerkte Ausschlussbegriffe ({len(begriffe)}) – noch nicht in config.txt</summary>
+        <ul style="margin:8px 0 0 0; padding-left:0; list-style:none;">{"".join(items)}</ul>
+    </details>"""
+
+
 def erstelle_kein_treffer_html(kein_treffer: dict) -> str:
     """Baut die Liste der Titel ohne Suchbegriff-Treffer je Firma - lebt auf einer
     eigenen Seite (kein_treffer.html), nicht im Haupt-Report, damit das
@@ -173,6 +220,7 @@ def erstelle_kein_treffer_html(kein_treffer: dict) -> str:
                 <div style="margin-top:4px;">
                     <input type="text" class="kt-freitext" placeholder="eigener Begriff..." style="width:160px;">
                     <button type="button" class="kt-btn" onclick="suchbegriffHinzufuegen(this)">+ Als Suchbegriff vormerken</button>
+                    <button type="button" class="kt-btn" onclick="ausschlussbegriffHinzufuegen(this)">🚫 Als Ausschlussbegriff vormerken</button>
                     <button type="button" class="kt-btn" onclick="stelleAusKeinTrefferAufnehmen(this)">📥 In Pipeline aufnehmen</button>
                     <button type="button" class="kt-btn" onclick="stellentextVorschau(this)">👁 Stellentext anzeigen</button>
                     <span class="kt-status" style="margin-left:6px; color:#888; font-size:0.85em;"></span>

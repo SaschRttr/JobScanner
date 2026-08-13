@@ -886,6 +886,58 @@
         }
     }
 
+    // "Als Ausschlussbegriff vormerken"-Button: übernimmt ausgewählte Wort-Chips
+    // (kt-chip-active) plus optionalen Freitext als Vorschlag in
+    // neue_ausschlussbegriffe.json - landet NICHT direkt in config.txt, sondern
+    // wird erst später gesammelt durchgesehen. Analog zu suchbegriffHinzufuegen,
+    // aber für die Blacklist [ausschlussbegriffe].
+    async function ausschlussbegriffHinzufuegen(btn) {
+        const zeile = btn.closest('.kt-eintrag');
+        const statusEl = zeile.querySelector('.kt-status');
+        const freitext = zeile.querySelector('.kt-freitext');
+
+        const begriffe = Array.from(zeile.querySelectorAll('.kt-chip-active')).map(c => c.textContent);
+        if (freitext.value.trim()) begriffe.push(freitext.value.trim());
+
+        if (begriffe.length === 0) {
+            statusEl.textContent = 'Bitte mind. einen Begriff wählen oder eingeben.';
+            statusEl.style.color = '#e74c3c';
+            return;
+        }
+
+        btn.disabled = true;
+        statusEl.textContent = 'Wird vorgemerkt...';
+        statusEl.style.color = '#2980b9';
+
+        try {
+            const res = await fetch(SERVER + '/ausschlussbegriff-hinzufuegen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    begriffe,
+                    url: zeile.dataset.url,
+                    firma: zeile.dataset.firma,
+                    titel: zeile.dataset.titel
+                })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
+                return;
+            }
+            statusEl.textContent = '🚫 als Ausschluss vorgemerkt: ' + begriffe.join(', ');
+            statusEl.style.color = '#27ae60';
+            freitext.value = '';
+            zeile.querySelectorAll('.kt-chip-active').forEach(c => c.classList.remove('kt-chip-active'));
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
+            statusEl.style.color = '#e74c3c';
+            btn.disabled = false;
+        }
+    }
+
     // "✅ In config übernehmen"-Button im Abschnitt "Vorgemerkte Suchbegriffe":
     // schreibt den Begriff in den [suchbegriffe]-Block von config.txt und
     // entfernt ihn aus neue_suchbegriffe.json.
@@ -900,6 +952,42 @@
 
         try {
             const res = await fetch(SERVER + '/suchbegriff-uebernehmen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ begriff })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                statusEl.textContent = 'Fehler: ' + (data.fehler || 'Unbekannt');
+                statusEl.style.color = '#e74c3c';
+                btn.disabled = false;
+                return;
+            }
+            statusEl.textContent = data.schon_vorhanden ? '✓ war schon in config.txt' : '✅ in config.txt übernommen';
+            statusEl.style.color = '#27ae60';
+            btn.style.display = 'none';
+            li.style.opacity = '0.55';
+        } catch (e) {
+            statusEl.textContent = 'Server nicht erreichbar';
+            statusEl.style.color = '#e74c3c';
+            btn.disabled = false;
+        }
+    }
+
+    // "🚫 In config übernehmen"-Button im Abschnitt "Vorgemerkte Ausschlussbegriffe":
+    // schreibt den Begriff in den [ausschlussbegriffe]-Block von config.txt und
+    // entfernt ihn aus neue_ausschlussbegriffe.json.
+    async function ausschlussbegriffInConfig(btn) {
+        const li = btn.closest('.vb-eintrag');
+        const statusEl = li.querySelector('.vb-status');
+        const begriff = li.dataset.begriff;
+
+        btn.disabled = true;
+        statusEl.textContent = 'Übernehme...';
+        statusEl.style.color = '#2980b9';
+
+        try {
+            const res = await fetch(SERVER + '/ausschlussbegriff-uebernehmen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ begriff })

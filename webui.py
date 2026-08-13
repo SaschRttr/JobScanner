@@ -41,6 +41,7 @@ VORSCHAU_LOG = BASIS_PFAD / "vorschau_scan.log"
 STELLEN_JSON = BASIS_PFAD / "stellen.json"
 VORSCHAU_JSON = BASIS_PFAD / "vorschau_kandidaten.json"
 NEUE_SUCHBEGRIFFE_JSON = BASIS_PFAD / "neue_suchbegriffe.json"
+NEUE_AUSSCHLUSSBEGRIFFE_JSON = BASIS_PFAD / "neue_ausschlussbegriffe.json"
 PORT         = 5000
 
 # Globaler Status: läuft gerade ein Scan?
@@ -1546,6 +1547,104 @@ def suchbegriff_uebernehmen():
                     eintrag["begriffe"] = rest
                     neu.append(eintrag)
             NEUE_SUCHBEGRIFFE_JSON.write_text(
+                json.dumps(neu, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass  # Übernahme in config hat geklappt; das Aufräumen ist zweitrangig
+
+    return jsonify({"ok": True, "schon_vorhanden": schon_vorhanden})
+
+
+@app.route("/ausschlussbegriff-hinzufuegen", methods=["POST"])
+def ausschlussbegriff_hinzufuegen():
+    """
+    Speichert einen Ausschlussbegriff-Vorschlag in neue_ausschlussbegriffe.json zur
+    späteren manuellen Durchsicht - analog zu /suchbegriff-hinzufuegen, aber für die
+    Blacklist [ausschlussbegriffe]. Schreibt bewusst NICHT direkt in config.txt, damit
+    ungeprüfte Begriffe nicht sofort den Live-Filter verändern.
+    Stellentext wird hier nicht mitgespeichert - ein Ausschlussbegriff braucht ihn
+    nicht, und ein Nachladen würde unnötig LLM-Tokens kosten.
+    Erwartet JSON: { begriffe: [...], url, firma, titel }
+    """
+    data = request.get_json()
+    begriffe = data.get("begriffe") if data else None
+    if not begriffe or not isinstance(begriffe, list):
+        return jsonify({"ok": False, "fehler": "begriffe (Liste) erforderlich"}), 400
+
+    begriffe = [b.strip() for b in begriffe if isinstance(b, str) and b.strip()]
+    if not begriffe:
+        return jsonify({"ok": False, "fehler": "Keine gültigen Begriffe übergeben"}), 400
+
+    url   = (data.get("url") or "").strip()
+    firma = (data.get("firma") or "").strip()
+    titel = (data.get("titel") or "").strip()
+
+    eintrag = {
+        "begriffe": begriffe,
+        "stellenbezeichnung": titel,
+        "firma": firma,
+        "url": url,
+        "datum": jetzt(),
+    }
+
+    try:
+        vorschlaege = []
+        if NEUE_AUSSCHLUSSBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_AUSSCHLUSSBEGRIFFE_JSON.read_text(encoding="utf-8"))
+        vorschlaege.append(eintrag)
+        NEUE_AUSSCHLUSSBEGRIFFE_JSON.write_text(
+            json.dumps(vorschlaege, ensure_ascii=False, indent=2), encoding="utf-8")
+        return jsonify({"ok": True, "hinzugefuegt": begriffe})
+
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+
+
+@app.route("/ausschlussbegriff-uebernehmen", methods=["POST"])
+def ausschlussbegriff_uebernehmen():
+    """
+    Übernimmt einen vorgemerkten Ausschlussbegriff aus neue_ausschlussbegriffe.json in
+    den [ausschlussbegriffe]-Block von config.txt (wirkt beim nächsten Scan als
+    Live-Filter) und entfernt ihn danach aus der Vormerk-Liste.
+    Erwartet JSON: { begriff }
+    """
+    data = request.get_json()
+    begriff = ((data.get("begriff") if data else "") or "").strip()
+    if not begriff:
+        return jsonify({"ok": False, "fehler": "begriff erforderlich"}), 400
+
+    # --- In config.txt schreiben ------------------------------------------
+    try:
+        config_pfad = BASIS_PFAD / "config.txt"
+        inhalt      = config_pfad.read_text(encoding="utf-8")
+
+        ende = inhalt.find("[\\ausschlussbegriffe]")
+        if ende == -1:
+            return jsonify({"ok": False, "fehler": "[\\ausschlussbegriffe] nicht in config.txt gefunden"}), 500
+
+        start = inhalt.find("[ausschlussbegriffe]")
+        block = inhalt[start:ende] if start != -1 else inhalt[:ende]
+        schon_vorhanden = any(
+            zeile.strip().lower() == begriff.lower() for zeile in block.splitlines()
+        )
+        if not schon_vorhanden:
+            inhalt = inhalt[:ende] + f"{begriff}\n" + inhalt[ende:]
+            config_pfad.write_text(inhalt, encoding="utf-8")
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"config.txt-Fehler: {e}"}), 500
+
+    # --- Aus neue_ausschlussbegriffe.json streichen -----------------------
+    # (Begriff aus allen Einträgen entfernen; Einträge ohne Restbegriffe fallen weg.)
+    try:
+        if NEUE_AUSSCHLUSSBEGRIFFE_JSON.exists():
+            vorschlaege = json.loads(NEUE_AUSSCHLUSSBEGRIFFE_JSON.read_text(encoding="utf-8"))
+            neu = []
+            for eintrag in vorschlaege:
+                rest = [b for b in eintrag.get("begriffe", [])
+                        if (b or "").strip().lower() != begriff.lower()]
+                if rest:
+                    eintrag["begriffe"] = rest
+                    neu.append(eintrag)
+            NEUE_AUSSCHLUSSBEGRIFFE_JSON.write_text(
                 json.dumps(neu, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass  # Übernahme in config hat geklappt; das Aufräumen ist zweitrangig
