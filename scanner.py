@@ -82,7 +82,13 @@ def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
 
 
-def kein_treffer_merken(name: str, titel: str, url: str):
+def kein_treffer_merken(name: str, titel: str, url: str, ausschlussbegriffe: list | None = None):
+    # Stellen mit Ausschlussbegriff im Titel gar nicht erst auf die
+    # Kein-Treffer-Liste setzen – sie sind bewusst unerwünscht und würden
+    # die Liste (die eigentlich fehlende Suchbegriffe sichtbar machen soll)
+    # nur mit Praktika/Vertrieb/Leitung usw. zumüllen.
+    if ausschlussbegriffe and ist_ausgeschlossen(titel, ausschlussbegriffe):
+        return
     KEIN_TREFFER.setdefault(name, []).append({"titel": titel, "url": url})
 
 
@@ -785,7 +791,7 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             treffer = text_matched(titel, config["suchbegriffe"])
 
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             if treffer:
@@ -916,7 +922,7 @@ def scanne_hr4you_firma(api_config: dict, bekannte_urls: set, config: dict) -> t
 
             treffer = text_matched(titel, config["suchbegriffe"])
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             _np_grund = ablehnungsgrund(titel, standort, config)
@@ -1009,7 +1015,7 @@ def scanne_html_tabelle_firma(api_config: dict, bekannte_urls: set, config: dict
 
         treffer = text_matched(titel, config["suchbegriffe"])
         if not treffer:
-            kein_treffer_merken(name, titel, url_job)
+            kein_treffer_merken(name, titel, url_job, config["ausschlussbegriffe"])
             continue
 
         _np_grund = ablehnungsgrund(titel, standort, config)
@@ -1118,7 +1124,7 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
             treffer  = text_matched(titel, config["suchbegriffe"])
 
             if not treffer:
-                kein_treffer_merken(name, titel, url)
+                kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
             if treffer:
@@ -2071,6 +2077,23 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     roh = 0               # echte Stellen (eindeutiger Titel) VOR allen Inhalts-Filtern
     ohne_suchbegriff = 0  # davon wegen fehlendem Suchbegriff verworfen
 
+    # Vorab: Linktexte, die bei MEHREREN verschiedenen Job-URLs identisch auftauchen,
+    # sind kein echter Job-Titel (z.B. Firmen-/Seitenname, der jede Job-Karte umschließt).
+    # In dem Fall greifen wir unten auf den URL-Slug zurück - sonst würde der Titel weder
+    # einen Suchbegriff treffen (→ "kein Treffer") noch der Dedupe die echten Stellen
+    # auseinanderhalten (alle teilen denselben falschen Titel). Generisch, kein Firmen-Sonderfall.
+    _titel_urls: dict = {}
+    for _link in kandidaten:
+        if _link.get("is_pdf") or _link["href"].lower().endswith(".pdf"):
+            continue
+        _h = _link["href"].split("#")[0].rstrip("/") or _link["href"]
+        _zeilen = [z.strip() for z in _link["text"].split("\n")
+                   if z.strip() and len(z.strip()) >= MIN_TITEL_LAENGE]
+        _basis = _zeilen[0] if _zeilen else _link["text"].strip()
+        if _basis:
+            _titel_urls.setdefault(_basis, set()).add(_h)
+    _mehrdeutige_titel = {t for t, urls in _titel_urls.items() if len(urls) > 1}
+
     for link in kandidaten:
         href = link["href"].split("#")[0].rstrip("/") or link["href"]
         titel_roh = link["text"]
@@ -2085,8 +2108,23 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
             dateiname = href.rstrip("/").split("/")[-1]
             titel = dateiname[:-4].replace("-", " ").replace("_", " ").strip()
             titel = titel[:1].upper() + titel[1:] if titel else dateiname
-        elif not titel or len(titel) < MIN_TITEL_LAENGE or titel.lower() in _BUTTON_TEXTE:
+        elif (not titel or len(titel) < MIN_TITEL_LAENGE
+              or titel.lower() in _BUTTON_TEXTE):
             titel = titel_aus_slug(href)
+        else:
+            # Linktext ist der Firmen-/Seitenname statt eines Job-Titels: entweder weil er
+            # bei mehreren Job-URLs identisch auftaucht (→ _mehrdeutige_titel) oder weil er
+            # (normalisiert) mit dem Firmennamen beginnt (z.B. "GLOBE Fuel Cell Systems" für
+            # Firma "GlobeFuelCell"). Dann den aussagekräftigeren URL-Slug bevorzugen - aber
+            # nur, wenn er lang genug ist, um nicht einen brauchbaren Titel durch eine ID zu
+            # ersetzen. Generisch, kein Firmen-Sonderfall.
+            _firma_norm = re.sub(r"[^a-z0-9]", "", name.lower())
+            _titel_norm = re.sub(r"[^a-z0-9]", "", titel.lower())
+            _ist_firmenname = bool(_firma_norm) and _titel_norm.startswith(_firma_norm)
+            if titel in _mehrdeutige_titel or _ist_firmenname:
+                _slug_titel = titel_aus_slug(href)
+                if len(_slug_titel) >= MIN_TITEL_LAENGE:
+                    titel = _slug_titel
 
         if not titel or len(titel) < MIN_TITEL_LAENGE:
             continue
@@ -2103,7 +2141,7 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         treffer = text_matched(titel, config["suchbegriffe"])
 
         if not treffer and not ist_pdf_link:
-            kein_treffer_merken(name, titel, href)
+            kein_treffer_merken(name, titel, href, config["ausschlussbegriffe"])
             ohne_suchbegriff += 1
             continue
         if not treffer:
@@ -2689,6 +2727,16 @@ def main():
 
     gesamt_kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
     gesamt_kein_treffer.update(KEIN_TREFFER)
+    # Bereits gespeicherte Einträge nachträglich gegen die aktuellen
+    # Ausschlussbegriffe filtern. Sonst blieben Alt-Einträge von Firmen, die in
+    # diesem Lauf keinen Kein-Treffer mehr liefern (weil alle ausgeschlossen
+    # wurden), unbereinigt stehen.
+    _ausschluss = config["ausschlussbegriffe"]
+    gesamt_kein_treffer = {
+        firma: [e for e in eintraege if not ist_ausgeschlossen(e.get("titel", ""), _ausschluss)]
+        for firma, eintraege in gesamt_kein_treffer.items()
+    }
+    gesamt_kein_treffer = {firma: eintraege for firma, eintraege in gesamt_kein_treffer.items() if eintraege}
     speichere_json(KEIN_TREFFER_JSON, gesamt_kein_treffer)
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
