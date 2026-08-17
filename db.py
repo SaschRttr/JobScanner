@@ -8,7 +8,7 @@ werden nur noch als lesbare Spiegel exportiert.
 import json
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -524,6 +524,23 @@ def repariere_inkonsistente_status():
 def neu_flag_zuruecksetzen():
     with verbindung() as con:
         con.execute("UPDATE stellen SET neu = 0 WHERE neu = 1")
+
+
+def kuerzlich_status_gewechselt(status: int, tage: int = 3) -> dict:
+    """URLs, deren Status innerhalb der letzten `tage` Tage auf `status` gewechselt
+    ist -> {url: letzter_wechsel_zeitpunkt}. Zeitfenster statt Einmal-Flag, damit
+    ein verpasster Report-/Mail-Lauf eine Änderung nicht endgültig unter den
+    Tisch fallen lässt (siehe Ghosting-Alarm, Grenzfall/Bewerben-Sektionen in
+    der Mail)."""
+    grenze = (datetime.now() - timedelta(days=tage)).strftime("%Y-%m-%d %H:%M")
+    with verbindung() as con:
+        rows = con.execute("""
+            SELECT url, MAX(geaendert_am) AS seit
+            FROM status_historie
+            WHERE status_neu = ? AND geaendert_am >= ?
+            GROUP BY url
+        """, (status, grenze)).fetchall()
+    return {r["url"]: r["seit"] for r in rows}
 
 
 def upsert_bewerbungsstatus(url: str, stufe: str):

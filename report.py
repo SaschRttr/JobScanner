@@ -304,6 +304,52 @@ def _scan_status_html(stellen: list | None = None) -> str:
     )
 
 
+ALARM_TAGE = 3  # so lange bleiben frische Status-Änderungen (Ghosting, Grenzfall, ...) in Report und Mail sichtbar
+
+
+def _ghosting_alarm_html(stellen: list) -> str:
+    """Fällt sonst leicht unter den Tisch: eine Bewerbung, bei der die Stelle
+    danach entfernt wurde (Status 7, Ghosting), landet nur noch im
+    eingeklappten '🗑️ Vergeben'-Bereich weiter unten. Diese Box zeigt Fälle,
+    bei denen der Statuswechsel auf Ghosting innerhalb der letzten ALARM_TAGE
+    Tage passiert ist, damit man es zuverlässig mitkriegt (zeitbasiert statt
+    "nur beim nächsten Report-Lauf einmal", weil man sonst einen Lauf
+    verpassen und die Meldung nie sehen kann)."""
+    from db import verbindung, kuerzlich_status_gewechselt
+
+    seit = kuerzlich_status_gewechselt(7, ALARM_TAGE)
+    if not seit:
+        return ""
+
+    with verbindung() as con:
+        platzhalter = ",".join("?" * len(seit))
+        beworben_am = dict(con.execute(
+            f"SELECT url, beworben_am FROM bewerbungsstatus WHERE url IN ({platzhalter})",
+            list(seit.keys()),
+        ).fetchall())
+
+    # Nur Stellen, die aktuell noch wirklich auf Ghosting stehen - falls der Status
+    # zwischenzeitlich wieder geändert wurde, ist die Historie-Zeile nicht mehr aktuell.
+    betroffen = [s for s in stellen if s.get("status") == 7 and s.get("url") in seit]
+    if not betroffen:
+        return ""
+
+    zeilen = "".join(
+        f'<li><b>{_html.escape(s.get("firma", "?"))}</b>: '
+        f'<a href="{_html.escape(s.get("url", ""))}" target="_blank">{_html.escape((s.get("titel") or s.get("url", ""))[:80])}</a> '
+        f'<span style="color:#666; font-size:0.85em;">'
+        f'(beworben {beworben_am.get(s["url"]) or "?"}, Ghosting seit {seit[s["url"]]})</span></li>\n'
+        for s in sorted(betroffen, key=lambda s: s.get("firma", ""))
+    )
+    return (
+        f'<div class="summary-box" style="background:#fdecea; border-left:4px solid #e74c3c; color:#5c1c17;">'
+        f'👻 {len(betroffen)} Bewerbung(en) betroffen: Stelle wurde nach der Bewerbung entfernt, ohne Rückmeldung (Ghosting) '
+        f'– Meldung bleibt {ALARM_TAGE} Tage sichtbar:'
+        f'<ul style="margin:6px 0 0 0;">{zeilen}</ul>'
+        f'</div>\n'
+    )
+
+
 def _rohtext_fehler_liste(stellen: list) -> list:
     """Aktive Stellen, deren Rohtext beim letzten rohtext_holen.py-Lauf gar nicht
     oder nur unvollständig (zu kurz, z.B. Login-Wall/leere SPA) geladen werden
@@ -1129,6 +1175,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 <body>
     <h1>🔍 Job-Scanner Report</h1>
     {_scan_status_html(stellen)}
+    {_ghosting_alarm_html(stellen)}
     {_rohtext_fehler_html(stellen)}
     <div class="summary-box">
         {status_zeilen} &nbsp;|&nbsp;
@@ -1466,12 +1513,22 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
 # ÄNDERUNGS-MAIL ERSTELLEN
 # =============================================================================
 
-def erstelle_aenderungs_html(stellen: list) -> str:
-    datum    = datetime.now().strftime("%d.%m.%Y %H:%M")
+def _mail_kategorien(stellen: list) -> dict:
+    """Einheitliche Kategorisierung für Mail-Body (erstelle_aenderungs_html) UND
+    Betreffzeile/Versand-Trigger in main() - beide müssen aus derselben
+    Berechnung kommen, sonst laufen Betreff-Zahl und tatsächlich aufgelisteter
+    Inhalt auseinander (Ursprungsbug: "neu" im Betreff zählte auch
+    nicht_passend-Stellen mit, weil main() eine eigene, abweichende Liste
+    berechnet hat). "neue" ist zeitfensterbasiert (gefunden_am >= vor
+    ALARM_TAGE Tagen) statt über das Einmal-Flag `neu`, ebenso Grenzfall,
+    Bewerbungsstellen und Ghosting über status_historie - damit eine verpasste
+    Mail eine Änderung nicht endgültig verschluckt (sie taucht dann einfach in
+    der nächsten Mail nochmal auf, solange sie innerhalb des Zeitfensters
+    liegt)."""
+    from db import verbindung as _db_verbindung, kuerzlich_status_gewechselt
 
     job_status: dict = {}
     try:
-        from db import verbindung as _db_verbindung
         with _db_verbindung() as _con:
             for _r in _con.execute("SELECT url, stufe FROM bewerbungsstatus WHERE stufe != ''").fetchall():
                 job_status[_r["url"]] = {"stufe": _r["stufe"]}
@@ -1481,13 +1538,41 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 
     bekannte_status  = {s["url"]: s.get("status") for s in stellen}
     entschieden_urls = {url for url, st in bekannte_status.items() if st in (4, 6, 7)}
-    aktive        = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
-    neue          = [s for s in aktive  if s.get("neu") and s["url"] not in absage_urls]
-    geloescht     = [s for s in stellen if s.get("geloescht_am")]
-    nicht_passend = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
-    absagen       = [s for s in aktive  if s["url"] in absage_urls]
+
+    grenze = (datetime.now() - timedelta(days=ALARM_TAGE)).strftime("%Y-%m-%d %H:%M")
+
+    aktive         = [s for s in stellen if not s.get("geloescht_am") and not s.get("nicht_passend")]
+    neue           = [s for s in aktive  if (s.get("gefunden_am") or "") >= grenze and s["url"] not in absage_urls]
+    geloescht      = [s for s in stellen if s.get("geloescht_am")]
+    nicht_passend  = [s for s in stellen if s.get("nicht_passend") and not s.get("geloescht_am")]
+    absagen        = [s for s in aktive  if s["url"] in absage_urls]
     geringer_match = [s for s in aktive if _hat_geringen_score(s) and s["url"] not in absage_urls and s["url"] not in entschieden_urls]
-    aktive_haupt  = [s for s in aktive  if (not _hat_geringen_score(s) or s["url"] in entschieden_urls) and s["url"] not in absage_urls]
+    aktive_haupt   = [s for s in aktive  if (not _hat_geringen_score(s) or s["url"] in entschieden_urls) and s["url"] not in absage_urls]
+
+    # Grenzfall/Bewerbungsstellen doppeln sich sonst mit "neue", wenn eine frisch
+    # gefundene Stelle sofort so eingestuft wird - daher hier ausgeschlossen.
+    neue_urls = {s["url"] for s in neue}
+    grenzfall_seit  = kuerzlich_status_gewechselt(11, ALARM_TAGE)
+    grenzfall       = [s for s in aktive if s.get("status") == 11 and s["url"] in grenzfall_seit and s["url"] not in neue_urls]
+    bewerben_seit   = kuerzlich_status_gewechselt(4, ALARM_TAGE)
+    bewerben_bereit = [s for s in aktive if s.get("status") == 4 and s["url"] in bewerben_seit and s["url"] not in neue_urls]
+    ghosting_seit   = kuerzlich_status_gewechselt(7, ALARM_TAGE)
+    ghosting        = [s for s in stellen if s.get("status") == 7 and s["url"] in ghosting_seit]
+
+    return {
+        "aktive_haupt": aktive_haupt, "neue": neue, "geringer_match": geringer_match,
+        "absagen": absagen, "nicht_passend": nicht_passend, "geloescht": geloescht,
+        "grenzfall": grenzfall, "bewerben_bereit": bewerben_bereit, "ghosting": ghosting,
+    }
+
+
+def erstelle_aenderungs_html(stellen: list) -> str:
+    datum = datetime.now().strftime("%d.%m.%Y %H:%M")
+    k = _mail_kategorien(stellen)
+    aktive_haupt, neue, geringer_match, absagen, nicht_passend, geloescht, grenzfall, bewerben_bereit, ghosting = (
+        k["aktive_haupt"], k["neue"], k["geringer_match"], k["absagen"], k["nicht_passend"],
+        k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"],
+    )
 
     def score_farbe(score: int) -> str:
         if score >= 70: return "#27ae60"
@@ -1539,12 +1624,15 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 </td></tr>"""
 
     stats = [
-        ("aktive",        len(aktive_haupt), "#2c7be5"),
-        ("neu",           len(neue),         "#27ae60"),
-        ("ger. Match",    len(geringer_match),"#f39c12"),
-        ("Absagen",       len(absagen),       "#e74c3c"),
-        ("n. passend",    len(nicht_passend), "#bbb"),
-        ("vergeben",      len(geloescht),     "#bbb"),
+        ("aktive",        len(aktive_haupt),   "#2c7be5"),
+        ("neu",           len(neue),           "#27ae60"),
+        ("Grenzfall",     len(grenzfall),      "#8e44ad"),
+        ("bereit",        len(bewerben_bereit),"#3498db"),
+        ("Ghosting",      len(ghosting),       "#e74c3c"),
+        ("ger. Match",    len(geringer_match), "#f39c12"),
+        ("Absagen",       len(absagen),        "#e74c3c"),
+        ("n. passend",    len(nicht_passend),  "#bbb"),
+        ("vergeben",      len(geloescht),      "#bbb"),
     ]
     stats_zellen = "".join(
         f'<td style="text-align:center;padding:12px 8px;border-right:1px solid #f0f0f0;">'
@@ -1574,6 +1662,9 @@ def erstelle_aenderungs_html(stellen: list) -> str:
   </td></tr>
 
   {sektion("🆕 Neue Stellen", "#27ae60", neue)}
+  {sektion("⚖️ Grenzfall – bitte manuell prüfen", "#8e44ad", grenzfall)}
+  {sektion("📋 Bereit zum Bewerben", "#3498db", bewerben_bereit)}
+  {sektion("👻 Ghosting – keine Rückmeldung mehr", "#e74c3c", ghosting)}
 
 </table></td></tr>
 </table>
@@ -1586,12 +1677,17 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 # =============================================================================
 
 def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0,
+               grenzfall: int = 0, bewerben_bereit: int = 0, ghosting: int = 0,
                scan_fehler: dict | None = None, rohtext_fehler: list | None = None):
     datum = datetime.now().strftime("%d.%m.%Y")
     scan_fehler = scan_fehler or {}
     rohtext_fehler = rohtext_fehler or []
 
     betreff = f"Job-Scanner {datum} – {neue} neu, {geloescht} vergeben"
+    if ghosting:
+        betreff += f" – 👻 {ghosting} Ghosting"
+    if grenzfall:
+        betreff += f" – ⚖️ {grenzfall} Grenzfall"
     if scan_fehler:
         betreff += f" – ⚠️ {len(scan_fehler)} Firma/Firmen mit Scan-Problem"
     if rohtext_fehler:
@@ -1606,6 +1702,9 @@ def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int
         f"Job-Scanner Änderungen vom {datum}:\n\n"
         f"  Neue Stellen:          {neue}\n"
         f"  Nicht mehr verfügbar:  {geloescht}\n"
+        f"  Grenzfall (prüfen):    {grenzfall}\n"
+        f"  Bereit zum Bewerben:   {bewerben_bereit}\n"
+        f"  Ghosting:              {ghosting}\n"
     )
     scan_fehler_html = ""
     if scan_fehler:
@@ -1742,9 +1841,13 @@ def main():
     KEIN_TREFFER_HTML.write_text(kein_treffer_html, encoding="utf-8")
     print(f"  ✅ Whitelist-Diagnose gespeichert: {KEIN_TREFFER_HTML}")
 
-    # E-Mail bei Änderungen ODER wenn eine Firma beim letzten Scan keine Stellen mehr lieferte
-    neue      = [s for s in stellen if s.get("neu") and not s.get("geloescht_am")]
-    geloescht = [s for s in stellen if s.get("geloescht_am")]
+    # E-Mail bei Änderungen ODER wenn eine Firma beim letzten Scan keine Stellen mehr lieferte.
+    # Kategorien kommen aus derselben Berechnung wie der Mail-Body (_mail_kategorien), damit
+    # Betreffzeile/Trigger und tatsächlicher Inhalt nicht auseinanderlaufen können.
+    k = _mail_kategorien(stellen)
+    neue, geloescht, grenzfall, bewerben_bereit, ghosting = (
+        k["neue"], k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"],
+    )
     scan_status = lade_json(SCAN_STATUS_JSON, {})
     scan_fehler = {name: info for name, info in scan_status.items() if not info.get("ok")}
     rohtext_fehler = _rohtext_fehler_liste(stellen)
@@ -1752,11 +1855,13 @@ def main():
     if args.keine_mail:
         print("  ℹ️  Mail-Versand unterdrückt (--keine-mail)")
     elif config["email_aktiv"]:
-        if neue or geloescht or scan_fehler or rohtext_fehler:
+        if neue or geloescht or grenzfall or bewerben_bereit or ghosting or scan_fehler or rohtext_fehler:
             print(f"  📧 Sende Mail ({len(neue)} neu, {len(geloescht)} vergeben, "
+                  f"{len(grenzfall)} Grenzfall, {len(bewerben_bereit)} bereit, {len(ghosting)} Ghosting, "
                   f"{len(scan_fehler)} Scan-Problem(e), {len(rohtext_fehler)} Stelle(n) ohne Stellentext)...")
             aenderungs_html = erstelle_aenderungs_html(stellen)
             sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht),
+                       grenzfall=len(grenzfall), bewerben_bereit=len(bewerben_bereit), ghosting=len(ghosting),
                        scan_fehler=scan_fehler, rohtext_fehler=rohtext_fehler)
         else:
             print("  ℹ️  Keine Änderungen – keine Mail gesendet.")
