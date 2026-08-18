@@ -671,7 +671,11 @@ def bewerbung_erstellen():
     # Schritt 4: Pfade in DB speichern damit report.py sie findet
     try:
         import db as _db
-        _upd = {"url": stellen_url, "lebenslauf_pfad": str(lv_pfad)}
+        _upd = {
+            "url": stellen_url,
+            "lebenslauf_pfad": str(lv_pfad),
+            "offene_rueckfragen": json.dumps(ergebnis.get("offene_rueckfragen", []), ensure_ascii=False),
+        }
         if as_pfad.exists():
             _upd["anschreiben_pfad"] = str(as_pfad)
         _db.upsert_stelle(_upd)
@@ -692,6 +696,88 @@ def bewerbung_erstellen():
         "lebenslauf_url":     f"/download?pfad={urllib.parse.quote(str(lv_pfad))}",
         "anschreiben_url":    anschreiben_url,
         "anschreiben_fehler": anschreiben_fehler,
+        "offene_rueckfragen": ergebnis.get("offene_rueckfragen", []),
+    })
+
+
+# =============================================================================
+# RÜCKFRAGEN-INTERVIEW: konditionale Anpassungshinweise klären
+# =============================================================================
+
+@app.route("/rueckfragen-beantworten", methods=["POST"])
+def rueckfragen_beantworten():
+    """
+    Verarbeitet die Antworten aus dem Rückfragen-Interview im Report (Body:
+    {"url": ..., "antworten": [{"hinweis", "bestaetigt", "detail"}, ...]}).
+    Lässt anpasser.py die bestätigten Punkte in Lebenslauf.txt einarbeiten,
+    baut danach das DOCX neu (gleicher Mechanismus wie /bewerbung-erstellen)
+    und aktualisiert den Report.
+    """
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"ok": False, "fehler": "Kein url-Parameter"}), 400
+    url          = data["url"]
+    antworten    = data.get("antworten") or []
+    zusatzfakten = data.get("zusatzfakten") or []
+
+    try:
+        sys.path.insert(0, str(BASIS_PFAD))
+        from anpasser import beantworte_rueckfragen
+        ergebnis = beantworte_rueckfragen(url, antworten, zusatzfakten=zusatzfakten)
+    except Exception as e:
+        return jsonify({"ok": False, "fehler": f"anpasser Fehler: {e}"}), 500
+
+    if not ergebnis["ok"]:
+        return jsonify(ergebnis), 400
+
+    txt_pfad = Path(ergebnis["pfad"])
+    sprache  = ergebnis.get("sprache", "de")
+
+    import db as _db
+    stellen = _db.lade_alle_stellen()
+    stelle  = next((s for s in stellen if s["url"] == url), None)
+    lv_pfad_alt = Path(stelle["lebenslauf_pfad"]) if stelle and stelle.get("lebenslauf_pfad") else None
+
+    lebenslauf_url = None
+    if ergebnis.get("geaenderte_marker") and lv_pfad_alt:
+        # DOCX mit Tracked Changes neu erzeugen – gleicher Zielpfad wie beim
+        # ursprünglichen "Bewerbung erstellen", damit bestehende Links/Downloads
+        # weiterhin funktionieren.
+        from docx_patcher import erzeuge_docx_mit_changes
+
+        def _vorlage_pfad(name_de: str, name_en: str) -> Path:
+            if sprache == "en":
+                pfad_en = BASIS_PFAD / name_en
+                if pfad_en.exists():
+                    return pfad_en
+            return BASIS_PFAD / name_de
+
+        vorlage_docx   = _vorlage_pfad("lebenslauf_vorlage.docx", "lebenslauf_vorlage_en.docx")
+        vorlage_lv_txt = _vorlage_pfad("lebenslauf_vorlage.txt",  "lebenslauf_vorlage_en.txt")
+
+        ok = erzeuge_docx_mit_changes(
+            txt_pfad         = txt_pfad,
+            vorlage_pfad     = vorlage_docx,
+            ausgabe_pfad     = lv_pfad_alt,
+            vorlage_txt_pfad = vorlage_lv_txt,
+        )
+        if not ok:
+            return jsonify({"ok": False, "fehler": "DOCX-Generierung fehlgeschlagen"}), 500
+        lebenslauf_url = f"/download?pfad={urllib.parse.quote(str(lv_pfad_alt))}"
+
+    _db.exportiere_stellen_json(STELLEN_JSON)
+
+    subprocess.run(
+        [sys.executable, str(BASIS_PFAD / "report.py"), "--keine-mail"],
+        cwd=str(BASIS_PFAD),
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+    )
+
+    return jsonify({
+        "ok":                      True,
+        "lebenslauf_url":          lebenslauf_url,
+        "geaenderte_marker":       ergebnis.get("geaenderte_marker", []),
+        "offene_rueckfragen_rest": ergebnis.get("offene_rueckfragen_rest", []),
     })
 
 

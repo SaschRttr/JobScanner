@@ -214,10 +214,29 @@ def passe_abschnitt_an(
     stelle: dict,
     client,
     sprache: str = "de",
+    bestaetigte_fakten: list | None = None,
 ) -> str | None:
-    """Lässt die KI einen einzelnen Abschnitt anpassen."""
+    """Lässt die KI einen einzelnen Abschnitt anpassen.
+
+    bestaetigte_fakten: Angaben, die der Nutzer in einem Rückfrage-Interview
+    (siehe beantworte_rueckfragen) ausdrücklich als wahr bestätigt hat. Für
+    diese speziellen Angaben wird die "Erfinde keine Fakten"-Regel gelockert –
+    für alles andere gilt sie unverändert weiter.
+    """
     anpassungen_text = "\n".join(f"- {a}" for a in anpassungen)
     sprache_name = "Englisch" if sprache == "en" else "Deutsch"
+
+    bestaetigt_block = ""
+    erfinde_ausnahme = ""
+    if bestaetigte_fakten:
+        bestaetigt_text = "\n".join(f"- {f}" for f in bestaetigte_fakten)
+        bestaetigt_block = f"""
+
+Vom Nutzer ausdrücklich bestätigte, echte Angaben (dürfen für diesen Abschnitt
+verwendet werden, auch wenn sie im Original-Abschnitt unten nicht wörtlich
+vorkommen):
+{bestaetigt_text}"""
+        erfinde_ausnahme = " (AUSGENOMMEN die oben als bestätigt aufgeführten Angaben)"
 
     prompt = f"""Du bist ein professioneller Bewerbungsberater.
 
@@ -228,19 +247,20 @@ Stelle:   {stelle['titel']}
 Abschnitt: {abschnitt_name}
 
 Anpassungshinweise:
-{anpassungen_text}
+{anpassungen_text}{bestaetigt_block}
 
 Regeln:
-- Verändere NUR was die Anpassungshinweise für diesen Abschnitt ({abschnitt_name}) verlangen
+- Verändere NUR was die Anpassungshinweise oder die oben bestätigten Angaben für diesen Abschnitt ({abschnitt_name}) verlangen
 - Falls ein Anpassungshinweis erkennbar einen ANDEREN Abschnitt oder eine andere
   Stelle betrifft (z.B. eine Erfahrung die laut Hinweis nur bei einem anderen
   Arbeitgeber/einer anderen Position stattfand), ignoriere ihn hier – wende ihn
   NICHT auf diesen Abschnitt an
-- Erfinde KEINE neuen Fakten oder Erfahrungen
+- Erfinde KEINE neuen Fakten oder Erfahrungen{erfinde_ausnahme}
 - Nenne eine konkrete Technologie/Methode/Tool/Tätigkeit NUR, wenn sie bereits
-  im Original-Abschnitt unten vorkommt oder direkt daraus ableitbar ist – auch
-  wenn ein Anpassungshinweis sie ohne Einschränkung vorschlägt. Anpassungshinweise
-  können ungenau oder spekulativ sein und sind KEIN Beleg für tatsächliche Erfahrung
+  im Original-Abschnitt unten vorkommt, direkt daraus ableitbar ist, oder oben
+  als bestätigte Angabe aufgeführt ist – auch wenn ein Anpassungshinweis sie
+  ohne Einschränkung vorschlägt. Anpassungshinweise können ungenau oder
+  spekulativ sein und sind KEIN Beleg für tatsächliche Erfahrung
 - Falls du eine Anpassung ohne Fakten zu erfinden nicht sauber umsetzen kannst,
   gib GENAU den Original-Abschnitt unverändert zurück
 - Stelle KEINE Rückfragen, schreibe KEINE Meta-Kommentare, KEINE Erklärungen
@@ -467,6 +487,75 @@ def generiere_anschreiben(
 
 
 # =============================================================================
+# MARKER-SCHLEIFE (gemeinsam von passe_stelle_an und main genutzt)
+# =============================================================================
+
+def _markiere_und_wende_an(
+    lv_vorlage: str,
+    relevante_marker: list,
+    anpassungen: list,
+    stelle: dict,
+    client,
+    sprache: str = "de",
+) -> tuple[str, list, list]:
+    """
+    Wendet für jeden relevanten Marker die passenden Anpassungshinweise an.
+
+    Gibt (angepasste_vorlage, nicht_angepasste_marker, offene_rueckfragen) zurück.
+    offene_rueckfragen ist eine Liste von {"hinweis": ..., "marker": [...]} –
+    ein Eintrag PRO EINDEUTIGEM Hinweistext (nicht pro Marker!), mit allen
+    Abschnitten, für die die KI ihn mangels belegbarer Fakten nicht übernommen
+    hat. Ein Hinweis kann mehrere Abschnitte betreffen (z.B. weil sein
+    Beispieltext zufällig Schlagwörter mehrerer Abschnitte enthält) – ohne die
+    Dedupe würde der Nutzer im Interview denselben Hinweis mehrfach beantworten
+    müssen. Kandidaten für ein Rückfrage-Interview mit dem Nutzer (siehe
+    beantworte_rueckfragen).
+    """
+    angepasste_vorlage      = lv_vorlage
+    nicht_angepasste_marker = []
+    offene_rueckfragen      = []
+
+    for marker in relevante_marker:
+        abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
+        if not abschnitt:
+            print(f"  ⚠️  Marker '{marker}' nicht in Vorlage gefunden – überspringe")
+            continue
+
+        marker_anpassungen = filtere_anpassungen_fuer_marker(marker, anpassungen)
+        neuer_inhalt = passe_abschnitt_an(marker, abschnitt, marker_anpassungen, stelle, client, sprache=sprache)
+
+        erfundene    = []
+        unveraendert = False
+        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt):
+            unveraendert = neuer_inhalt.strip() == abschnitt.strip()
+            if not unveraendert:
+                erfundene = pruefe_auf_erfindungen(lv_vorlage, neuer_inhalt, client)
+
+        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt) and not erfundene and not unveraendert:
+            angepasste_vorlage = ersetze_abschnitt(angepasste_vorlage, marker, neuer_inhalt)
+            print(f"  ✅ {marker} angepasst")
+        else:
+            if erfundene:
+                print(f"  ⚠️  {marker}: KI-Antwort enthält unbelegte Angaben {erfundene} – Original behalten")
+            elif unveraendert:
+                print(f"  ℹ️  {marker}: keine Änderung ohne Fakten zu erfinden möglich – Original behalten")
+            elif neuer_inhalt:
+                print(f"  ⚠️  {marker}: KI-Antwort wirkte wie Rückfrage/Meta-Text – Original behalten")
+            else:
+                print(f"  ⚠️  {marker} konnte nicht angepasst werden – Original behalten")
+            nicht_angepasste_marker.append(marker)
+            for hinweis in marker_anpassungen:
+                bestehender = next((e for e in offene_rueckfragen if e["hinweis"] == hinweis), None)
+                if bestehender:
+                    if marker not in bestehender["marker"]:
+                        bestehender["marker"].append(marker)
+                else:
+                    offene_rueckfragen.append({"hinweis": hinweis, "marker": [marker]})
+
+    return angepasste_vorlage, nicht_angepasste_marker, offene_rueckfragen
+
+
+# =============================================================================
 # EINZELSTELLE ANPASSEN  (wird von webui.py / Flask aufgerufen)
 # =============================================================================
 
@@ -516,27 +605,10 @@ def passe_stelle_an(url: str, force: bool = False) -> dict:
     lv_vorlage = vorlage_pfad.read_text(encoding="utf-8")
     client     = anthropic_lib.Anthropic(api_key=config["api_key"])
 
-    relevante_marker      = bestimme_relevante_marker(anpassungen)
-    angepasste_vorlage    = lv_vorlage
-    nicht_angepasste_marker = []
-
-    for marker in relevante_marker:
-        abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
-        if not abschnitt:
-            continue
-        marker_anpassungen = filtere_anpassungen_fuer_marker(marker, anpassungen)
-        neuer_inhalt = passe_abschnitt_an(marker, abschnitt, marker_anpassungen, stelle, client, sprache=sprache)
-        erfundene = []
-        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt):
-            erfundene = pruefe_auf_erfindungen(lv_vorlage, neuer_inhalt, client)
-        if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt) and not erfundene:
-            angepasste_vorlage = ersetze_abschnitt(angepasste_vorlage, marker, neuer_inhalt)
-        else:
-            if erfundene:
-                print(f"  ⚠️  {marker}: KI-Antwort enthält unbelegte Angaben {erfundene} – Original behalten")
-            elif neuer_inhalt:
-                print(f"  ⚠️  {marker}: KI-Antwort wirkte wie Rückfrage/Meta-Text – Original behalten")
-            nicht_angepasste_marker.append(marker)
+    relevante_marker = bestimme_relevante_marker(anpassungen)
+    angepasste_vorlage, nicht_angepasste_marker, offene_rueckfragen = _markiere_und_wende_an(
+        lv_vorlage, relevante_marker, anpassungen, stelle, client, sprache=sprache
+    )
 
     with open(ziel, "w", encoding="utf-8") as f:
         f.write(f"Firma:                {firma}\n")
@@ -573,7 +645,171 @@ def passe_stelle_an(url: str, force: bool = False) -> dict:
             anschreiben_fehler = generiere_anschreiben(
                 stelle, lv_vorlage, as_vorlage, config, client, ordner, sprache=sprache)
 
-    return {"ok": True, "pfad": str(ziel), "anschreiben_fehler": anschreiben_fehler, "sprache": sprache}
+    return {
+        "ok": True,
+        "pfad": str(ziel),
+        "anschreiben_fehler": anschreiben_fehler,
+        "sprache": sprache,
+        "offene_rueckfragen": offene_rueckfragen,
+    }
+
+
+# =============================================================================
+# RÜCKFRAGEN BEANTWORTEN  (Interview: konditionale Anpassungshinweise klären)
+# =============================================================================
+
+_TRENNER = "\n" + "=" * 60 + "\n\n"
+
+
+def beantworte_rueckfragen(url: str, antworten: list, zusatzfakten: list | None = None) -> dict:
+    """
+    Verarbeitet Antworten aus dem WebUI-Rückfragen-Interview für eine Stelle,
+    deren Lebenslauf.txt bereits existiert.
+
+    antworten: [{"hinweis": str, "bestaetigt": bool, "detail": str}, ...] –
+    Nur Punkte, die in den offenen Rückfragen der Stelle (DB-Feld
+    offene_rueckfragen) stehen, werden berücksichtigt.
+    zusatzfakten: [{"marker": str, "fakt": str}, ...] – vom Nutzer frei
+    eingetragene Angaben OHNE zugrundeliegenden Anpassungshinweis (der
+    Rückfragen-Punkt ist immer sichtbar, nicht nur wenn die KI etwas als
+    "nicht angepasst" erkannt hat).
+
+    Bestätigte/frei eingetragene Fakten werden – gruppiert nach dem Abschnitt
+    (Marker), zu dem sie gehören – an die KI gegeben, mit dem Hinweis dass es
+    sich um bestätigte echte Fakten handelt. Wirkt NUR auf die Lebenslauf.txt
+    dieser einen Stelle, NICHT auf die Master-Vorlage.
+
+    Gibt zurück:
+      { "ok": True, "pfad": ..., "sprache": ..., "geaenderte_marker": [...],
+        "offene_rueckfragen_rest": [...] }
+      { "ok": False, "fehler": "..." }
+    """
+    zusatzfakten = zusatzfakten or []
+    config = lade_config()
+    if not config["api_key"]:
+        return {"ok": False, "fehler": "Kein API-Key in config.txt"}
+
+    stellen = db.lade_alle_stellen()
+    stelle  = next((s for s in stellen if s.get("url") == url), None)
+    if not stelle:
+        return {"ok": False, "fehler": f"Stelle nicht gefunden: {url}"}
+
+    offene = stelle.get("offene_rueckfragen") or []
+    if not offene and not zusatzfakten:
+        return {"ok": False, "fehler": "Keine Angaben zum Verarbeiten übergeben"}
+
+    firma  = stelle["firma"]
+    titel  = stelle["titel"]
+    ordner = BEWERBUNGEN_DIR / sicherer_pfadname(firma) / sicherer_pfadname(titel)
+    ziel   = ordner / "Lebenslauf.txt"
+    if not ziel.exists():
+        return {"ok": False, "fehler": "Lebenslauf.txt nicht gefunden – zuerst Bewerbung erstellen"}
+
+    inhalt_gesamt = ziel.read_text(encoding="utf-8")
+    idx = inhalt_gesamt.find(_TRENNER)
+    if idx == -1:
+        return {"ok": False, "fehler": "Lebenslauf.txt hat unerwartetes Format"}
+    kopf = inhalt_gesamt[:idx]
+    body = inhalt_gesamt[idx + len(_TRENNER):]
+
+    hinweis_zu_marker = {e["hinweis"]: e["marker"] for e in offene}
+
+    fakten_je_marker: dict = {}
+    beantwortete_hinweise = set()
+    for antwort in antworten:
+        hinweis = antwort.get("hinweis", "")
+        if hinweis not in hinweis_zu_marker:
+            continue
+        beantwortete_hinweise.add(hinweis)
+        if antwort.get("bestaetigt"):
+            fakt = hinweis
+            detail = (antwort.get("detail") or "").strip()
+            if detail:
+                fakt = f"{fakt} (Detail vom Nutzer: {detail})"
+            # Ein Hinweis kann mehrere Abschnitte betreffen (siehe
+            # _markiere_und_wende_an) – der bestätigte Fakt gilt dann für alle.
+            for marker in hinweis_zu_marker[hinweis]:
+                fakten_je_marker.setdefault(marker, []).append(fakt)
+
+    for zusatz in zusatzfakten:
+        # Kein Marker-Whitelist-Check nötig: extrahiere_abschnitt() weiter unten
+        # verwirft jeden Marker, der in der Vorlage nicht existiert, ohnehin.
+        marker = (zusatz.get("marker") or "").strip()
+        fakt   = (zusatz.get("fakt") or "").strip()
+        if marker and fakt:
+            fakten_je_marker.setdefault(marker, []).append(fakt)
+
+    # Nach dieser Runde gelten alle im Formular gezeigten Punkte als geklärt –
+    # egal ob bestätigt oder verneint, sie werden nicht erneut zur Beantwortung
+    # angeboten.
+    rest = [e for e in offene if e["hinweis"] not in beantwortete_hinweise]
+
+    sprache          = (stelle.get("bewertung") or {}).get("sprache", "de")
+    geaenderte_marker = []
+
+    if fakten_je_marker:
+        client = anthropic_lib.Anthropic(api_key=config["api_key"])
+        for marker, fakten in fakten_je_marker.items():
+            abschnitt = extrahiere_abschnitt(body, marker)
+            if not abschnitt:
+                continue
+            alle_hinweise_fuer_marker = [e["hinweis"] for e in offene if marker in e["marker"]]
+            neuer_inhalt = passe_abschnitt_an(
+                marker, abschnitt, alle_hinweise_fuer_marker, stelle, client,
+                sprache=sprache, bestaetigte_fakten=fakten,
+            )
+            if not neuer_inhalt or not ist_valide_abschnitt(neuer_inhalt):
+                continue
+            if neuer_inhalt.strip() == abschnitt.strip():
+                # KI hat trotz bestätigter Fakten nichts geändert (z.B. weil die
+                # Fakten inhaltlich nicht zu diesem Abschnitt/Arbeitgeber passen)
+                # – nicht als Änderung zählen.
+                print(f"  ℹ️  {marker}: keine Änderung trotz bestätigter Fakten – Original behalten")
+                continue
+            # Kein pruefe_auf_erfindungen hier: der Zweck dieses Interviews ist
+            # ja gerade, vom Nutzer bestätigte Fakten aufzunehmen, die vorher
+            # NIRGENDWO im Lebenslauf standen – der Erfindungs-Check würde das
+            # (und leichte Umformulierungen davon) systematisch als "unbelegt"
+            # zurückweisen. Die explizite Nutzerbestätigung übernimmt hier die
+            # Schutzfunktion; passe_abschnitt_an() bleibt trotzdem angewiesen,
+            # sich strikt an die bestätigten Fakten zu halten.
+            body = ersetze_abschnitt(body, marker, neuer_inhalt)
+            geaenderte_marker.append(marker)
+
+    # Kopf aktualisieren: gelöste Marker aus "Nicht angepasst" entfernen,
+    # Zeitstempel der letzten Bearbeitung ergänzen.
+    kopf_zeilen = kopf.splitlines()
+    neue_kopf_zeilen = []
+    for zeile in kopf_zeilen:
+        if zeile.startswith("Nicht angepasst (Original behalten): "):
+            reste_marker = [
+                m.strip() for m in zeile.split(":", 1)[1].split(",")
+                if m.strip() not in geaenderte_marker
+            ]
+            if reste_marker:
+                neue_kopf_zeilen.append(f"Nicht angepasst (Original behalten): {', '.join(reste_marker)}")
+            continue
+        neue_kopf_zeilen.append(zeile)
+    if geaenderte_marker:
+        neue_kopf_zeilen.append(
+            f"Rückfragen beantwortet am: {datetime.now().strftime('%d.%m.%Y %H:%M')} ({', '.join(geaenderte_marker)})"
+        )
+    kopf = "\n".join(neue_kopf_zeilen)
+
+    ziel.write_text(kopf + _TRENNER + body, encoding="utf-8")
+
+    db.upsert_stelle({
+        "url": url,
+        "offene_rueckfragen": json.dumps(rest, ensure_ascii=False),
+    })
+
+    return {
+        "ok": True,
+        "pfad": str(ziel),
+        "sprache": sprache,
+        "geaenderte_marker": geaenderte_marker,
+        "offene_rueckfragen_rest": rest,
+    }
 
 
 # =============================================================================
@@ -660,35 +896,16 @@ def main():
         print(f"  📌 Relevante Abschnitte: {', '.join(relevante_marker)}")
 
         # Vorlage schrittweise anpassen
-        angepasste_vorlage = lv_vorlage
-        nicht_angepasste_marker = []
-        for marker in relevante_marker:
-            abschnitt = extrahiere_abschnitt(lv_vorlage, marker)
-            if not abschnitt:
-                print(f"  ⚠️  Marker '{marker}' nicht in Vorlage gefunden – überspringe")
-                continue
+        angepasste_vorlage, nicht_angepasste_marker, offene_rueckfragen = _markiere_und_wende_an(
+            lv_vorlage, relevante_marker, anpassungen, stelle, client, sprache=sprache
+        )
 
-            print(f"  🤖 Passe Abschnitt {marker} an...")
-            marker_anpassungen = filtere_anpassungen_fuer_marker(marker, anpassungen)
-            neuer_inhalt = passe_abschnitt_an(
-                marker, abschnitt, marker_anpassungen, stelle, client, sprache=sprache
-            )
-            erfundene = []
-            if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt):
-                erfundene = pruefe_auf_erfindungen(lv_vorlage, neuer_inhalt, client)
-            if neuer_inhalt and ist_valide_abschnitt(neuer_inhalt) and not erfundene:
-                angepasste_vorlage = ersetze_abschnitt(
-                    angepasste_vorlage, marker, neuer_inhalt
-                )
-                print(f"  ✅ {marker} angepasst")
-            else:
-                if erfundene:
-                    print(f"  ⚠️  {marker}: KI-Antwort enthält unbelegte Angaben {erfundene} – Original behalten")
-                elif neuer_inhalt:
-                    print(f"  ⚠️  {marker}: KI-Antwort wirkte wie Rückfrage/Meta-Text – Original behalten")
-                else:
-                    print(f"  ⚠️  {marker} konnte nicht angepasst werden – Original behalten")
-                nicht_angepasste_marker.append(marker)
+        # Offene Rückfragen in der DB vormerken, damit das Interview in der
+        # WebUI auch für Batch-generierte Stellen verfügbar ist.
+        db.upsert_stelle({
+            "url": stelle["url"],
+            "offene_rueckfragen": json.dumps(offene_rueckfragen, ensure_ascii=False),
+        })
 
         # Datei schreiben
         with open(ziel, "w", encoding="utf-8") as f:

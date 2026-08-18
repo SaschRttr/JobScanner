@@ -132,6 +132,7 @@ def _migriere_schema():
         "ALTER TABLE bewertungen ADD COLUMN score_potenzial INTEGER",
         "ALTER TABLE bewertungen ADD COLUMN schliessbare_luecken TEXT",
         "ALTER TABLE bewertungen ADD COLUMN punkteabzug TEXT",
+        "ALTER TABLE stellen ADD COLUMN offene_rueckfragen TEXT",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -260,6 +261,10 @@ def upsert_stelle(s: dict):
             if "anschreiben_pfad" in s:
                 felder.append("anschreiben_pfad = ?")
                 werte.append(s["anschreiben_pfad"])
+
+            if "offene_rueckfragen" in s:
+                felder.append("offene_rueckfragen = ?")
+                werte.append(s["offene_rueckfragen"])
 
             if "pruef_vormerken" in s:
                 felder.append("pruef_vormerken = ?")
@@ -638,7 +643,8 @@ def lade_alle_stellen() -> list[dict]:
                 s.rohtext, s.stellentext, s.status,
                 s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
-                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken, s.gemerkt,
+                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.offene_rueckfragen,
+                s.pruef_vormerken, s.gemerkt,
                 b.score, b.score_potenzial, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
                 b.staerken, b.luecken, b.punkteabzug, b.schliessbare_luecken, b.lebenslauf_anpassungen,
                 b.profil_hinweise, b.sprache, b.bewertet_am
@@ -695,6 +701,7 @@ def lade_alle_stellen() -> list[dict]:
             "steckbrief":          steckbrief,
             "lebenslauf_pfad":     r["lebenslauf_pfad"],
             "anschreiben_pfad":    r["anschreiben_pfad"],
+            "offene_rueckfragen":  json.loads(r["offene_rueckfragen"] or "[]"),
             "bewertung":           bewertung,
         })
     return ergebnis

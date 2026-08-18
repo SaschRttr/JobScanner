@@ -71,6 +71,25 @@ def _titel_chips_html(titel: str) -> str:
     return "".join(chips)
 
 
+def _rueckfragen_marker_labels() -> list:
+    """
+    Baut Anzeige-Labels für die Abschnitts-Auswahl im Rückfragen-Interview aus
+    der echten Lebenslauf-Vorlage (Firma + Rolle statt nichtssagendem
+    "Stelle 1"/"Stelle 2"). Gleiche Marker wie anpasser.py:_MARKER_KEYWORDS.
+    """
+    labels = [("KOMPETENZPROFIL", "Kompetenzprofil (Einleitung)")]
+    vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage.txt"
+    if vorlage_pfad.exists():
+        vorlage = vorlage_pfad.read_text(encoding="utf-8")
+        for match in re.finditer(r"---STELLE_(\d+)---\n(.*?)\n(.*?)\n", vorlage):
+            nummer = match.group(1)
+            rolle  = match.group(2).split("|", 1)[-1].strip()
+            firma  = match.group(3).split(",", 1)[0].strip()
+            labels.append((f"STELLE_{nummer}_AUFGABEN", f"{firma} – {rolle}" if firma else rolle))
+    labels.append(("FAEHIGKEITEN", "Fähigkeiten"))
+    return labels
+
+
 def erstelle_kein_treffer_seite() -> str:
     """Eigenständige Seite (kein_treffer.html) für die Whitelist-Diagnose - getrennt
     vom Haupt-Report, damit das Produktivsystem (Bewerbungs-Tracking) übersichtlich
@@ -733,12 +752,28 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         if as_docx:
             as_dl = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
             links.append(f'✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>')
+        # Rückfragen-Punkt: IMMER sichtbar (nicht nur wenn die KI konditionale
+        # Anpassungshinweise nicht übernehmen konnte), damit man jederzeit auch
+        # von sich aus eine Zusatz-Angabe ergänzen kann, die in keinem
+        # Anpassungshinweis stand.
+        offene_rueckfragen = s.get("offene_rueckfragen") or []
+        rueckfragen_json   = _html.escape(json.dumps(offene_rueckfragen, ensure_ascii=False), quote=True)
+        rueckfragen_label  = f"❓ Rückfragen ({len(offene_rueckfragen)})" if offene_rueckfragen else "❓ Ergänzung hinzufügen"
+        rueckfragen_link = (
+            f'<a href="#" data-rueckfragen="{rueckfragen_json}" '
+            f'onclick="rueckfragenOeffnen(this, \'{url_js}\', \'{firma_safe}\', \'{titel_safe}\'); return false;" '
+            f'style="color:#e67e22; margin-left:12px;" '
+            f'title="Konditionale Anpassungshinweise klären oder eine eigene Angabe ergänzen">'
+            f'{rueckfragen_label}</a>'
+        )
         lebenslauf_html = f"""
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             {''.join(links)}
             <a href="#" onclick="bewerbungNeuGenerieren(this, '{url_js}', '{firma_safe}', '{titel_safe}'); return false;"
                style="color:#7f8c8d; margin-left:12px;" title="Lebenslauf &amp; Anschreiben neu generieren">🔄 Neu generieren</a>
+            {rueckfragen_link}
             <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
+            <div id="rueckfragen-form-{firma_safe}-{titel_safe}"></div>
         </div>"""
     else:
         # Noch nicht erstellt → Checkbox anzeigen (für jede Stelle, unabhängig vom Score)
@@ -1160,7 +1195,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
         f"const INAKTIVE_STATUS = {json.dumps(list(INAKTIVE_STATUSWERTE))};\n"
         f"const UNBEWERTETE_STATUS = {json.dumps(list(UNBEWERTETE_STATUSWERTE))};\n"
-        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};"
+        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};\n"
+        f"const RUECKFRAGEN_MARKER = {json.dumps(_rueckfragen_marker_labels(), ensure_ascii=False)};"
     )
 
     html = f"""<!DOCTYPE html>

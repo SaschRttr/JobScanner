@@ -687,6 +687,130 @@
         }
     }
 
+    function rueckfragenOeffnen(link, stellenUrl, firma, titel) {
+        const formBox = document.getElementById('rueckfragen-form-' + firma + '-' + titel);
+        if (!formBox) return;
+
+        // Erneutes Klicken schließt das Formular wieder, statt es zu duplizieren.
+        if (formBox.innerHTML) {
+            formBox.innerHTML = '';
+            return;
+        }
+
+        let fragen = [];
+        try { fragen = JSON.parse(link.getAttribute('data-rueckfragen')) || []; } catch (e) {}
+
+        const zeilenHtml = fragen.map((f, i) => `
+            <div style="margin:10px 0; padding:8px; background:#fff; border:1px solid #e0e0e0; border-radius:4px;">
+                <div style="margin-bottom:6px;">${f.hinweis.replace(/</g, '&lt;')}</div>
+                <label style="margin-right:12px; cursor:pointer;">
+                    <input type="radio" name="rf-bestaetigt-${firma}-${titel}-${i}" value="ja"> Ja
+                </label>
+                <label style="margin-right:12px; cursor:pointer;">
+                    <input type="radio" name="rf-bestaetigt-${firma}-${titel}-${i}" value="nein" checked> Nein
+                </label>
+                <input type="text" id="rf-detail-${firma}-${titel}-${i}" placeholder="Details (optional, z.B. wo/wann)"
+                       style="margin-top:4px; padding:2px 4px; font-size:0.85em; border:1px solid #ccc; border-radius:3px; width:280px; display:block;">
+            </div>`).join('');
+
+        const zusatzId = `rf-zusatz-${firma}-${titel}`;
+
+        formBox.innerHTML = `
+            <div style="margin-top:8px; padding:8px; background:#fff8f0; border:1px solid #e67e22; border-radius:4px;">
+                ${fragen.length ? '<div style="font-weight:bold; margin-bottom:4px;">❓ Offene Rückfragen für diesen Lebenslauf</div>' + zeilenHtml : ''}
+                <div style="font-weight:bold; margin:8px 0 4px;">✏️ Eigene Ergänzung</div>
+                <div id="${zusatzId}"></div>
+                <a href="#" onclick="rueckfragenZeileHinzufuegen('${zusatzId}'); return false;"
+                   style="font-size:0.85em; color:#7f8c8d;">+ weitere Angabe</a>
+                <div style="margin-top:8px;">
+                    <button class="scan-btn"
+                        onclick="rueckfragenAbsenden(this, '${stellenUrl}', '${firma}', '${titel}', ${fragen.length}, '${zusatzId}')">💾 Absenden</button>
+                    <span id="rf-status-${firma}-${titel}" style="margin-left:8px; color:#888;"></span>
+                </div>
+            </div>`;
+
+        rueckfragenZeileHinzufuegen(zusatzId);
+    }
+
+    function rueckfragenZeileHinzufuegen(zusatzId) {
+        const container = document.getElementById(zusatzId);
+        if (!container) return;
+        const markerListe = (typeof RUECKFRAGEN_MARKER !== 'undefined') ? RUECKFRAGEN_MARKER : [];
+        const markerOptionsHtml = markerListe.map(([m, label]) =>
+            `<option value="${m}">${label.replace(/</g, '&lt;')}</option>`).join('');
+        const zeile = document.createElement('div');
+        zeile.style.cssText = 'margin:6px 0; display:flex; gap:6px; align-items:flex-start;';
+        zeile.innerHTML = `
+            <select class="rf-zusatz-marker" style="padding:2px 4px; font-size:0.85em; border:1px solid #ccc; border-radius:3px;">${markerOptionsHtml}</select>
+            <input type="text" class="rf-zusatz-fakt" placeholder="z.B. 'Datenlogger bei Bosch eingesetzt'"
+                   style="flex:1; padding:2px 4px; font-size:0.85em; border:1px solid #ccc; border-radius:3px;">`;
+        container.appendChild(zeile);
+    }
+
+    async function rueckfragenAbsenden(btn, stellenUrl, firma, titel, anzahl, zusatzId) {
+        const statusEl = document.getElementById('rf-status-' + firma + '-' + titel);
+        btn.disabled = true;
+        if (statusEl) { statusEl.textContent = '⏳ Wird verarbeitet...'; statusEl.style.color = '#2980b9'; }
+
+        const link = document.querySelector(`a[onclick*="rueckfragenOeffnen(this, '${stellenUrl}'"]`);
+        let fragen = [];
+        try { fragen = JSON.parse(link.getAttribute('data-rueckfragen')) || []; } catch (e) {}
+
+        const antworten = [];
+        for (let i = 0; i < anzahl; i++) {
+            const radio = document.querySelector(`input[name="rf-bestaetigt-${firma}-${titel}-${i}"]:checked`);
+            const detailEl = document.getElementById(`rf-detail-${firma}-${titel}-${i}`);
+            antworten.push({
+                hinweis:    fragen[i] ? fragen[i].hinweis : '',
+                bestaetigt: !!radio && radio.value === 'ja',
+                detail:     detailEl ? detailEl.value.trim() : '',
+            });
+        }
+
+        const zusatzfakten = [];
+        const zusatzContainer = document.getElementById(zusatzId);
+        if (zusatzContainer) {
+            zusatzContainer.querySelectorAll('div').forEach(zeile => {
+                const sel  = zeile.querySelector('.rf-zusatz-marker');
+                const feld = zeile.querySelector('.rf-zusatz-fakt');
+                if (sel && feld && feld.value.trim()) {
+                    zusatzfakten.push({ marker: sel.value, fakt: feld.value.trim() });
+                }
+            });
+        }
+
+        if (!antworten.some(a => a.bestaetigt) && !zusatzfakten.length && !antworten.length) {
+            if (statusEl) { statusEl.textContent = 'Nichts einzutragen.'; statusEl.style.color = '#888'; }
+            btn.disabled = false;
+            return;
+        }
+
+        try {
+            const server = window.location.origin;
+            const res = await fetch(server + '/rueckfragen-beantworten', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: stellenUrl, antworten, zusatzfakten })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                location.reload();
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '❌ ' + (data.fehler || 'Unbekannter Fehler');
+                    statusEl.style.color = '#e74c3c';
+                }
+                btn.disabled = false;
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.textContent = '❌ Server nicht erreichbar';
+                statusEl.style.color = '#e74c3c';
+            }
+            btn.disabled = false;
+        }
+    }
+
     // Trägt eine Stelle über /stelle-einfuegen ein und lässt die Teil-Pipeline
     // (rohtext_holen/extraktor/bewertung/report) über /manuell-stream laufen.
     // meldung(text, istFehler) zeigt Statustext an; onZeile(text) ist optional
