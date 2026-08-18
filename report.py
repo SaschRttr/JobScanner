@@ -1558,20 +1558,24 @@ def _mail_kategorien(stellen: list) -> dict:
     bewerben_bereit = [s for s in aktive if s.get("status") == 4 and s["url"] in bewerben_seit and s["url"] not in neue_urls]
     ghosting_seit   = kuerzlich_status_gewechselt(7, ALARM_TAGE)
     ghosting        = [s for s in stellen if s.get("status") == 7 and s["url"] in ghosting_seit]
+    # Gemerkt: kein Zeitfenster wie bei "neue"/Grenzfall/Bewerben - die Merkliste
+    # soll dauerhaft alle markierten Stellen zeigen, nicht nur kürzlich gemerkte.
+    gemerkt         = [s for s in aktive if s.get("gemerkt") and s["url"] not in neue_urls]
 
     return {
         "aktive_haupt": aktive_haupt, "neue": neue, "geringer_match": geringer_match,
         "absagen": absagen, "nicht_passend": nicht_passend, "geloescht": geloescht,
         "grenzfall": grenzfall, "bewerben_bereit": bewerben_bereit, "ghosting": ghosting,
+        "gemerkt": gemerkt,
     }
 
 
 def erstelle_aenderungs_html(stellen: list) -> str:
     datum = datetime.now().strftime("%d.%m.%Y %H:%M")
     k = _mail_kategorien(stellen)
-    aktive_haupt, neue, geringer_match, absagen, nicht_passend, geloescht, grenzfall, bewerben_bereit, ghosting = (
+    aktive_haupt, neue, geringer_match, absagen, nicht_passend, geloescht, grenzfall, bewerben_bereit, ghosting, gemerkt = (
         k["aktive_haupt"], k["neue"], k["geringer_match"], k["absagen"], k["nicht_passend"],
-        k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"],
+        k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"], k["gemerkt"],
     )
 
     def score_farbe(score: int) -> str:
@@ -1629,6 +1633,7 @@ def erstelle_aenderungs_html(stellen: list) -> str:
         ("Grenzfall",     len(grenzfall),      "#8e44ad"),
         ("bereit",        len(bewerben_bereit),"#3498db"),
         ("Ghosting",      len(ghosting),       "#e74c3c"),
+        ("gemerkt",       len(gemerkt),        "#f1c40f"),
         ("ger. Match",    len(geringer_match), "#f39c12"),
         ("Absagen",       len(absagen),        "#e74c3c"),
         ("n. passend",    len(nicht_passend),  "#bbb"),
@@ -1665,6 +1670,7 @@ def erstelle_aenderungs_html(stellen: list) -> str:
   {sektion("⚖️ Grenzfall – bitte manuell prüfen", "#8e44ad", grenzfall)}
   {sektion("📋 Bereit zum Bewerben", "#3498db", bewerben_bereit)}
   {sektion("👻 Ghosting – keine Rückmeldung mehr", "#e74c3c", ghosting)}
+  {sektion("🔖 Gemerkt", "#f1c40f", gemerkt)}
 
 </table></td></tr>
 </table>
@@ -1677,7 +1683,7 @@ def erstelle_aenderungs_html(stellen: list) -> str:
 # =============================================================================
 
 def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int = 0,
-               grenzfall: int = 0, bewerben_bereit: int = 0, ghosting: int = 0,
+               grenzfall: int = 0, bewerben_bereit: int = 0, ghosting: int = 0, gemerkt: int = 0,
                scan_fehler: dict | None = None, rohtext_fehler: list | None = None):
     datum = datetime.now().strftime("%d.%m.%Y")
     scan_fehler = scan_fehler or {}
@@ -1705,6 +1711,7 @@ def sende_mail(aenderungs_html: str, config: dict, neue: int = 0, geloescht: int
         f"  Grenzfall (prüfen):    {grenzfall}\n"
         f"  Bereit zum Bewerben:   {bewerben_bereit}\n"
         f"  Ghosting:              {ghosting}\n"
+        f"  Gemerkt:               {gemerkt}\n"
     )
     scan_fehler_html = ""
     if scan_fehler:
@@ -1845,8 +1852,8 @@ def main():
     # Kategorien kommen aus derselben Berechnung wie der Mail-Body (_mail_kategorien), damit
     # Betreffzeile/Trigger und tatsächlicher Inhalt nicht auseinanderlaufen können.
     k = _mail_kategorien(stellen)
-    neue, geloescht, grenzfall, bewerben_bereit, ghosting = (
-        k["neue"], k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"],
+    neue, geloescht, grenzfall, bewerben_bereit, ghosting, gemerkt = (
+        k["neue"], k["geloescht"], k["grenzfall"], k["bewerben_bereit"], k["ghosting"], k["gemerkt"],
     )
     scan_status = lade_json(SCAN_STATUS_JSON, {})
     scan_fehler = {name: info for name, info in scan_status.items() if not info.get("ok")}
@@ -1855,14 +1862,18 @@ def main():
     if args.keine_mail:
         print("  ℹ️  Mail-Versand unterdrückt (--keine-mail)")
     elif config["email_aktiv"]:
+        # "gemerkt" löst bewusst keine eigene Mail aus (zeigt dauerhaft alle markierten
+        # Stellen, nicht nur neu markierte) - sonst würde jede Mail erzwungen, solange
+        # irgendeine Stelle markiert bleibt. Wird nur mitgeschickt, wenn ohnehin gesendet wird.
         if neue or geloescht or grenzfall or bewerben_bereit or ghosting or scan_fehler or rohtext_fehler:
             print(f"  📧 Sende Mail ({len(neue)} neu, {len(geloescht)} vergeben, "
                   f"{len(grenzfall)} Grenzfall, {len(bewerben_bereit)} bereit, {len(ghosting)} Ghosting, "
+                  f"{len(gemerkt)} gemerkt, "
                   f"{len(scan_fehler)} Scan-Problem(e), {len(rohtext_fehler)} Stelle(n) ohne Stellentext)...")
             aenderungs_html = erstelle_aenderungs_html(stellen)
             sende_mail(aenderungs_html, config, neue=len(neue), geloescht=len(geloescht),
                        grenzfall=len(grenzfall), bewerben_bereit=len(bewerben_bereit), ghosting=len(ghosting),
-                       scan_fehler=scan_fehler, rohtext_fehler=rohtext_fehler)
+                       gemerkt=len(gemerkt), scan_fehler=scan_fehler, rohtext_fehler=rohtext_fehler)
         else:
             print("  ℹ️  Keine Änderungen – keine Mail gesendet.")
     else:
