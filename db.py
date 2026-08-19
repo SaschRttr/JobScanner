@@ -264,7 +264,10 @@ def upsert_stelle(s: dict):
 
             if "offene_rueckfragen" in s:
                 felder.append("offene_rueckfragen = ?")
-                werte.append(s["offene_rueckfragen"])
+                wert = s["offene_rueckfragen"]
+                werte.append(
+                    json.dumps(wert, ensure_ascii=False) if isinstance(wert, (list, dict)) else wert
+                )
 
             if "pruef_vormerken" in s:
                 felder.append("pruef_vormerken = ?")
