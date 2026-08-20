@@ -519,7 +519,9 @@ def repariere_inkonsistente_status():
         groups = con.execute("""
             SELECT lower(titel) as lt, lower(firma) as lf,
                    lower(coalesce(arbeitsort, '')) as lo, COUNT(*) as cnt
-            FROM stellen GROUP BY lt, lf, lo HAVING cnt > 1
+            FROM stellen
+            WHERE trim(coalesce(firma, '')) != '' AND trim(coalesce(arbeitsort, '')) != ''
+            GROUP BY lt, lf, lo HAVING cnt > 1
         """).fetchall()
         for g in groups:
             rows = con.execute("""

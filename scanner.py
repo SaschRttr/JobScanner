@@ -361,7 +361,15 @@ def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
             if not titel or not href:
                 continue
             if href.startswith("/"):
-                href = urllib.parse.urljoin(basis_url, href)
+                pr_basis = urlparse(basis_url)
+                if pr_basis.netloc.endswith(".myworkdayjobs.com"):
+                    # Workday-SPA: der Pfad der aufgerufenen Seite (z.B.
+                    # "/de-DE/Global") ist Locale+Portal, kein echtes Verzeichnis –
+                    # urljoin() würde ihn beim Auflösen eines "/"-Pfads verwerfen
+                    # und einen 404-Link erzeugen. Daher bewusst voranstellen.
+                    href = f"{pr_basis.scheme}://{pr_basis.netloc}{pr_basis.path}{href}"
+                else:
+                    href = urllib.parse.urljoin(basis_url, href)
             if not href.startswith("http"):
                 continue
             href = _bereinige_job_url(href)
@@ -372,8 +380,82 @@ def _stellen_aus_api_json(bodies: list, basis_url: str) -> list:
                         if isinstance(low.get(f), str) and low.get(f).strip()), "")
             kand.append({"href": href, "text": titel, "arbeitsort": ort, "api": True})
         if kand and not _ist_locale_selektor(kand):
+            _workday_ort_platzhalter_ersetzen(kand)
             return kand
     return []
+
+
+def _workday_job_detail_ort(href: str, timeout: int = 8) -> str:
+    """Fragt den Workday-Detail-Endpoint für EINE Stelle ab und liefert den
+    echten Ort+Land (z.B. 'Whitewater, WI, United States of America'). Nur ein
+    einzelner Request, genutzt als letzter Ausweg, wenn die Job-LISTE selbst
+    kein Referenzbeispiel mit echtem Ort liefert (z.B. weil bei dieser Firma
+    JEDES Posting als 'N Standorte' kommt, weil Workday ein nicht-
+    geografisches Zusatz-Tag wie den Firmennamen mitzählt) - ohne diesen
+    Beleg ließe sich das URL-Schema für die Firma gar nicht verifizieren."""
+    try:
+        pr = urlparse(href)
+        teile = [t for t in pr.path.split("/") if t]
+        i = teile.index("job")
+        tenant = pr.netloc.split(".")[0]
+        portal = teile[i - 1] if i > 0 else ""
+        pfad = "/" + "/".join(teile[i:])
+        detail_url = f"{pr.scheme}://{pr.netloc}/wday/cxs/{tenant}/{portal}{pfad}"
+        req = urllib.request.Request(
+            detail_url, headers={"Accept": "application/json", "User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        jp = data.get("jobPostingInfo", {})
+        ort  = (jp.get("location") or "").strip()
+        land = ((jp.get("country") or {}).get("descriptor") or "").strip()
+        if ort and land and land.lower() not in ort.lower():
+            return f"{ort}, {land}"
+        return ort or land
+    except Exception:
+        return ""
+
+
+def _workday_ort_platzhalter_ersetzen(kand: list, href_key: str = "href") -> None:
+    """Ersetzt bei Workday-Kandidaten den Platzhaltertext, den die API bei
+    MEHREREN Standorten statt echter Ortsnamen liefert (z.B. '2 Locations'/
+    '2 Standorte' - Workday zählt dabei auch nicht-geografische Zusatz-Tags
+    wie einen Marken-/Gesellschaftsnamen als 'Standort' mit), durch den im
+    externalPath kodierten Ort (z.B. '/job/Nanjing-China/...').
+
+    Nicht jeder Workday-Tenant kodiert den Ort so im Pfad (manche nutzen dort
+    z.B. eine Requisition-ID oder eine Adresse) - deshalb wird der Fallback
+    nur aktiviert, wenn er sich an einem Kandidaten mit echtem
+    (nicht-Platzhalter-)Ort bestätigen lässt. Findet sich in der Liste selbst
+    kein solches Beispiel (z.B. weil ALLE Postings dieser Firma Platzhalter
+    zeigen), wird für EINE Platzhalter-Stelle einmalig der Detail-Endpoint
+    abgefragt, um das Schema am echten Ort zu verifizieren - kein Rateschritt
+    ohne Beleg, aber auch kein Extra-Request pro Stelle."""
+    platzhalter = [k for k in kand
+                   if k.get("arbeitsort") and _WORKDAY_ORT_PLATZHALTER.match(k["arbeitsort"].strip())]
+    if not platzhalter:
+        return
+
+    schema_bestaetigt = any(
+        not _WORKDAY_ORT_PLATZHALTER.match(k["arbeitsort"].strip())
+        and _slug_ort_bestaetigt(_ort_aus_workday_pfad(k[href_key]), k["arbeitsort"])
+        for k in kand if k.get("arbeitsort")
+    )
+
+    if not schema_bestaetigt:
+        sonde = platzhalter[0]
+        echter_ort = _workday_job_detail_ort(sonde[href_key])
+        if not echter_ort:
+            return  # Detail-Call fehlgeschlagen -> kein Beleg, kein Rateschritt
+        sonde["arbeitsort"] = echter_ort
+        schema_bestaetigt = _slug_ort_bestaetigt(_ort_aus_workday_pfad(sonde[href_key]), echter_ort)
+        platzhalter = [k for k in platzhalter if k is not sonde]
+
+    if not schema_bestaetigt:
+        return
+    for k in platzhalter:
+        abgeleitet = _ort_aus_workday_pfad(k[href_key])
+        if abgeleitet:
+            k["arbeitsort"] = abgeleitet
 
 
 # Pagination-Parameter, die in Job-REST-APIs vorkommen (Seite bzw. Größe) sowie
@@ -604,6 +686,36 @@ def loese_offer_redirect_auf(href: str, cache: dict) -> str:
         pass  # Auflösung fehlgeschlagen → Original-Link behalten
     cache[href] = ergebnis
     return ergebnis
+
+
+_WORKDAY_ORT_PLATZHALTER = re.compile(r"^\d+\s*(standorte?|locations?)$", re.I)
+
+
+def _ort_aus_workday_pfad(href: str) -> str:
+    """Leitet einen Orts-KANDIDATEN aus dem Workday-URL-Segment ab (z.B.
+    '/job/Nanjing-China/...' -> 'Nanjing, China'). Nur ein Kandidat - ob das
+    Schema bei dieser Firma tatsächlich den Ort kodiert (nicht alle
+    Workday-Tenants tun das), muss der Aufrufer per _slug_ort_bestaetigt() an
+    einem Beispiel mit echtem Ort verifizieren, bevor er verwendet wird."""
+    pfad = urlparse(href).path
+    teile = [t for t in pfad.split("/") if t]
+    try:
+        slug = teile[teile.index("job") + 1]
+    except (ValueError, IndexError):
+        return ""
+    return slug.replace("-", ", ").strip()
+
+
+def _slug_ort_bestaetigt(slug_ort: str, echter_ort: str) -> bool:
+    """True, wenn der aus der URL abgeleitete Ort zum echten (von der API
+    gelieferten) Ort passt - d.h. dieser Workday-Tenant kodiert den Ort
+    tatsächlich im URL-Pfad. Vergleicht nur das erste Wort (Stadt), da
+    Groß-/Kleinschreibung und Umlaut-Encoding in der URL variieren."""
+    def _erstes_wort(s: str) -> str:
+        s = normalisiere_ort(s or "")
+        return re.split(r"[,\s]+", s.strip())[0] if s.strip() else ""
+    w1, w2 = _erstes_wort(slug_ort), _erstes_wort(echter_ort)
+    return bool(w1) and w1 == w2
 
 
 def titel_aus_slug(href: str) -> str:
@@ -1073,6 +1185,9 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
     stellen = []
     ausgeschlossen = []
     gesehen = set()
+    vorlaeufig = []  # {firma, titel, url, arbeitsort, treffer} vor Ausland-/Standort-Filter,
+                      # damit der Workday-"N Standorte"-Platzhalter erst über ALLE Seiten
+                      # hinweg ersetzt werden kann (siehe _workday_ort_platzhalter_ersetzen)
     limit = api_config["payload"].get("limit", 20)
     gesamt_jobs_gesehen = 0
     api_fehler = False
@@ -1135,30 +1250,39 @@ def scanne_workday_firma(api_config: dict, bekannte_urls: set, config: dict) -> 
                 kein_treffer_merken(name, titel, url, config["ausschlussbegriffe"])
                 continue
 
-            if treffer:
-                _np_grund = ablehnungsgrund(titel, standort, config)
-                if _np_grund:
-                    ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
-                                           "treffer": treffer, "nicht_passend_grund": _np_grund})
-                    print(f"  🚫 Nicht passend: {titel[:70]}")
-                else:
-                    ist_neu = url not in bekannte_urls
-                    stellen.append({
-                        "firma": name,
-                        "titel": titel,
-                        "url": url,
-                        "arbeitsort": standort,
-                        "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
-                        "treffer": treffer,
-                        "neu": ist_neu,
-                        "rohtext": None,
-                    })
-                    neu_label = "🆕 " if ist_neu else "   "
-                    print(f"  ✅ {neu_label}{titel}")
-                    print(f"     {standort} | Treffer: {', '.join(treffer)}")
+            vorlaeufig.append({"firma": name, "titel": titel, "url": url,
+                               "arbeitsort": standort, "treffer": treffer})
 
         if payload["offset"] + len(jobs) >= total:
             break
+
+    _workday_ort_platzhalter_ersetzen(vorlaeufig, href_key="url")
+
+    for kand in vorlaeufig:
+        standort = kand["arbeitsort"]
+        titel = kand["titel"]
+        url = kand["url"]
+        treffer = kand["treffer"]
+        _np_grund = ablehnungsgrund(titel, standort, config)
+        if _np_grund:
+            ausgeschlossen.append({"firma": name, "titel": titel, "url": url,
+                                   "treffer": treffer, "nicht_passend_grund": _np_grund})
+            print(f"  🚫 Nicht passend: {titel[:70]}")
+        else:
+            ist_neu = url not in bekannte_urls
+            stellen.append({
+                "firma": name,
+                "titel": titel,
+                "url": url,
+                "arbeitsort": standort,
+                "standort": berechne_standort(standort, config["erlaubte_standorte"], config["verbotene_standorte"]),
+                "treffer": treffer,
+                "neu": ist_neu,
+                "rohtext": None,
+            })
+            neu_label = "🆕 " if ist_neu else "   "
+            print(f"  ✅ {neu_label}{titel}")
+            print(f"     {standort} | Treffer: {', '.join(treffer)}")
 
     if not stellen and not ausgeschlossen:
         print(f"  ℹ️  Keine passenden Stellen bei {name}")
@@ -2136,7 +2260,13 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
 
         if not titel or len(titel) < MIN_TITEL_LAENGE:
             continue
-        if href in gesehen_urls or titel in gesehen_titel:
+        # Titel-Dedupe nur außerhalb der API: DOM-Links können denselben Job
+        # mehrfach mit identischem Linktext, aber verschiedenen (Tracking-)Hrefs
+        # zeigen. API-Kandidaten haben dagegen bereits eine echte, eindeutige
+        # Job-URL je Eintrag – gleicher Titel bedeutet dort oft eine ANDERE
+        # Stelle (z.B. mehrere "Operator"-Stellen an verschiedenen Standorten),
+        # die der globale Titel-Dedupe sonst fälschlich verwerfen würde.
+        if href in gesehen_urls or (not aus_api and titel in gesehen_titel):
             continue
         gesehen_urls.add(href)
         gesehen_titel.add(titel)
