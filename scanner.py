@@ -2223,7 +2223,8 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, erlaubte: list,
                     bekannte[url]["nicht_passend_grund"] = grund
                 else:
                     bekannte[url] = {"status": 0, "nicht_passend": True,
-                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt(),
+                                     "titel": s.get("titel", ""), "firma": s.get("firma", "")}
 
         entfernte_urls = {s.get("url") for s in zu_entfernen}
         stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
@@ -2266,7 +2267,8 @@ def bereinige_ausschlussbegriffe(stellen: list, bekannte: dict, begriffe: list) 
                     bekannte[url]["nicht_passend_grund"] = grund
                 else:
                     bekannte[url] = {"status": 0, "nicht_passend": True,
-                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt(),
+                                     "titel": s.get("titel", ""), "firma": s.get("firma", "")}
 
         entfernte_urls = {s.get("url") for s in zu_entfernen}
         stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
@@ -2773,7 +2775,7 @@ def main():
     stellen_urls = {s["url"] for s in stellen}
     for url, b in bekannte.items():
         if url not in stellen_urls:
-            upsert_stelle({"url": url, "firma": "", "titel": "",
+            upsert_stelle({"url": url, "firma": b.get("firma", ""), "titel": b.get("titel", ""),
                            "status": b.get("status", 1),
                            "nicht_passend": b.get("nicht_passend", False),
                            "nicht_passend_grund": b.get("nicht_passend_grund", ""),
