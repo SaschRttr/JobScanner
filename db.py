@@ -298,6 +298,17 @@ def upsert_stelle(s: dict):
                 felder.append("status = ?")
                 werte.append(neuer_status)
 
+            # Eine Stelle, die gerade als nicht passend (Ausschlusskriterium/Standort)
+            # oder per Status 5/10 ("nicht bewerben"/"nicht beworben") abgelehnt wird,
+            # gehört nicht mehr auf die Merkliste - sonst bleibt sie dort sichtbar
+            # hängen, obwohl der Nutzer sie bewusst aussortiert hat. Ein im selben
+            # Aufruf explizit mitgegebenes "gemerkt" hat Vorrang.
+            if "gemerkt" not in s and (
+                s.get("nicht_passend") or s.get("status") in (5, 10)
+            ):
+                felder.append("gemerkt = ?")
+                werte.append(None)
+
             if felder:
                 werte.append(s["url"])
                 con.execute(

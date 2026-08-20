@@ -1467,6 +1467,27 @@
         btn.textContent = '🔍 Neu prüfen';
     }
 
+    // Eine Stelle, die gerade als "nicht passend"/"nicht beworben" abgelehnt wird,
+    // gehört nicht mehr auf die Merkliste (server-seitig löscht db.upsert_stelle()
+    // das gemerkt-Feld automatisch mit). Bildet das clientseitig sofort nach, statt
+    // auf die Report-Neugenerierung im Hintergrund zu warten.
+    function _entferneAusMerkliste(url) {
+        let warGemerkt = false;
+        document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el => {
+            if (el.dataset.gemerkt === '1') {
+                warGemerkt = true;
+                delete el.dataset.gemerkt;
+                const mb = el.querySelector('.merken-toggle');
+                if (mb) _setzeMerkenBtn(mb, url, false);
+            }
+        });
+        if (warGemerkt) {
+            const zaehler = document.getElementById('stat-merkliste');
+            if (zaehler) zaehler.textContent = String(Math.max(0, (parseInt(zaehler.textContent) || 0) - 1));
+            if (_flatAktiv) _aktualisiereFlach();
+        }
+    }
+
     async function nichtBeworben(btn, url) {
         if (!confirm('Stelle als "Nicht beworben" markieren?')) return;
         btn.disabled = true;
@@ -1483,6 +1504,7 @@
             // "Nicht beworben" gehört nicht mehr zu "Neue Stellen" - Karte dort sofort
             // entfernen, statt auf die Report-Neugenerierung im Hintergrund zu warten.
             document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"][data-section="neue"]`).forEach(el => el.remove());
+            _entferneAusMerkliste(url);
             btn.textContent = '🚫 Nicht beworben';
             btn.style.opacity = '0.5';
         } catch(e) {
@@ -1535,6 +1557,7 @@
                 // "Nicht passend" gehört nicht mehr zu "Neue Stellen" - Karte dort sofort
                 // entfernen, statt auf die Report-Neugenerierung im Hintergrund zu warten.
                 document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"][data-section="neue"]`).forEach(el => el.remove());
+                _entferneAusMerkliste(url);
             }
         } catch(e) {
             alert('Server nicht erreichbar');
