@@ -4,6 +4,22 @@ cd "$(dirname "$0")"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# Log-Datei begrenzen (falls stdout per '>> log.txt' umgeleitet wird):
+# wird sie zu groß, auf die letzten 5MB kürzen, bevor weiter angehängt wird.
+LOG_MAX_BYTES=$((5 * 1024 * 1024))
+LOG_ZIEL="$(readlink -f /proc/self/fd/1 2>/dev/null)"
+if [ -n "$LOG_ZIEL" ] && [ -f "$LOG_ZIEL" ]; then
+    LOG_GROESSE=$(stat -c%s "$LOG_ZIEL" 2>/dev/null || echo 0)
+    if [ "$LOG_GROESSE" -gt "$LOG_MAX_BYTES" ]; then
+        # In-place kürzen (gleiche Inode!), sonst schreibt der bereits offene
+        # append-Filehandle des aufrufenden Prozesses (z.B. cron) weiter in die alte Datei.
+        tail -c "$LOG_MAX_BYTES" "$LOG_ZIEL" > "$LOG_ZIEL.tmp"
+        : > "$LOG_ZIEL"
+        cat "$LOG_ZIEL.tmp" >> "$LOG_ZIEL"
+        rm -f "$LOG_ZIEL.tmp"
+    fi
+fi
+
 log "=== Pipeline gestartet ==="
 
 source venv/bin/activate
