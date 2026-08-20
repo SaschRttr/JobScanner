@@ -36,11 +36,22 @@ except ImportError:
     print("playwright nicht installiert: pip install playwright && playwright install chromium")
     sys.exit(1)
 
-from utils import klick_cookie_banner
+from utils import klick_cookie_banner, standort_ausnahme_urls, speichere_json
 from browser import (
     MIN_ROHTEXT_LAENGE, lade_pdf_text,
     starte_browser, neuer_context, neue_seite,
 )
+
+STANDORT_AUSNAHME_JSON = BASIS_PFAD / "standort_ausnahme.json"
+
+
+def _entferne_standort_ausnahme(url: str) -> None:
+    """Räumt den Standort-Ausnahme-Eintrag auf, den /stelle-einfuegen beim
+    manuellen Hinzufügen gesetzt hat, wenn die Stelle wieder verworfen wird."""
+    urls = standort_ausnahme_urls()
+    if url in urls:
+        urls.discard(url)
+        speichere_json(STANDORT_AUSNAHME_JSON, sorted(urls))
 
 
 # =============================================================================
@@ -312,7 +323,7 @@ def main():
 
     sys.path.insert(0, str(BASIS_PFAD))
     from db import lade_alle_stellen, upsert_stelle, exportiere_stellen_json, \
-                   exportiere_bekannte_json, erstelle_schema
+                   exportiere_bekannte_json, erstelle_schema, loesche_stelle
     erstelle_schema()
     stellen = lade_alle_stellen()
 
@@ -437,6 +448,7 @@ def main():
                     "titel":  stellen[idx]["titel"],
                     "status": neuer_status,
                     "nicht_ladbar": False,
+                    "manuell_neu": False,
                 }
 
                 seiten_ort = _extrahiere_ort(page, url)
@@ -452,13 +464,26 @@ def main():
                 zu_kurz += 1
                 print(f"  ⚠️  Nur {len(rohtext.strip())} Zeichen geladen – zu kurz, wird übersprungen")
                 if not alter_rohtext:
-                    upsert_stelle({"url": url, "nicht_ladbar": True})
+                    if stelle.get("manuell_neu"):
+                        # Manuell hinzugefügte Stelle, die noch nie erfolgreich geladen
+                        # wurde – kein Stub-Eintrag, der als leere Karteileiche im
+                        # Report hängen bleibt, sondern direkt wieder verwerfen.
+                        loesche_stelle(url)
+                        _entferne_standort_ausnahme(url)
+                        print(f"  🗑️  Manuell hinzugefügte Stelle verworfen (nicht ladbar)")
+                    else:
+                        upsert_stelle({"url": url, "nicht_ladbar": True})
             else:
                 # Kompletter Fehler
                 fehler += 1
                 print(f"  ❌ Kein Inhalt geladen")
                 if not alter_rohtext:
-                    upsert_stelle({"url": url, "nicht_ladbar": True})
+                    if stelle.get("manuell_neu"):
+                        loesche_stelle(url)
+                        _entferne_standort_ausnahme(url)
+                        print(f"  🗑️  Manuell hinzugefügte Stelle verworfen (nicht ladbar)")
+                    else:
+                        upsert_stelle({"url": url, "nicht_ladbar": True})
 
         browser.close()
 

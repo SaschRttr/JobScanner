@@ -126,6 +126,8 @@ Entwicklungstechniker Test & Validierung
 Hardwareentwickler Testsysteme
 Mess- und Prüftechniker
 Electrical
+Laboringenieur
+Versuchstechniker
 [\suchbegriffe]
 
 # -----------------------------------------------------------------------------
@@ -216,6 +218,8 @@ Onboarding
 Initiativbewerbung
 Director
 Business+development 
+Redakteur
+Produktionsmitarbeiter
 [\ausschlussbegriffe]
 
 # -----------------------------------------------------------------------------
@@ -394,6 +398,7 @@ SEG Automotive       | https://career.seg-automotive.com/stellenangebote.html
     "feld_titel": "jobPostingTitle",
     "feld_standort": "primaryJobPostingLocation",
     "feld_id": "url",
+    "standort_aus_id": true,
     "url_vorlage": "https://www.hitachirail.com{id}"
   },
   {

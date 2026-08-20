@@ -768,6 +768,16 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             standort = " ".join(standort_roh) if isinstance(standort_roh, list) else standort_roh
 
             job_id = str(_get_nested(job, api_config.get("feld_id", "")))
+
+            if not standort and api_config.get("standort_aus_id") and "_" in job_id:
+                # Manche APIs (z.B. Hitachi Rail) liefern das Standortfeld nicht für
+                # jeden Job, hängen den Ort aber an die Job-ID an
+                # (z.B. "R1013077_Vélizy-Villacoublay, Île-de-France, France").
+                # Ohne diesen Fallback rutschen solche Stellen am Standortfilter
+                # vorbei, weil ein leerer arbeitsort als "unbekannt → sicher" gilt.
+                # Nur für Configs mit "standort_aus_id": true, da ein "_" in der ID
+                # bei anderen Firmen keine Standort-Bedeutung haben muss.
+                standort = job_id.split("_", 1)[1]
             url_vorlage = api_config["url_vorlage"]
             titel_fuer_url = titel.lower().replace(" ", "-")
             if api_config.get("feld_url_titel"):
@@ -2223,7 +2233,8 @@ def bereinige_verbotene_standorte(stellen: list, bekannte: dict, erlaubte: list,
                     bekannte[url]["nicht_passend_grund"] = grund
                 else:
                     bekannte[url] = {"status": 0, "nicht_passend": True,
-                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt(),
+                                     "titel": s.get("titel", ""), "firma": s.get("firma", "")}
 
         entfernte_urls = {s.get("url") for s in zu_entfernen}
         stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
@@ -2266,7 +2277,8 @@ def bereinige_ausschlussbegriffe(stellen: list, bekannte: dict, begriffe: list) 
                     bekannte[url]["nicht_passend_grund"] = grund
                 else:
                     bekannte[url] = {"status": 0, "nicht_passend": True,
-                                     "nicht_passend_grund": grund, "geloescht_am": jetzt()}
+                                     "nicht_passend_grund": grund, "geloescht_am": jetzt(),
+                                     "titel": s.get("titel", ""), "firma": s.get("firma", "")}
 
         entfernte_urls = {s.get("url") for s in zu_entfernen}
         stellen[:] = [s for s in stellen if s.get("url") not in entfernte_urls]
@@ -2773,7 +2785,7 @@ def main():
     stellen_urls = {s["url"] for s in stellen}
     for url, b in bekannte.items():
         if url not in stellen_urls:
-            upsert_stelle({"url": url, "firma": "", "titel": "",
+            upsert_stelle({"url": url, "firma": b.get("firma", ""), "titel": b.get("titel", ""),
                            "status": b.get("status", 1),
                            "nicht_passend": b.get("nicht_passend", False),
                            "nicht_passend_grund": b.get("nicht_passend_grund", ""),

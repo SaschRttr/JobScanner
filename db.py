@@ -132,6 +132,8 @@ def _migriere_schema():
         "ALTER TABLE bewertungen ADD COLUMN score_potenzial INTEGER",
         "ALTER TABLE bewertungen ADD COLUMN schliessbare_luecken TEXT",
         "ALTER TABLE bewertungen ADD COLUMN punkteabzug TEXT",
+        "ALTER TABLE stellen ADD COLUMN offene_rueckfragen TEXT",
+        "ALTER TABLE stellen ADD COLUMN manuell_neu INTEGER DEFAULT 0",
     ]
     with verbindung() as con:
         for sql in neue_spalten:
@@ -159,8 +161,8 @@ def upsert_stelle(s: dict):
                      neu, rohtext, stellentext, status, arbeitsort, standort,
                      nicht_passend, nicht_passend_grund, nicht_ladbar,
                      vergabe_status, vergaben_bestaetigt,
-                     steckbrief, lebenslauf_pfad, anschreiben_pfad)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     steckbrief, lebenslauf_pfad, anschreiben_pfad, manuell_neu)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 s["url"],
                 s.get("firma", ""),
@@ -182,6 +184,7 @@ def upsert_stelle(s: dict):
                 json.dumps(s["steckbrief"], ensure_ascii=False) if s.get("steckbrief") else None,
                 s.get("lebenslauf_pfad"),
                 s.get("anschreiben_pfad"),
+                1 if s.get("manuell_neu") else 0,
             ))
         else:
             felder = []
@@ -239,6 +242,10 @@ def upsert_stelle(s: dict):
                 felder.append("nicht_ladbar = ?")
                 werte.append(1 if s["nicht_ladbar"] else 0)
 
+            if "manuell_neu" in s:
+                felder.append("manuell_neu = ?")
+                werte.append(1 if s["manuell_neu"] else 0)
+
             if "vergabe_status" in s:
                 felder.append("vergabe_status = ?")
                 werte.append(s["vergabe_status"])
@@ -260,6 +267,13 @@ def upsert_stelle(s: dict):
             if "anschreiben_pfad" in s:
                 felder.append("anschreiben_pfad = ?")
                 werte.append(s["anschreiben_pfad"])
+
+            if "offene_rueckfragen" in s:
+                felder.append("offene_rueckfragen = ?")
+                wert = s["offene_rueckfragen"]
+                werte.append(
+                    json.dumps(wert, ensure_ascii=False) if isinstance(wert, (list, dict)) else wert
+                )
 
             if "pruef_vormerken" in s:
                 felder.append("pruef_vormerken = ?")
@@ -289,6 +303,17 @@ def upsert_stelle(s: dict):
                           datetime.now().strftime("%Y-%m-%d %H:%M")))
                 felder.append("status = ?")
                 werte.append(neuer_status)
+
+            # Eine Stelle, die gerade als nicht passend (Ausschlusskriterium/Standort)
+            # oder per Status 5/10 ("nicht bewerben"/"nicht beworben") abgelehnt wird,
+            # gehört nicht mehr auf die Merkliste - sonst bleibt sie dort sichtbar
+            # hängen, obwohl der Nutzer sie bewusst aussortiert hat. Ein im selben
+            # Aufruf explizit mitgegebenes "gemerkt" hat Vorrang.
+            if "gemerkt" not in s and (
+                s.get("nicht_passend") or s.get("status") in (5, 10)
+            ):
+                felder.append("gemerkt = ?")
+                werte.append(None)
 
             if felder:
                 werte.append(s["url"])
@@ -638,7 +663,8 @@ def lade_alle_stellen() -> list[dict]:
                 s.rohtext, s.stellentext, s.status,
                 s.arbeitsort, s.standort, s.nicht_passend, s.nicht_passend_grund, s.nicht_ladbar,
                 s.vergabe_status, s.vergaben_bestaetigt,
-                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.pruef_vormerken, s.gemerkt,
+                s.steckbrief, s.lebenslauf_pfad, s.anschreiben_pfad, s.offene_rueckfragen,
+                s.pruef_vormerken, s.gemerkt,
                 b.score, b.score_potenzial, b.score_nach_anpassung, b.empfehlung, b.score_begruendung,
                 b.staerken, b.luecken, b.punkteabzug, b.schliessbare_luecken, b.lebenslauf_anpassungen,
                 b.profil_hinweise, b.sprache, b.bewertet_am
@@ -695,6 +721,7 @@ def lade_alle_stellen() -> list[dict]:
             "steckbrief":          steckbrief,
             "lebenslauf_pfad":     r["lebenslauf_pfad"],
             "anschreiben_pfad":    r["anschreiben_pfad"],
+            "offene_rueckfragen":  json.loads(r["offene_rueckfragen"] or "[]"),
             "bewertung":           bewertung,
         })
     return ergebnis

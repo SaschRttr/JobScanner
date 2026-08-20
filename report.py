@@ -71,6 +71,25 @@ def _titel_chips_html(titel: str) -> str:
     return "".join(chips)
 
 
+def _rueckfragen_marker_labels() -> list:
+    """
+    Baut Anzeige-Labels für die Abschnitts-Auswahl im Rückfragen-Interview aus
+    der echten Lebenslauf-Vorlage (Firma + Rolle statt nichtssagendem
+    "Stelle 1"/"Stelle 2"). Gleiche Marker wie anpasser.py:_MARKER_KEYWORDS.
+    """
+    labels = [("KOMPETENZPROFIL", "Kompetenzprofil (Einleitung)")]
+    vorlage_pfad = BASIS_PFAD / "lebenslauf_vorlage.txt"
+    if vorlage_pfad.exists():
+        vorlage = vorlage_pfad.read_text(encoding="utf-8")
+        for match in re.finditer(r"---STELLE_(\d+)---\n(.*?)\n(.*?)\n", vorlage):
+            nummer = match.group(1)
+            rolle  = match.group(2).split("|", 1)[-1].strip()
+            firma  = match.group(3).split(",", 1)[0].strip()
+            labels.append((f"STELLE_{nummer}_AUFGABEN", f"{firma} – {rolle}" if firma else rolle))
+    labels.append(("FAEHIGKEITEN", "Fähigkeiten"))
+    return labels
+
+
 def erstelle_kein_treffer_seite() -> str:
     """Eigenständige Seite (kein_treffer.html) für die Whitelist-Diagnose - getrennt
     vom Haupt-Report, damit das Produktivsystem (Bewerbungs-Tracking) übersichtlich
@@ -486,7 +505,7 @@ def aktualisiere_fahrzeit_fuer_stelle(url: str, firma: str, arbeitsort: str, con
 # HTML-BAUSTEINE
 # =============================================================================
 
-def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False, ausgeschlossen: bool = False) -> str:
+def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = None, geringer_match: bool = False, scanner_status: int | None = None, zu_weit: bool = False, ausgeschlossen: bool = False, neue_stellen_abschnitt: bool = False) -> str:
     import html as _html
     ist_neu       = s.get("neu", False)
     ist_geloescht = s.get("geloescht_am") is not None
@@ -733,12 +752,28 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         if as_docx:
             as_dl = f"/download?pfad={urllib.parse.quote(str(as_docx))}"
             links.append(f'✉️ <a href="{as_dl}" style="color:#27ae60;">Anschreiben.docx</a>')
+        # Rückfragen-Punkt: IMMER sichtbar (nicht nur wenn die KI konditionale
+        # Anpassungshinweise nicht übernehmen konnte), damit man jederzeit auch
+        # von sich aus eine Zusatz-Angabe ergänzen kann, die in keinem
+        # Anpassungshinweis stand.
+        offene_rueckfragen = s.get("offene_rueckfragen") or []
+        rueckfragen_json   = _html.escape(json.dumps(offene_rueckfragen, ensure_ascii=False), quote=True)
+        rueckfragen_label  = f"❓ Rückfragen ({len(offene_rueckfragen)})" if offene_rueckfragen else "❓ Ergänzung hinzufügen"
+        rueckfragen_link = (
+            f'<a href="#" data-rueckfragen="{rueckfragen_json}" '
+            f'onclick="rueckfragenOeffnen(this, \'{url_js}\', \'{firma_safe}\', \'{titel_safe}\'); return false;" '
+            f'style="color:#e67e22; margin-left:12px;" '
+            f'title="Konditionale Anpassungshinweise klären oder eine eigene Angabe ergänzen">'
+            f'{rueckfragen_label}</a>'
+        )
         lebenslauf_html = f"""
         <div style="margin-top:8px; padding:8px; background:#eafaf1; border-radius:4px; font-size:0.85em;" id="bew-box-{firma_safe}-{titel_safe}">
             {''.join(links)}
             <a href="#" onclick="bewerbungNeuGenerieren(this, '{url_js}', '{firma_safe}', '{titel_safe}'); return false;"
                style="color:#7f8c8d; margin-left:12px;" title="Lebenslauf &amp; Anschreiben neu generieren">🔄 Neu generieren</a>
+            {rueckfragen_link}
             <span id="bew-status-{firma_safe}-{titel_safe}" style="margin-left:8px; color:#888;"></span>
+            <div id="rueckfragen-form-{firma_safe}-{titel_safe}"></div>
         </div>"""
     else:
         # Noch nicht erstellt → Checkbox anzeigen (für jede Stelle, unabhängig vom Score)
@@ -832,11 +867,12 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
     _vm_attr = ' data-vorgemerkt="1"' if _vm_relevant else ''
     _gemerkt_attr = ' data-gemerkt="1"' if s.get("gemerkt") else ''
     _ausg_attr = ' data-ausgeschlossen="1"' if ausgeschlossen else ''
+    _neue_attr = ' data-section="neue"' if neue_stellen_abschnitt else ''
     if zu_weit:
         css += " stelle-zu-weit"
     _scanner_status_attr = str(scanner_status) if scanner_status is not None else ""
     zu_weit_badge = '<span class="badge badge-zu-weit">ZU WEIT</span>' if zu_weit else ""
-    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr}{_gemerkt_attr}{_ausg_attr} data-scanner-status="{_scanner_status_attr}">
+    return f"""<div class="{css}" data-url="{url_attr}" data-firma="{firma_escaped}" data-hat-lebenslauf="{hat_lv}" data-score="{score}" data-auto-min="{_auto_min_attr}" data-transit-min="{_transit_min_attr}"{_gm_attr}{_zw_attr}{_vm_attr}{_gemerkt_attr}{_ausg_attr}{_neue_attr} data-scanner-status="{_scanner_status_attr}">
     <a href="{url_attr}" target="_blank">{_html.escape(s['titel'])}</a>{neu_badge}{geloescht_badge}{status_badge}{zu_weit_badge}{firma_label}{standort_label}{datum_label}
     {vormerken_badge}
     {np_grund_html}{fahrzeit_html}<div class="tags">{tags}</div>
@@ -1160,7 +1196,8 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         f"const STATUS_LABELS = {json.dumps(STATUS_LABELS, ensure_ascii=False)};\n"
         f"const INAKTIVE_STATUS = {json.dumps(list(INAKTIVE_STATUSWERTE))};\n"
         f"const UNBEWERTETE_STATUS = {json.dumps(list(UNBEWERTETE_STATUSWERTE))};\n"
-        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};"
+        f"const FILTER_STATUS = {json.dumps(list(FILTER_STATUS_VALS))};\n"
+        f"const RUECKFRAGEN_MARKER = {json.dumps(_rueckfragen_marker_labels(), ensure_ascii=False)};"
     )
 
     html = f"""<!DOCTYPE html>
@@ -1363,7 +1400,7 @@ def erstelle_report(stellen: list, config: dict | None = None) -> str:
         html += '<div class="firma-block">\n'
         html += f'<h2>🆕 Neue Stellen – letzte 3 Tage ({len(neueste_sorted)})</h2>\n'
         for s in neueste_sorted:
-            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s))
+            html += stelle_zu_html(s, zeige_firma=True, fahrzeit=_fz(s), scanner_status=_st(s), neue_stellen_abschnitt=True)
         html += '</div>\n'
 
     # ── Top 10 nach KI-Score ────────────────────────────────────────
