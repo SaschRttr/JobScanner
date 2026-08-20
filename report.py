@@ -612,7 +612,17 @@ def stelle_zu_html(s: dict, zeige_firma: bool = False, fahrzeit: dict | None = N
         # Neubewertung (score_nach_anpassung geändert, Status neu berechnet)
         # blieb das gespeicherte empfehlung-Feld sonst auf dem alten Wert stehen
         # und widersprach dem Badge (z.B. Badge "Grenzfall", Text "BEWERBEN").
-        empf  = empfehlung_fuer_score(effektiver_score(b))
+        # Ausnahme: Status 4/5 wurde bereits final entschieden (automatisch
+        # außerhalb der Grenzzone, oder manuell per /passend-setzen aus einem
+        # Grenzfall heraus) - dann zählt die Entscheidung, nicht der reine
+        # Score, sonst bliebe "UNSICHER" nach manuellem "Passend" stehen.
+        _status = s.get("status")
+        if _status == 4:
+            empf = "bewerben"
+        elif _status == 5:
+            empf = "nicht bewerben"
+        else:
+            empf  = empfehlung_fuer_score(effektiver_score(b))
         def _farbe(v: float) -> str:
             return "#27ae60" if v >= 70 else "#f39c12" if v >= 40 else "#e74c3c"
         empf_farbe  = "#27ae60" if empf == "bewerben" else "#8e44ad" if empf == "unsicher" else "#e74c3c"
