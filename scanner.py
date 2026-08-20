@@ -1790,6 +1790,69 @@ def _klick_load_more(page, alle_links: list, gesehene_hrefs: set, links_js: str,
         fort_prev = fort_now
 
 
+def _dom_heuristik_und_ki(alle_links: list, url_boerse: str, dom: str, strukturen: dict,
+                           name: str, config: dict, muster_trifft) -> list | None:
+    """Ermittelt Job-Kandidaten per DOM-Heuristik und fragt bei Bedarf die KI
+    nach einem Link-Muster. Genutzt sowohl beim allerersten Scan einer Domain
+    (noch kein gecachtes Muster) als auch, wenn sich ein gecachtes Muster als
+    unzuverlässig herausgestellt hat (siehe scanne_boerse, 'elif muster:').
+    Gibt None zurück, wenn kein Muster gefunden wurde - der Aufrufer soll dann
+    [], [] zurückgeben (Domain für diesen Lauf überspringen)."""
+    kandidaten = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
+    schon_ki_geprueft = bool(strukturen.get(dom, {}).get("ki_geprueft"))
+
+    # Schwelle NICHT gegen rohe Treffer prüfen: Navigations-/Übersichtslinks
+    # (z.B. /de/jobs/, /en/jobs/) erfüllen ist_job_link(), sind aber keine
+    # Stellen. Würden sie mitzählen, gilt die Heuristik fälschlich als
+    # erfolgreich und die KI (die das echte Muster lernen könnte) wird nie
+    # gefragt. Daher nur echte Detail-Links als Zählbasis.
+    echte = _echte_job_links(kandidaten, url_boerse)
+
+    if len(echte) >= MIN_HEURISTIK_LINKS or (echte and schon_ki_geprueft):
+        print(f"  ✅ Heuristik: {len(echte)} Job-Links erkannt")
+        return kandidaten
+    if schon_ki_geprueft:
+        # Domain wurde schon einmal ergebnislos der KI vorgelegt → nicht erneut
+        # fragen (spart Tokens); nichts gefunden heißt hier wirklich nichts.
+        print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
+        status_merken(name, False, "Kein Job-Link-Muster erkannt")
+        return None
+
+    # Heuristik findet verdächtig wenig (oder nichts) → KI um ein Muster
+    # bitten und nur das STRIKT bessere Ergebnis übernehmen. Das fängt
+    # Seiten ab, auf denen ein paar beiläufige Links die Heuristik "erfüllen",
+    # die echten Stellen aber ein anderes Muster haben. Der >-Vergleich
+    # (gegen die ECHTEN Detail-Links) schützt eine funktionierende
+    # Heuristik, die 0.6-Grenze vor zu breiten (Navigation mitfangenden)
+    # KI-Mustern.
+    print(f"  🤖 Heuristik nur {len(echte)} echte Job-Link(s) – frage KI...")
+    alle_hrefs = list({l["href"] for l in alle_links if len(l["href"]) > 30})
+    ki_muster = ki_lerne_muster(dom, alle_hrefs, config["api_key"])
+    ki_kandidaten = ([l for l in alle_links if muster_trifft(l["href"], ki_muster)]
+                     if ki_muster else [])
+    zu_breit = len(ki_kandidaten) > 0.6 * max(len(alle_links), 1)
+    if ki_muster and len(ki_kandidaten) > len(echte) and not zu_breit:
+        print(f"  ✅ KI-Muster gelernt: '{ki_muster}' ({len(ki_kandidaten)} Links)")
+        strukturen.setdefault(dom, {})["link_muster"] = ki_muster
+        strukturen.setdefault(dom, {})["gelernt_am"] = jetzt()
+        return ki_kandidaten
+
+    # Kein besseres KI-Muster. Domain merken (nur wenn die Seite geladen
+    # war, sonst könnte ein transienter Fehler die KI dauerhaft aussperren),
+    # damit wir nicht bei jedem Lauf erneut die KI bemühen.
+    if len(alle_links) >= 20:
+        strukturen.setdefault(dom, {})["ki_geprueft"] = jetzt()
+    if echte:
+        # Nur die echten Detail-Links weiterverwenden (Übersichts-/
+        # Selbst-Links raus), nicht die rohe Müll-Liste.
+        print(f"  ✅ Heuristik: {len(echte)} Job-Links (KI kein besseres Muster)")
+        return echte
+
+    print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
+    status_merken(name, False, "Kein Job-Link-Muster erkannt")
+    return None
+
+
 def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[list, list]:
     name       = firma["name"]
     url_boerse = firma["url"]
@@ -2098,6 +2161,26 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
     elif muster:
         print(f"  ✅ Bekanntes Muster: '{muster}'")
         kandidaten = [l for l in alle_links if muster_trifft(l["href"], muster)]
+
+        # Gegenprobe: liefert das gecachte Muster spürbar weniger als die
+        # DOM-Heuristik an echten Job-Links auf der aktuellen Seite sieht,
+        # war das Muster vermutlich zu eng gelernt (z.B. zufällig auf eine
+        # Sprachvariante wie "-en-" überfit, weil beim Lernen nur englische
+        # Beispiel-Links vorlagen) und verschluckt seitdem unbemerkt echte
+        # Stellen (z.B. deutsche mit "-de-"). Statt das dauerhaft blind
+        # weiterzuverwenden: Muster verwerfen und wie bei einer noch
+        # unbekannten Domain neu lernen (DOM-Heuristik, ggf. KI erneut fragen).
+        _heuristik_links = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
+        echte_pruefung = _echte_job_links(_heuristik_links, url_boerse)
+        if len(kandidaten) < len(echte_pruefung):
+            print(f"  ⚠️  Muster findet nur {len(kandidaten)} Links, Heuristik sieht "
+                  f"{len(echte_pruefung)} echte – verwerfe Muster, lerne neu")
+            strukturen.get(dom, {}).pop("link_muster", None)
+            strukturen.get(dom, {}).pop("gelernt_am", None)
+            kandidaten = _dom_heuristik_und_ki(alle_links, url_boerse, dom, strukturen,
+                                               name, config, muster_trifft)
+            if kandidaten is None:
+                return [], []
     elif api_kandidaten:
         # API vorhanden, aber wenige Treffer – trotzdem nutzen (sauberer als
         # flakiges DOM-Scraping), statt an der Heuristik zu scheitern.
@@ -2105,58 +2188,10 @@ def scanne_boerse(page, firma: dict, strukturen: dict, config: dict) -> tuple[li
         aus_api = True
         print(f"  🛰️  JSON-API erkannt – {len(kandidaten)} Stellen aus abgefangener API-Antwort")
     else:
-        kandidaten = [l for l in alle_links if ist_job_link(l["href"]) or ist_ats_host(l["href"])]
-        schon_ki_geprueft = bool(strukturen.get(dom, {}).get("ki_geprueft"))
-
-        # Schwelle NICHT gegen rohe Treffer prüfen: Navigations-/Übersichtslinks
-        # (z.B. /de/jobs/, /en/jobs/) erfüllen ist_job_link(), sind aber keine
-        # Stellen. Würden sie mitzählen, gilt die Heuristik fälschlich als
-        # erfolgreich und die KI (die das echte Muster lernen könnte) wird nie
-        # gefragt. Daher nur echte Detail-Links als Zählbasis.
-        echte = _echte_job_links(kandidaten, url_boerse)
-
-        if len(echte) >= MIN_HEURISTIK_LINKS or (echte and schon_ki_geprueft):
-            print(f"  ✅ Heuristik: {len(echte)} Job-Links erkannt")
-        elif schon_ki_geprueft:
-            # Domain wurde schon einmal ergebnislos der KI vorgelegt → nicht erneut
-            # fragen (spart Tokens); nichts gefunden heißt hier wirklich nichts.
-            print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
-            status_merken(name, False, "Kein Job-Link-Muster erkannt")
+        kandidaten = _dom_heuristik_und_ki(alle_links, url_boerse, dom, strukturen,
+                                           name, config, muster_trifft)
+        if kandidaten is None:
             return [], []
-        else:
-            # Heuristik findet verdächtig wenig (oder nichts) → KI um ein Muster
-            # bitten und nur das STRIKT bessere Ergebnis übernehmen. Das fängt
-            # Seiten ab, auf denen ein paar beiläufige Links die Heuristik "erfüllen",
-            # die echten Stellen aber ein anderes Muster haben. Der >-Vergleich
-            # (gegen die ECHTEN Detail-Links) schützt eine funktionierende
-            # Heuristik, die 0.6-Grenze vor zu breiten (Navigation mitfangenden)
-            # KI-Mustern.
-            print(f"  🤖 Heuristik nur {len(echte)} echte Job-Link(s) – frage KI...")
-            alle_hrefs = list({l["href"] for l in alle_links if len(l["href"]) > 30})
-            ki_muster = ki_lerne_muster(dom, alle_hrefs, config["api_key"])
-            ki_kandidaten = ([l for l in alle_links if muster_trifft(l["href"], ki_muster)]
-                             if ki_muster else [])
-            zu_breit = len(ki_kandidaten) > 0.6 * max(len(alle_links), 1)
-            if ki_muster and len(ki_kandidaten) > len(echte) and not zu_breit:
-                print(f"  ✅ KI-Muster gelernt: '{ki_muster}' ({len(ki_kandidaten)} Links)")
-                strukturen.setdefault(dom, {})["link_muster"] = ki_muster
-                strukturen.setdefault(dom, {})["gelernt_am"] = jetzt()
-                kandidaten = ki_kandidaten
-            else:
-                # Kein besseres KI-Muster. Domain merken (nur wenn die Seite geladen
-                # war, sonst könnte ein transienter Fehler die KI dauerhaft aussperren),
-                # damit wir nicht bei jedem Lauf erneut die KI bemühen.
-                if len(alle_links) >= 20:
-                    strukturen.setdefault(dom, {})["ki_geprueft"] = jetzt()
-                if echte:
-                    # Nur die echten Detail-Links weiterverwenden (Übersichts-/
-                    # Selbst-Links raus), nicht die rohe Müll-Liste.
-                    kandidaten = echte
-                    print(f"  ✅ Heuristik: {len(echte)} Job-Links (KI kein besseres Muster)")
-                else:
-                    print(f"  ⚠️  Kein Muster gefunden – überspringe {name}")
-                    status_merken(name, False, "Kein Job-Link-Muster erkannt")
-                    return [], []
 
     # API-Kandidaten überspringen den Domain-/Bewerbungslink-Filter: ihre URLs
     # zeigen bewusst auf das dahinterliegende ATS (z.B. *.myworkdayjobs.com) und
