@@ -1090,6 +1090,7 @@ def stelle_einfuegen():
             "neu":         True,
             "rohtext":     rohtext,
             "status":      2 if rohtext else 1,
+            "manuell_neu": not rohtext,
         })
         _db.exportiere_stellen_json(BASIS_PFAD / "stellen.json")
         _db.exportiere_bekannte_json(BASIS_PFAD / "bekannte_stellen.json")
