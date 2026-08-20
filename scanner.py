@@ -70,26 +70,24 @@ VORSCHAU_JSON   = BASIS_PFAD / "vorschau_kandidaten.json"
 # Wird am Ende von main() nach SCAN_STATUS_JSON geschrieben, report.py zeigt es an.
 SCAN_STATUS: dict = {}
 
-# Pro Firma: Liste von {"titel": str, "url": str} für Stellen, die keinen
-# Suchbegriff-Treffer hatten (anders als Ausschlussbegriffe/Standort landen die
-# nirgends in stellen.json - hier bleibt zumindest sichtbar, was der Whitelist-
-# Filter verwirft, damit man [suchbegriffe] bei Bedarf gezielt erweitern kann).
-# Wird am Ende von main() nach KEIN_TREFFER_JSON geschrieben, report.py zeigt es an.
-KEIN_TREFFER: dict = {}
-
-
 def status_merken(name: str, ok: bool, fehler: str | None = None):
     SCAN_STATUS[name] = {"ok": ok, "fehler": fehler, "zeitpunkt": jetzt()}
 
 
 def kein_treffer_merken(name: str, titel: str, url: str, ausschlussbegriffe: list | None = None):
-    # Stellen mit Ausschlussbegriff im Titel gar nicht erst auf die
-    # Kein-Treffer-Liste setzen – sie sind bewusst unerwünscht und würden
-    # die Liste (die eigentlich fehlende Suchbegriffe sichtbar machen soll)
-    # nur mit Praktika/Vertrieb/Leitung usw. zumüllen.
+    """Vermerkt Stellen ohne Suchbegriff-Treffer in der DB (Tabelle kein_treffer) -
+    anders als Ausschlussbegriffe/Standort landen die nirgends in stellen.json,
+    hier bleibt zumindest sichtbar, was der Whitelist-Filter verwirft, damit man
+    [suchbegriffe] bei Bedarf gezielt erweitern kann. kein_treffer.json wird am
+    Ende von main() als reiner Export aus der DB neu geschrieben."""
+    # Stellen mit Ausschlussbegriff im Titel gar nicht erst vermerken – sie sind
+    # bewusst unerwünscht und würden die Liste (die eigentlich fehlende
+    # Suchbegriffe sichtbar machen soll) nur mit Praktika/Vertrieb/Leitung usw.
+    # zumüllen.
     if ausschlussbegriffe and ist_ausgeschlossen(titel, ausschlussbegriffe):
         return
-    KEIN_TREFFER.setdefault(name, []).append({"titel": titel, "url": url})
+    from db import upsert_kein_treffer
+    upsert_kein_treffer(name, titel, url)
 
 
 class SessionGesperrtFehler(Exception):
@@ -2737,19 +2735,13 @@ def main():
     gesamt_status.update(SCAN_STATUS)
     speichere_json(SCAN_STATUS_JSON, gesamt_status)
 
-    gesamt_kein_treffer = lade_json(KEIN_TREFFER_JSON, {})
-    gesamt_kein_treffer.update(KEIN_TREFFER)
+    from db import entferne_kein_treffer_nach_ausschlussbegriff, exportiere_kein_treffer_json
     # Bereits gespeicherte Einträge nachträglich gegen die aktuellen
     # Ausschlussbegriffe filtern. Sonst blieben Alt-Einträge von Firmen, die in
     # diesem Lauf keinen Kein-Treffer mehr liefern (weil alle ausgeschlossen
     # wurden), unbereinigt stehen.
-    _ausschluss = config["ausschlussbegriffe"]
-    gesamt_kein_treffer = {
-        firma: [e for e in eintraege if not ist_ausgeschlossen(e.get("titel", ""), _ausschluss)]
-        for firma, eintraege in gesamt_kein_treffer.items()
-    }
-    gesamt_kein_treffer = {firma: eintraege for firma, eintraege in gesamt_kein_treffer.items() if eintraege}
-    speichere_json(KEIN_TREFFER_JSON, gesamt_kein_treffer)
+    entferne_kein_treffer_nach_ausschlussbegriff(config["ausschlussbegriffe"])
+    exportiere_kein_treffer_json(KEIN_TREFFER_JSON)
 
     # Zweiter Bereinigungslauf: erfasst Stellen, deren standort-Feld erst im
     # aktuellen Scan nachgetragen wurde und beim ersten Lauf noch fehlte.

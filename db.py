@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import normalisiere_url
+from utils import normalisiere_url, ist_ausgeschlossen
 from status_def import INAKTIVE_STATUSWERTE, status_fuer_stufe
 
 
@@ -104,6 +104,14 @@ def erstelle_schema():
                 transit_min  INTEGER,
                 abgerufen_am TEXT,
                 FOREIGN KEY (url) REFERENCES stellen(url)
+            );
+
+            CREATE TABLE IF NOT EXISTS kein_treffer (
+                url             TEXT PRIMARY KEY,
+                firma           TEXT NOT NULL,
+                titel           TEXT NOT NULL,
+                zuerst_gesehen  TEXT,
+                zuletzt_gesehen TEXT
             );
         """)
     _migriere_schema()
@@ -607,6 +615,61 @@ def upsert_bewerbungsstatus(url: str, stufe: str):
 
 
 # =============================================================================
+# KEIN-TREFFER (Whitelist-Diagnose: Titel ohne Suchbegriff-Treffer)
+# =============================================================================
+
+def upsert_kein_treffer(firma: str, titel: str, url: str):
+    """Legt einen Titel-ohne-Suchbegriff-Treffer an oder aktualisiert ihn.
+    zuerst_gesehen bleibt beim ersten Fund stehen, damit der Alters-Filter im
+    Export (siehe exportiere_kein_treffer_json) korrekt greift."""
+    jetzt_ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    with verbindung() as con:
+        con.execute("""
+            INSERT INTO kein_treffer (url, firma, titel, zuerst_gesehen, zuletzt_gesehen)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                firma           = excluded.firma,
+                titel           = excluded.titel,
+                zuletzt_gesehen = excluded.zuletzt_gesehen
+        """, (url, firma, titel, jetzt_ts, jetzt_ts))
+
+
+def entferne_kein_treffer_nach_ausschlussbegriff(begriffe: list):
+    """Löscht Kein-Treffer-Einträge, deren Titel aktuell einen Ausschlussbegriff
+    enthält - fängt Begriffe ab, die erst nachträglich zu config.txt hinzugefügt
+    wurden, nachdem der Eintrag schon gespeichert war."""
+    if not begriffe:
+        return
+    with verbindung() as con:
+        rows = con.execute("SELECT url, titel FROM kein_treffer").fetchall()
+        loeschen = [r["url"] for r in rows if ist_ausgeschlossen(r["titel"] or "", begriffe)]
+        for url in loeschen:
+            con.execute("DELETE FROM kein_treffer WHERE url = ?", (url,))
+
+
+def exportiere_kein_treffer_json(pfad: Path, max_alter_tage: int = 14):
+    """Schreibt kein_treffer.json als lesbaren Spiegel der DB - nur Einträge, die
+    seit weniger als max_alter_tage Tagen bestehen. Ältere Zeilen bleiben in der
+    DB (verhindern erneutes Hinzufügen), verschwinden aber aus Export/Anzeige."""
+    grenze = (datetime.now() - timedelta(days=max_alter_tage)).strftime("%Y-%m-%d %H:%M")
+    with verbindung() as con:
+        rows = con.execute("""
+            SELECT firma, titel, url, zuerst_gesehen FROM kein_treffer
+            WHERE zuerst_gesehen >= ?
+            ORDER BY firma, zuerst_gesehen
+        """, (grenze,)).fetchall()
+
+    ergebnis: dict = {}
+    for r in rows:
+        ergebnis.setdefault(r["firma"], []).append({
+            "titel":          r["titel"],
+            "url":            r["url"],
+            "zuerst_gesehen": r["zuerst_gesehen"],
+        })
+    pfad.write_text(json.dumps(ergebnis, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# =============================================================================
 # FAHRZEIT-CACHE
 # =============================================================================
 
@@ -904,6 +967,7 @@ if __name__ == "__main__":
         basis = Path(__file__).parent
         exportiere_stellen_json(basis / "stellen.json")
         exportiere_bekannte_json(basis / "bekannte_stellen.json")
+        exportiere_kein_treffer_json(basis / "kein_treffer.json")
         print("  JSON-Spiegel exportiert")
 
     else:
