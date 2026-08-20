@@ -768,6 +768,16 @@ def scanne_api_firma(api_config: dict, bekannte_urls: set, config: dict) -> tupl
             standort = " ".join(standort_roh) if isinstance(standort_roh, list) else standort_roh
 
             job_id = str(_get_nested(job, api_config.get("feld_id", "")))
+
+            if not standort and api_config.get("standort_aus_id") and "_" in job_id:
+                # Manche APIs (z.B. Hitachi Rail) liefern das Standortfeld nicht für
+                # jeden Job, hängen den Ort aber an die Job-ID an
+                # (z.B. "R1013077_Vélizy-Villacoublay, Île-de-France, France").
+                # Ohne diesen Fallback rutschen solche Stellen am Standortfilter
+                # vorbei, weil ein leerer arbeitsort als "unbekannt → sicher" gilt.
+                # Nur für Configs mit "standort_aus_id": true, da ein "_" in der ID
+                # bei anderen Firmen keine Standort-Bedeutung haben muss.
+                standort = job_id.split("_", 1)[1]
             url_vorlage = api_config["url_vorlage"]
             titel_fuer_url = titel.lower().replace(" ", "-")
             if api_config.get("feld_url_titel"):
