@@ -1477,8 +1477,12 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({url, feld: 'nicht_beworben', wert: '1'})
             });
-            const el = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
-            if (el) aktualisiereStatusBadge(el, 10);
+            document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"]`).forEach(el => {
+                aktualisiereStatusBadge(el, 10);
+            });
+            // "Nicht beworben" gehört nicht mehr zu "Neue Stellen" - Karte dort sofort
+            // entfernen, statt auf die Report-Neugenerierung im Hintergrund zu warten.
+            document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"][data-section="neue"]`).forEach(el => el.remove());
             btn.textContent = '🚫 Nicht beworben';
             btn.style.opacity = '0.5';
         } catch(e) {
@@ -1527,6 +1531,11 @@
                     else b.remove();
                 });
             });
+            if (!passend) {
+                // "Nicht passend" gehört nicht mehr zu "Neue Stellen" - Karte dort sofort
+                // entfernen, statt auf die Report-Neugenerierung im Hintergrund zu warten.
+                document.querySelectorAll(`.stelle[data-url="${CSS.escape(url)}"][data-section="neue"]`).forEach(el => el.remove());
+            }
         } catch(e) {
             alert('Server nicht erreichbar');
             _setzePassendBtn(btn, url, !passend);

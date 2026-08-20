@@ -94,6 +94,28 @@ def komprimiere_response(response):
     return response
 
 
+def _regeneriere_report_async():
+    """Baut report.html im Hintergrund neu, ohne die API-Antwort zu blockieren.
+
+    Statusänderungen (passend/nicht passend/nicht beworben) landen sofort in der
+    DB, aber report.html ist eine statisch generierte Datei - ohne diesen Rebuild
+    bliebe eine Karte bis zum nächsten vollen Scan in der falschen Sektion
+    (z.B. weiterhin unter "Neue Stellen") stehen.
+    """
+    def _lauf():
+        try:
+            sys.path.insert(0, str(BASIS_PFAD))
+            import report as _report
+            from db import lade_alle_stellen as _lade_alle_stellen
+            config = lade_config()
+            stellen = _lade_alle_stellen()
+            html = _report.erstelle_report(stellen, config)
+            REPORT_HTML.write_text(html, encoding="utf-8")
+        except Exception as e:
+            print(f"⚠️ Report-Regenerierung fehlgeschlagen: {e}")
+    threading.Thread(target=_lauf, daemon=True).start()
+
+
 @app.route("/")
 def index():
     """Liefert den aktuellen Report aus."""
@@ -852,6 +874,7 @@ def post_status():
             current = db.status_von(data["url"])
             if current in (6, 7):
                 db.upsert_stelle({"url": data["url"], "status": 8})
+        _regeneriere_report_async()
     elif data["feld"] == "kommentar":
         import db
         with db.verbindung() as con:
@@ -863,6 +886,7 @@ def post_status():
     elif data["feld"] == "nicht_beworben":
         import db
         db.upsert_stelle({"url": data["url"], "status": 10})
+        _regeneriere_report_async()
     elif data["feld"] == "nicht_beworben_grund":
         import db
         with db.verbindung() as con:
@@ -1163,6 +1187,7 @@ def passend_setzen():
     except Exception as e:
         return jsonify({"ok": False, "fehler": f"Datenbankfehler: {e}"}), 500
 
+    _regeneriere_report_async()
     return jsonify({"ok": True, "status": neuer_status})
 
 
